@@ -6,10 +6,11 @@ Two routes, chosen by what the operation does:
 
 | Operation | Route |
 |---|---|
-| Read: view, list, search, comments, linked PRs | `gh` CLI **or** GitHub MCP (`mcp__github__issue_read`, `list_issues`, `search_issues`, `pull_request_read`) |
-| Write: create, comment, label, close, assign | `gh` CLI only — the MCP server exposes no write tools |
+| Read: view, list, search, comments, linked PRs | `gh` CLI **or** GitHub MCP (`issue_read`, `list_issues`, `search_issues`, `pull_request_read`) |
+| Issues, Projects v2, pull requests — write | GitHub MCP (`issue_write`, `projects_write`, `create_pull_request`, …) **or** `gh`; files stay on git/`gh` |
+| File and code mutations | `git` / `gh` only — MCP is configured read-only for code |
 
-Choose the thinner route: MCP when the session already has it bound and the call is a single read; `gh` when scripting, filtering with `jq`, or doing any mutation. Neither route replaces a read-back when the result matters.
+Choose the thinner route: MCP when the session already has it bound and the call is a single read or a structured Project operation; `gh` when scripting, filtering with `jq`, or when a local checker or QA workflow needs a deterministic exit code. Neither route replaces a read-back when the result matters.
 
 **This split describes today's bound tool surface, not a permanent architecture.** Legacy `theseus-local-lab#123` (open) plans a discovery-only MCP layer with lazy tool binding: a capability search surface instead of hundreds of injected schemas, `gh`/GraphQL staying the complete route for Projects v2, and no silent fallback that changes a mutation route. When that lands, re-probe the surface before treating "MCP cannot write" as a rule.
 

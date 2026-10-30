@@ -147,15 +147,17 @@ services:
   - id: INFRA-013
     name: backup-lattice
     role: резервные копии операционного состояния
-    status: needs-actualization
+    status: active
     kind: scheduled-task
     location:
       task: Theseus Backup
       script: E:/local-lab/tools/backup_lattice/run_backup.py
       runtime_root: D:/theseus-backups
-    monitoring: Grafana Cloud — покрытие бэкапа как метрика не подтверждено
-    check: python tools/backup_lattice/run_backup.py --help
-    notes: задача перенацелена на local-lab 2026-10-30; фактический прогон и restore-drill не проверялись, это следующий этап
+      repos: [local, s3, drive]
+      heartbeat: "C:/Users/s.poklad/AppData/Local/hermes/logs/backup-lattice.log"
+    monitoring: Grafana backup-guard — «нет успешного прогона 30 ч» и «прогон завершился ошибкой»; лог читает Alloy (job="backup")
+    check: python tools/backup_lattice/run_backup.py; затем restic snapshots --latest 3 в каждом репозитории
+    notes: ручной прогон 2026-10-30 11:03-11:37 успешен во всех трёх репозиториях, restore-drill sha256_match; плановый запуск 31.10 03:00 ещё не подтверждён — LastTaskResult на момент проверки был 1 от прогона до фикса
 
 retired:
   - name: automem
