@@ -15,6 +15,7 @@ the service, and this script asks the registry instead of guessing.
 
 from __future__ import annotations
 
+import io
 import sys
 from pathlib import Path
 
@@ -42,6 +43,29 @@ def service_paths(service: dict) -> list[str]:
         elif isinstance(value, list):
             paths.extend(str(v).replace("\\", "/") for v in value if isinstance(v, str))
     return paths
+
+
+def self_test() -> int:
+    """Negative control: known inputs must produce known verdicts."""
+    cases = [
+        ("tools/contracts/check_infra.py", 0, "P1 path"),
+        ("tools/backup_lattice/prepare_snapshot.py", 0, "P1 path"),
+        (".github/workflows/gate.yml", 0, "P1 path"),
+        ("AGENTS.md", 0, "P1 path"),
+        ("infra/compose/hindsight/docker-compose.yml", 0, "P1 service by registry"),
+        ("docs/reference/infrastructure.md", 1, "not P1"),
+        ("infra/registry.yaml", 1, "registry stays P2 by decision"),
+        ("tools/dev/check", 1, "not P1"),
+    ]
+    failures = 0
+    for path, expected, why in cases:
+        sys.stdin = io.StringIO(path + "\n")
+        actual = main()
+        ok = actual == expected
+        failures += 0 if ok else 1
+        print(f"{'OK  ' if ok else 'FAIL'} {path} -> {actual} (expected {expected}: {why})")
+    print("self-test:", "all cases pass" if failures == 0 else f"{failures} failed")
+    return 0 if failures == 0 else 1
 
 
 def main() -> int:
@@ -75,4 +99,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if "--self-test" in sys.argv:
+        raise SystemExit(self_test())
     raise SystemExit(main())
