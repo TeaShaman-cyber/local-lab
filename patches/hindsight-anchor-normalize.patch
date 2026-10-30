@@ -1,0 +1,69 @@
+--- a/plugins/hindsight/__init__.py
++++ b/plugins/hindsight/__init__.py
+@@ -18,6 +18,7 @@
+ import os
+ import queue
+ import re
++import subprocess
+ import sys
+ import threading
+ import time
+@@ -405,6 +406,50 @@
+ }
+ 
+ 
++_GITHUB_REF = re.compile(r"(?<![\w./-])#(\d{1,6})\b")
++_REPO_SLUG_CACHE: dict[str, tuple[float, str | None]] = {}
++
++
++def _current_repo_slug() -> str | None:
++    """owner/repo of the git remote in the current working directory, or None."""
++    cwd = os.getcwd()
++    now = time.time()
++    cached = _REPO_SLUG_CACHE.get(cwd)
++    if cached and now - cached[0] < 300:
++        return cached[1]
++    slug = None
++    try:
++        out = subprocess.run(
++            ["git", "-C", cwd, "remote", "get-url", "origin"],
++            capture_output=True,
++            text=True,
++            timeout=5,
++        )
++        url = (out.stdout or "").strip()
++        match = re.search(r"github\.com[:/]+([^/]+)/([^/\s]+?)(?:\.git)?/?$", url)
++        if match:
++            slug = f"{match.group(1)}/{match.group(2)}"
++    except Exception:
++        slug = None
++    _REPO_SLUG_CACHE[cwd] = (now, slug)
++    return slug
++
++
++def _normalize_github_refs(text: str) -> str:
++    """Rewrite a bare #NNN to owner/repo#NNN using the current git remote.
++
++    Deterministic by design: the extraction model should not have to infer which
++    repository a number belongs to. Numbers that already carry owner/repo are left
++    untouched, and nothing changes when the remote cannot be resolved.
++    """
++    if not isinstance(text, str) or "#" not in text:
++        return text
++    slug = _current_repo_slug()
++    if not slug:
++        return text
++    return _GITHUB_REF.sub(lambda m: f"{slug}#{m.group(1)}", text)
++
++
+ def _bank_not_written_yet(exc: Exception) -> bool:
+     """Hindsight answers 404 for a bank nothing has been retained to yet. Read off the status rather
+     than importing the client's exception class here: that import, run from the prefetch thread while
+@@ -2064,7 +2108,7 @@
+         item: Dict[str, Any] = {
+             # See #93568.
+-            "content": content,
++            "content": _normalize_github_refs(content),
+             "metadata": metadata or self._build_metadata(message_count=1, turn_index=self._turn_index),
+             "timestamp": (occurred_at or "").strip() or _event_timestamp(),
+         }
