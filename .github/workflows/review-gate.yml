@@ -61,7 +61,7 @@ jobs:
           fi
 
           reviewed=$(gh api "repos/$REPO/pulls/$PR/reviews" \
-            --jq "[.[] | select(.user.login == \"chatgpt-codex-connector\" and .commit_id == \"$HEAD\")] | length")
+            --jq "[.[] | select((.user.login | startswith(\"chatgpt-codex-connector\")) and .commit_id == \"$HEAD\")] | length")
           if [ "$reviewed" -gt 0 ]; then
             echo "PASS: Codex reviewed head $HEAD ($reviewed review(s))"
             exit 0
