@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Repository-owned canonical QA endpoint.
+#
+# The workflow stays dumb: it checks out the PR head and runs this script.
+# All checks live here, so they can be run locally with the same result —
+# `tools/dev/check` is the gate, CI is only where it executes.
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+
+echo "=== infra contract ==="
+python tools/contracts/check_infra.py
+
+echo "=== infra self-test ==="
+python tools/contracts/check_infra.py --self-test
+
+echo "=== python syntax ==="
+while IFS= read -r -d '' f; do
+    python -m py_compile "$f"
+done < <(find tools scripts -name "*.py" -print0 2>/dev/null)
+echo "ok"
+
+echo "=== yaml syntax ==="
+python - <<'PY'
+import pathlib, sys, yaml
+bad = 0
+for p in list(pathlib.Path(".").rglob("*.yml")) + list(pathlib.Path(".").rglob("*.yaml")):
+    if ".git" in p.parts:
+        continue
+    try:
+        yaml.safe_load(p.read_text(encoding="utf-8"))
+        print(f"ok  {p}")
+    except Exception as exc:
+        print(f"FAIL {p}: {exc}", file=sys.stderr)
+        bad = 1
+sys.exit(bad)
+PY
+
+echo "=== shell syntax ==="
+for f in scripts/*.sh .githooks/*; do
+    [ -f "$f" ] || continue
+    bash -n "$f"
+    echo "ok  $f"
+done
+
+echo "=== secrets scan ==="
+if grep -rnE 'glc_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|BEGIN [A-Z ]*PRIVATE KEY' \
+    --include="*.py" --include="*.yaml" --include="*.yml" --include="*.sh" \
+    --exclude-dir=.git . ; then
+    echo "FAIL: secret-like token found" >&2
+    exit 1
+fi
+echo "ok"
+
+echo "=== QA PASS ==="
