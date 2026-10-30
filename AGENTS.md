@@ -215,6 +215,7 @@ stateful или внешне значимое действие.
 | `IDEA.md` | замысел проекта, короткая заметка |
 | `AGENTS.md` | этот контракт |
 | `.agents/skills/` | проектные скиллы: `local-core-router`, `sonar` |
+| `scripts/sync-skills.sh` | установка скиллов в Hermes (`$HERMES_HOME/skills/local-lab/`) с readback |
 | `docs/agents/` | конфигурация инженерных скиллов: issue tracker, triage-лейблы, доменные доки |
 
 ## Agent skills
