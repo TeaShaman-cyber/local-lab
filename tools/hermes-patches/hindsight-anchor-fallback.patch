@@ -1,0 +1,38 @@
+--- a/plugins/hindsight/__init__.py
++++ b/plugins/hindsight/__init__.py
+@@ -414,6 +414,26 @@
+ )
+ _REPO_SLUG_CACHE: dict[str, tuple[float, str | None]] = {}
+ _REPO_SLUG_LOCK = threading.Lock()
++_NAMED_REPO = re.compile(r"\b([A-Za-z][A-Za-z0-9_.-]{0,38})/([A-Za-z][A-Za-z0-9_.-]{0,38})\b")
++
++
++def _repo_named_in_text(text: str) -> str | None:
++    """owner/repo written out in the entry, or None.
++
++    Used only when the session cwd is unavailable (upstream #144869): Desktop and
++    gateway sessions hand providers no cwd, so the git remote cannot be resolved
++    and normalisation used to switch itself off silently. Reading the repository
++    from the entry is narrower than os.getcwd(), which is one process-wide
++    directory shared by every session in the gateway, and it never invents a
++    repository the text does not name.
++    """
++    for match in _NAMED_REPO.finditer(text):
++        before = text[max(0, match.start() - 80) : match.start()].lower()
++        if _ISSUE_CONTEXT.search(before) or "репозитор" in before or "repo" in before:
++            return f"{match.group(1)}/{match.group(2)}"
++    return None
++
++
+ def _current_repo_slug(cwd: str | None) -> str | None:
+     """owner/repo of the git remote for *cwd* (the session's workspace), or None.
+ 
+@@ -458,7 +478,7 @@
+     """
+     if not isinstance(text, str) or "#" not in text:
+         return text
+-    slug = _current_repo_slug(cwd)
++    slug = _current_repo_slug(cwd) or _repo_named_in_text(text)
+     if not slug:
+         return text
+ 
