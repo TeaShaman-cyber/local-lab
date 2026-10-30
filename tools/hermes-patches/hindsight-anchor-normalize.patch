@@ -1,0 +1,100 @@
+--- a/plugins/hindsight/__init__.py
++++ b/plugins/hindsight/__init__.py
+@@ -18,6 +18,6 @@ import queue
+ import os
+ import queue
+ import re
++import subprocess
+ import sys
+ import threading
+@@ -405,5 +405,85 @@ def _bank_not_written_yet
+ }
+ 
+ 
++_GITHUB_REF = re.compile(r"#(\d{1,6})\b")
++_REMOTE_RE = re.compile(r"(?:^|[@/])github\.com(?::\d+)?[:/]([^/]+)/([^/\s?#]+?)(?:\.git)?(?:[/?#]|$)")
++# Only rewrite a number that sits next to GitHub-facing wording. Without this,
++# prose like "шаг #2" or "python #3.11" would be rewritten as if it were an issue.
++_ISSUE_CONTEXT = re.compile(
++    r"(?i)\b(issue|pr|pull|fixe[sd]|closes?|refs?|ticket|bug|задач\w*|правк\w*|тикет\w*|баг\w*)\b"
++)
++_REPO_SLUG_CACHE: dict[str, tuple[float, str | None]] = {}
++_REPO_SLUG_LOCK = threading.Lock()
++
++
++def _current_repo_slug(cwd: str | None) -> str | None:
++    """owner/repo of the git remote for *cwd* (the session's workspace), or None.
++
++    cwd must come from the session, never from os.getcwd(): the process-wide
++    directory is shared by every session in the gateway, so a global cwd would
++    stamp one repository onto facts from all the others.
++    """
++    if not cwd:
++        return None
++    now = time.time()
++    with _REPO_SLUG_LOCK:
++        cached = _REPO_SLUG_CACHE.get(cwd)
++    if cached and now - cached[0] < 300:
++        return cached[1]
++    slug = None
++    try:
++        out = subprocess.run(
++            ["git", "-C", cwd, "remote", "get-url", "origin"],
++            capture_output=True,
++            text=True,
++            timeout=5,
++        )
++        url = (out.stdout or "").strip()
++        match = _REMOTE_RE.search(url)
++        if match:
++            slug = f"{match.group(1)}/{match.group(2)}"
++    except Exception:
++        slug = None
++    with _REPO_SLUG_LOCK:
++        _REPO_SLUG_CACHE[cwd] = (now, slug)
++    return slug
++
++
++def _normalize_github_refs(text: str, cwd: str | None = None) -> str:
++    """Rewrite a bare issue number to owner/repo#NNN using the session's remote.
++
++    Deterministic by design: the extraction model should not have to infer which
++    repository a number belongs to. A number is rewritten only when it is not
++    already qualified and when GitHub-facing wording appears shortly before it;
++    anything else is left untouched, and nothing changes when the remote cannot
++    be resolved.
++    """
++    if not isinstance(text, str) or "#" not in text:
++        return text
++    slug = _current_repo_slug(cwd)
++    if not slug:
++        return text
++
++    pieces: list[str] = []
++    last = 0
++    changed = False
++    for match in _GITHUB_REF.finditer(text):
++        start = match.start()
++        if start and (text[start - 1].isalnum() or text[start - 1] in "./-&"):
++            continue  # already qualified, part of a URL, or an HTML entity
++        before = text[max(0, start - 60) : start]
++        if not _ISSUE_CONTEXT.search(before):
++            continue
++        pieces.append(text[last:start])
++        pieces.append(f"{slug}#{match.group(1)}")
++        last = match.end()
++        changed = True
++
++    if not changed:
++        return text
++    pieces.append(text[last:])
++    return "".join(pieces)
++
++
+ def _bank_not_written_yet(exc: Exception) -> bool:
+     """Hindsight answers 404 for a bank nothing has been retained to yet. Read off the status rather
+@@ -2101,4 +2101,4 @@ class HindsightMemoryProvider(MemoryProvider)
+         item: Dict[str, Any] = {
+             # See #93568.
++            "content": _normalize_github_refs(content, self._cwd),
+             "metadata": metadata or self._build_metadata(message_count=1, turn_index=self._turn_index),
