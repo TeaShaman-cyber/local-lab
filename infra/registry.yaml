@@ -180,12 +180,15 @@ test_stands:
     host: "pve.lab / 10.67.163.198 (host=pve-t490)"
     capacity: "7.48 GiB RAM, ThinkPad T490, без swap"
     constraints: >-
-      Слабый CPU; одновременная загрузка моделей приводила к global OOM при
-      свободной памяти хоста около 1.16 GiB. Требует, чтобы ноут был загружен в PVE
-      (dual-boot с Windows). ICMP закрыт: ping не отвечает при живом сервере.
+      Слабый CPU. /tmp здесь это tmpfs в RAM размером 3.8 GiB, архивы образов и
+      моделей класть только на диск. 30 октября 2026 в /tmp накопилось 3,8 ГБ
+      остатков, свободная память упала до 2 ГБ и OOM выглядел как нехватка RAM.
+      При разборе OOM проверять /tmp и Shmem, а не только RSS процессов. Требует,
+      чтобы ноут был загружен в PVE (dual-boot с Windows). ICMP закрыт, ping не
+      отвечает при живом сервере.
     priority: 1
     monitoring: "Grafana Cloud, job=integrations/unix, host=pve-t490; дашборд /d/pve-t490-host"
-    check: "curl -sk https://10.67.163.198:8006/ (ожидается 200); ssh root@pve.lab 'pct list'"
+    check: "curl -sk https://10.67.163.198:8006/ (ожидается 200); ssh pve pct list — по ключу из ~/.ssh/config, не по паролю"
     docs: docs/reference/pve.md
     notes: Предпочтителен по умолчанию. Продовую работу не затрагивает.
 
