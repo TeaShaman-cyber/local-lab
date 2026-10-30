@@ -1,0 +1,106 @@
+--- a/__init__.py
++++ b/__init__.py
+@@ -1745,6 +1745,83 @@
+             raise
+         return resp.text
+ 
++    def _fmt_recall_line(self, r, prefix: str = "- ") -> str:
++        """Render one recalled memory with its date and, when known, its source session.
++
++        Hindsight returns occurred_start / occurred_end / mentioned_at, but the block used to
++        render only ``r.text`` - a fact from yesterday looked identical to one from three weeks
++        ago, and there was no way back to the conversation it came from.
++
++        Raw ``experience`` facts carry provenance (metadata.session_id, or a ``session:`` tag);
++        consolidated ``world`` / ``observation`` facts currently lose it, so the session marker
++        is simply omitted for those. Dates and provenance are metadata: no model call involved.
++        """
++        when = (
++            getattr(r, "occurred_start", None)
++            or getattr(r, "occurred_end", None)
++            or getattr(r, "mentioned_at", None)
++        )
++        stamp = str(when)[:10] if when else ""
++
++        sid = None
++        meta = getattr(r, "metadata", None) or {}
++        if isinstance(meta, dict):
++            sid = meta.get("session_id")
++        if not sid:
++            for tag in getattr(r, "tags", None) or []:
++                if isinstance(tag, str) and tag.startswith("session:"):
++                    sid = tag.split(":", 1)[1]
++                    break
++
++        if sid:
++            marker = f"{stamp} · {str(sid)[:8]}" if stamp else str(sid)[:8]
++            return f"{prefix}[{marker}] {r.text}"
++        if stamp:
++            return f"{prefix}[{stamp}] {r.text}"
++        return f"{prefix}{r.text}"
++
++    @staticmethod
++    def _recall_key(text) -> str:
++        """Normalised text used to spot the same fact stored more than once."""
++        cleaned = str(text or "").split("| When:")[0].lower()
++        cleaned = "".join(ch if (ch.isalnum() or ch == " ") else " " for ch in cleaned)
++        return " ".join(cleaned.split())[:160]
++
++    @staticmethod
++    def _has_provenance(r) -> bool:
++        """True when the record can still be traced back to the session it came from."""
++        meta = getattr(r, "metadata", None) or {}
++        if isinstance(meta, dict) and meta.get("session_id"):
++            return True
++        for tag in getattr(r, "tags", None) or []:
++            if isinstance(tag, str) and tag.startswith("session:"):
++                return True
++        return str(getattr(r, "type", "")) == "experience"
++
++    def _dedupe_recall(self, results):
++        """Collapse repeated facts, keeping the record that carries provenance.
++
++        Consolidation writes an observation whose text matches the experience it came
++        from, so recall regularly returns one sentence twice - measured at 17 percent
++        of all returned lines across twenty queries. That is context budget spent on
++        nothing, and it makes a single fact look like two. Matching is on normalised
++        text, so it is deterministic and costs no model call; when both copies are
++        present the one with a session reference wins even if it ranked lower.
++        """
++        kept = {}
++        order = []
++        for r in results:
++            key = self._recall_key(getattr(r, "text", ""))
++            if not key:
++                continue
++            prev = kept.get(key)
++            if prev is None:
++                kept[key] = r
++                order.append(key)
++            elif self._has_provenance(r) and not self._has_provenance(prev):
++                kept[key] = r
++        return [kept[k] for k in order]
++
+     def _do_recall(self, query: str) -> tuple[str, int]:
+         """One recall/reflect for *query* (background prefetch and ``recall_sync`` paths)
+         -> (text, memory count); the count is 0 for reflect (synthesis) and on error."""
+@@ -1759,7 +1836,8 @@
+             )
+             results = self._recall(query)
+             logger.debug("Recall: returned %d results", len(results))
+-            return "\n".join(f"- {r.text}" for r in results if r.text), len(results)
++            deduped = self._dedupe_recall([r for r in results if r.text])
++            return "\n".join(self._fmt_recall_line(r) for r in deduped), len(deduped)
+         except Exception as e:
+             logger.warning("Hindsight recall failed: %s", e, exc_info=True)
+             return "", 0
+@@ -2112,7 +2190,8 @@
+         logger.debug("Tool hindsight_recall: bank=%s, query_len=%d, budget=%s", self._bank_id, len(query), self._budget)
+         results = self._recall(query)
+         logger.debug("Tool hindsight_recall: %d results", len(results))
+-        return "\n".join(f"{i}. {r.text}" for i, r in enumerate(results, 1)) or "No relevant memories found."
++        deduped = self._dedupe_recall(results)
++        return "\n".join(self._fmt_recall_line(r, f"{i}. ") for i, r in enumerate(deduped, 1)) or "No relevant memories found."
+ 
+     def _tool_reflect(self, args: dict) -> str:
+         query = args["query"]
