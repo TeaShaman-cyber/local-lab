@@ -19,6 +19,20 @@ name: merge-watch
 on:
   pull_request:
     types: [closed]
+  # Actions do not inherit across an account the way issue templates do, so
+  # coverage of 43 repositories needs a caller in each one. A caller is six
+  # lines:
+  #
+  #   on: { pull_request: { types: [closed] } }
+  #   permissions: { contents: read, issues: write, pull-requests: read }
+  #   jobs:
+  #     merge-watch:
+  #       uses: TeaShaman-cyber/local-lab/.github/workflows/merge-watch.yml@main
+  #       secrets: inherit
+  #
+  # Inside a call, github.repository is the calling repository, so the check runs
+  # against the right repo without parameters.
+  workflow_call:
 
 permissions:
   contents: read
