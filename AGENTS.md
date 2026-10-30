@@ -1,9 +1,7 @@
 # local-lab — контракт проекта
 
-Структура перенесена из `marcopolo-cookbook/project/project-contract.wl` и адаптирована
-под локальный рантайм. Отличие одно и главное: **MarcoPolo не является обязательным
-операционным слоем**. Локальные средства идут первыми, MarcoPolo — только когда нужна
-именно его поверхность.
+Контракт адаптирован под локальный рантайм: локальные средства идут первыми,
+внешние поверхности подключаются только под конкретную задачу.
 
 Прежний проект (`theseus-local-lab`, локальная папка
 `life-science-research-plugin-life-science-4`) остаётся справочным архивом и сюда не
@@ -65,21 +63,15 @@ FACT | INFERENCE | HYPOTHESIS | UNKNOWN
 1. Репозиторий и файлы      Git, docs, код в E:\local-lab
 2. session_search           встроенный поиск по сессиям Hermes (FTS5)
 3. Память                   memory provider, с readback
-4. MarcoPolo MCP            только история ChatGPT / Session Search
-5. Внешние источники        GitHub, Google Drive через Pipedream, провайдеры
+4. Внешние поверхности      GitHub, Google Drive через Pipedream, провайдеры
 ```
-
-Переход на MarcoPolo — материальная смена маршрута: назвать причину (чего нет
-локально) и не выдавать его состояние за локальное.
 
 Проверенные внешние поверхности:
 
 ```text
-Google Drive   Pipedream, mcp__pipedream__google_drive_*   read-only проверка пройдена
-shell, файлы, git, сеть   локально                        workspace shell на MarcoPolo не нужен
+Google Drive              Pipedream, mcp__pipedream__google_drive_*
+shell, файлы, git, сеть   локально
 ```
-
-Не переносить в MarcoPolo то, что уже доступно локально или через Pipedream.
 
 Для маршрутизации локального рантайма, свежести репозитория, границ 403 и механики
 записи использовать скилл `local-core-router`.
@@ -130,13 +122,12 @@ shell, файлы, git, сеть   локально                        works
 (алгоритм LIGHT_SONAR).
 
 ```text
-SURFACE A  session_search            по умолчанию
-SURFACE B  self-hosted corpus        когда нужна история вне Hermes
-SURFACE C  MarcoPolo Session Search  когда нужна история ChatGPT/MarcoPolo
+SURFACE A  session_search      по умолчанию
+SURFACE B  self-hosted corpus  когда нужна история вне Hermes
 ```
 
 Встроенный поиск не является fallback по умолчанию — это первая поверхность. Переход
-на B или C называть явно и обосновывать. Историческое свидетельство не равно текущему
+на B называть явно и обосновывать. Историческое свидетельство не равно текущему
 авторитету: найденное утверждение разрешается через владеющий источник.
 
 ## Currentness
