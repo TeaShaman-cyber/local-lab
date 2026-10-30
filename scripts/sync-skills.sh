@@ -41,7 +41,25 @@ for dir in "$SRC"/*/; do
 done
 
 echo
-echo "--- readback (source vs installed) ---"
+# Remove skills that exist only in the destination. The loop above walks SRC, so
+# a skill deleted from the source was never touched, and the readback stayed
+# green while an obsolete skill sat in the projection. Found 2026-10-31: a stale
+# fourth skill survived every sync.
+echo "--- prune (installed, but no longer in source) ---"
+pruned=0
+for dir in "$DEST"/*/; do
+  [ -d "$dir" ] || continue
+  name="$(basename "$dir")"
+  if [ ! -d "$SRC/$name" ]; then
+    rm -rf "$DEST/$name"
+    echo "REMOVED $name"
+    pruned=1
+  fi
+done
+[ "$pruned" -eq 0 ] && echo "none"
+
+echo
+echo "--- readback (content) ---"
 fail=0
 for dir in "$SRC"/*/; do
   name="$(basename "$dir")"
@@ -49,6 +67,17 @@ for dir in "$SRC"/*/; do
     echo "OK      $name"
   else
     echo "DIFF    $name"
+    fail=1
+  fi
+done
+
+# Matching content is not the same as a matching set: anything present in the
+# projection but absent from the source must also fail the check.
+for dir in "$DEST"/*/; do
+  [ -d "$dir" ] || continue
+  name="$(basename "$dir")"
+  if [ ! -d "$SRC/$name" ]; then
+    echo "EXTRA   $name (present in projection, absent in source)"
     fail=1
   fi
 done
