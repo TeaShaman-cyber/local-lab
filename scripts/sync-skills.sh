@@ -54,43 +54,54 @@ echo
 # a skill deleted from the source was never touched, and the readback stayed
 # green while an obsolete skill sat in the projection. Found 2026-10-31: a stale
 # fourth skill survived every sync.
+#
+# The list of extras is captured BEFORE pruning. Checking the set only after
+# prune would be theatre — prune has already removed those entries, so the
+# assertion could never fire. Independent review caught exactly that.
 echo "--- prune (installed, but no longer in source) ---"
-pruned=0
+fail=0
+extras="$(mktemp)"
+trap 'rm -f "$extras"' EXIT
+
 for dir in "$DEST"/*/; do
   [ -d "$dir" ] || continue
   name="$(basename "$dir")"
   if [ ! -d "$SRC/$name" ]; then
-    rm -rf "$DEST/$name"
-    echo "REMOVED $name"
-    pruned=1
+    printf '%s\n' "$name" >> "$extras"
   fi
 done
+
+pruned=0
+while IFS= read -r name; do
+  [ -z "$name" ] && continue
+  rm -rf "$DEST/$name"
+  echo "REMOVED $name"
+  pruned=1
+done < "$extras"
+
 # Not `[ "$pruned" -eq 0 ] && echo "none"`: under `set -e` that form makes the
 # script's exit status depend on whether anything was pruned.
 if [ "$pruned" -eq 0 ]; then
   echo "none"
 fi
 
+# The real assertion about prune: what it claimed to remove is actually gone.
+while IFS= read -r name; do
+  [ -z "$name" ] && continue
+  if [ -d "$DEST/$name" ]; then
+    echo "EXTRA   $name (prune did not remove it)"
+    fail=1
+  fi
+done < "$extras"
+
 echo
 echo "--- readback (content) ---"
-fail=0
 for dir in "$SRC"/*/; do
   name="$(basename "$dir")"
   if diff -r "$dir" "$DEST/$name" >/dev/null 2>&1; then
     echo "OK      $name"
   else
     echo "DIFF    $name"
-    fail=1
-  fi
-done
-
-# Matching content is not the same as a matching set: anything present in the
-# projection but absent from the source must also fail the check.
-for dir in "$DEST"/*/; do
-  [ -d "$dir" ] || continue
-  name="$(basename "$dir")"
-  if [ ! -d "$SRC/$name" ]; then
-    echo "EXTRA   $name (present in projection, absent in source)"
     fail=1
   fi
 done
