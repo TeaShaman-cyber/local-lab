@@ -1,17 +1,17 @@
 name: gate
 
-# One gate, one verdict. Replaces the separate qa and review-gate workflows:
-# two workflows meant two check runs per commit, and branch protection blocked
-# on the worse one.
+# Two checks, one verdict each. This replaced a single job that ran on both
+# `pull_request` and `pull_request_review`: the first run failed for lack of a
+# review, the second passed once the review arrived, and branch protection
+# blocked on the worse of the two. Cancelling could not help — the first run
+# had already finished before the second started.
 #
-# The gate answers a single question — may this reach main? — and answers it
-# differently depending on what the change carries:
+#   gate-checks  deterministic checks. Always gives a verdict on the commit.
+#   gate-review  outside review for P1. Waits for it instead of being re-run,
+#                so there is exactly one run and one verdict per commit.
 #
-#   P1 path or P1 service touched  -> deterministic checks AND an outside review
-#   everything else                -> deterministic checks only
-#
-# The class comes from infra/registry.yaml via tools/contracts/review_needed.py,
-# not from folder names.
+# A change is P1 by its class in infra/registry.yaml, resolved through
+# tools/contracts/review_needed.py — not by folder name.
 #
 # merge-watch stays separate on purpose: it runs after the merge and detects a
 # merge nobody asked for. Detection is not a gate.
@@ -19,24 +19,22 @@ name: gate
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  pull_request_review:
-    types: [submitted]
 
 permissions:
   contents: read
   pull-requests: read
 
-# A newer commit or review cancels the older run, so only one verdict survives
-# per PR head.
 concurrency:
   group: gate-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  gate:
-    name: gate
+  gate-checks:
+    name: gate-checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      need_review: ${{ steps.need.outputs.required }}
     steps:
       - name: Check out the pull-request head
         uses: actions/checkout@v4
@@ -86,8 +84,18 @@ jobs:
             echo "required=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Require outside review for P1
-        if: steps.need.outputs.required == 'true'
+  gate-review:
+    name: gate-review
+    needs: gate-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Not P1 — nothing to wait for
+        if: needs.gate-checks.outputs.need_review != 'true'
+        run: echo "Not P1 — no outside review required."
+
+      - name: Wait for an outside review
+        if: needs.gate-checks.outputs.need_review == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -96,42 +104,44 @@ jobs:
         run: |
           set -euo pipefail
 
-          bot=$(gh api "repos/$REPO/pulls/$PR/reviews" \
-            --jq "[.[] | select((.user.login | startswith(\"chatgpt-codex-connector\")) and .commit_id == \"$HEAD\")] | length")
-          if [ "$bot" -gt 0 ]; then
-            echo "PASS: Codex reviewed $HEAD ($bot)"
-            exit 0
-          fi
-
-          # Codex does not comment when it finds nothing — it reacts with 👍 on
-          # the PR. Without this branch a clean review looked like no review at
-          # all, and the gate blocked a PR that had been reviewed.
-          # The thumb must be newer than the head commit, otherwise it belongs
-          # to an earlier revision.
           head_date=$(gh api "repos/$REPO/commits/$HEAD" --jq '.commit.committer.date')
-          thumb=$(gh api "repos/$REPO/issues/$PR/reactions" --paginate \
-            --jq "[.[] | select((.user.login | startswith(\"chatgpt-codex-connector\")) and .content == \"+1\" and .created_at > \"$head_date\")] | length")
-          if [ "$thumb" -gt 0 ]; then
-            echo "PASS: Codex reacted 👍 on this PR after $head_date — reviewed, no findings"
-            exit 0
-          fi
+          echo "waiting for review of $HEAD (committed $head_date)"
 
-          human=$(gh api "repos/$REPO/pulls/$PR/reviews" \
-            --jq "[.[] | select(.state == \"APPROVED\" and .commit_id == \"$HEAD\" and ((.user.login | startswith(\"chatgpt-codex-connector\")) | not))] | length")
-          if [ "$human" -gt 0 ]; then
-            echo "PASS: human approval on $HEAD ($human)"
-            exit 0
-          fi
+          # A review lands in one of three shapes. All three are evidence that
+          # someone outside looked at this exact commit:
+          #   1. a review object pinned to the head commit;
+          #   2. a thumbs-up reaction — Codex stays silent when it finds nothing;
+          #   3. an APPROVED review from a human.
+          # Waiting here instead of being re-run on the review event is what
+          # keeps one verdict per commit.
+          for attempt in $(seq 1 30); do
+            bot=$(gh api "repos/$REPO/pulls/$PR/reviews" \
+              --jq "[.[] | select((.user.login | startswith(\"chatgpt-codex-connector\")) and .commit_id == \"$HEAD\")] | length")
+            if [ "$bot" -gt 0 ]; then
+              echo "PASS: Codex reviewed $HEAD ($bot)"
+              exit 0
+            fi
 
-          echo "::error::P1 change without outside review on $HEAD."
+            thumb=$(gh api "repos/$REPO/issues/$PR/reactions" --paginate \
+              --jq "[.[] | select((.user.login | startswith(\"chatgpt-codex-connector\")) and .content == \"+1\" and .created_at > \"$head_date\")] | length")
+            if [ "$thumb" -gt 0 ]; then
+              echo "PASS: Codex reacted thumbs-up on this PR after $head_date — reviewed, no findings"
+              exit 0
+            fi
+
+            human=$(gh api "repos/$REPO/pulls/$PR/reviews" \
+              --jq "[.[] | select(.state == \"APPROVED\" and .commit_id == \"$HEAD\" and ((.user.login | startswith(\"chatgpt-codex-connector\")) | not))] | length")
+            if [ "$human" -gt 0 ]; then
+              echo "PASS: human approval on $HEAD ($human)"
+              exit 0
+            fi
+
+            echo "attempt $attempt/30: no outside review yet, waiting 20s"
+            sleep 20
+          done
+
+          echo "::error::P1 change without outside review on $HEAD after 10 minutes."
           echo "Ask for one: comment '@codex review', or approve in the GitHub UI."
           echo "Deterministic checks passed — this is the review requirement, not a code defect."
+          echo "If the review arrives later, re-run: gh run rerun <run-id>"
           exit 1
-
-      - name: Verdict
-        run: |
-          if [ "${{ steps.need.outputs.required }}" = "true" ]; then
-            echo "gate: P1 change, checks and review satisfied"
-          else
-            echo "gate: deterministic checks satisfied, no outside review required"
-          fi
