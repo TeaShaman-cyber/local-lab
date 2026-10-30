@@ -1,0 +1,158 @@
+revision: 2026-10-30-infra-v1
+migrated_from: legacy infrastructure-registry.yaml (schema_version 2, last_verified 2026-10-28)
+last_verified: 2026-10-30
+
+services:
+  - id: INFRA-001
+    name: hindsight
+    role: долговременная память — провайдер Hermes и изолированные операционные банки
+    status: active
+    kind: docker-compose
+    location:
+      compose: C:/Users/s.poklad/Documents/Codex/2026-07-08/life-science-research-plugin-life-science-4/deploy/hindsight/docker-compose.yml
+      runtime_root: D:/hindsight
+      env_file: D:/hindsight/.env
+      ports: [8888, 9999, 1455]
+      containers: [hindsight-api]
+      volumes: [theseus-hindsight-pg0-v2, theseus-hindsight-hf-cache, theseus-hindsight-chatgpt-auth]
+    monitoring: Grafana Cloud — container_* метрики через docker-exporter (INFRA-004), логи через Alloy
+    check: python tools/hindsight_api.py health
+    notes: pg0 живёт в named volume, не в bind-mount — bind-вариант дал root-owned каталог, и postgres не инициализировался
+
+  - id: INFRA-002
+    name: hermes-subscription-proxy
+    role: брокер OAuth-креденшелов Nous для Solar-маршрута Hindsight
+    status: active
+    kind: docker-compose
+    location:
+      compose: C:/Users/s.poklad/Documents/Codex/2026-07-08/life-science-research-plugin-life-science-4/deploy/hindsight/docker-compose.yml
+      runtime_root: D:/hindsight
+      env_file: D:/hindsight/.env
+      containers: [hermes-proxy]
+      published_ports: none
+    monitoring: Grafana Cloud — container_* через docker-exporter (INFRA-004)
+    check: docker ps --filter name=hermes-proxy
+    notes: статического ключа нет ни в compose, ни в реестре; auth живёт в named volume theseus-hermes-proxy-data
+
+  - id: INFRA-003
+    name: docker-read-proxy
+    role: узкий read-only маршрут к Docker API для наблюдателей
+    status: active
+    kind: standalone-compose
+    location:
+      compose: D:/theseus-observatory/docker-proxy-lattice
+      containers: [theseus-docker-socket-proxy]
+    monitoring: Grafana Cloud — container_* через docker-exporter (INFRA-004)
+    check: docker ps --filter name=theseus-docker-socket-proxy
+    notes: без прямого docker.sock и без privileged; наружу отдаёт только read-эндпоинты
+
+  - id: INFRA-004
+    name: docker-exporter
+    role: метрики контейнеров в Grafana Cloud
+    status: active
+    kind: docker-compose
+    location:
+      compose: C:/Users/s.poklad/Documents/Codex/2026-07-08/life-science-research-plugin-life-science-4/deploy/docker-exporter/docker-compose.yml
+      env_file: D:/theseus-monitoring/docker-exporter.env
+      containers: [theseus-otel-docker]
+      network: docker-proxy-lattice_default (external, принадлежит INFRA-003)
+    monitoring: сам является источником метрик; remote_write в Grafana Cloud Prometheus (uid grafanacloud-prom)
+    check: docker ps --filter name=theseus-otel-docker
+    notes: otel-collector-contrib 0.163.2 с docker_stats receiver; cAdvisor пробовали первым и отвергли — под Docker Desktop он видит контейнеры, но не резолвит файловые слои и не отдаёт per-container метрики
+
+  - id: INFRA-005
+    name: ohmgraphite
+    role: аппаратные датчики — реальная частота CPU, температуры по ядрам, package power
+    status: active
+    kind: windows-service
+    location:
+      install_path: C:/Apps/OhmGraphite
+      config: C:/Apps/OhmGraphite/OhmGraphite.exe.config
+      service: OhmGraphite
+      endpoint: 127.0.0.1:4445/metrics
+    monitoring: Grafana Cloud — scrape через Alloy, затем remote_write
+    check: sc query OhmGraphite
+    notes: нужен потому, что windows_exporter отдаёт статическую номинальную частоту (1801 MHz), и троттлинг по нему не выводится
+
+  - id: INFRA-006
+    name: guardrails-test
+    role: изолированный Hermes-профиль для проверки guardrails-плагина
+    status: active
+    kind: hermes-profile
+    location:
+      profile: guardrails-test
+      bank: hermes-guardrails-test
+    monitoring: Grafana Cloud и Langfuse — общие, отдельных панелей нет
+    check: hermes --profile guardrails-test status
+    notes: отдельный банк Hindsight; основной профиль не трогает
+
+  - id: INFRA-007
+    name: hermes-hugging-face-hub
+    role: ограниченный справочный доступ к моделям и датасетам Hub
+    status: active
+    kind: mcp-integration
+    location:
+      endpoint: https://huggingface.co/mcp
+      route: hermes-native-mcp -> official-hugging-face-mcp -> hub
+    monitoring: Langfuse — трейсы вызовов MCP
+    check: hf auth whoami
+    notes: источник справки, не канон документации
+
+  - id: INFRA-008
+    name: hermes-codex-google-workspace
+    role: маршрут Gmail и Drive через Codex app server
+    status: configured-unverified
+    kind: runtime-integration
+    location:
+      config: C:/Users/s.poklad/AppData/Local/hermes/config.yaml
+      route: hermes -> codex_app_server -> native Codex applications
+      services: [gmail, google-drive]
+    monitoring: Langfuse — трейсы; отдельных панелей нет
+    check: hermes status
+    notes: Drive также доступен через Pipedream (mcp__pipedream__google_drive_*) — этот маршрут проверен read-only
+
+  - id: INFRA-009
+    name: hermes-gog-google-workspace
+    role: Gmail-доступ через gog-обёртку
+    status: deployed
+    kind: runtime-integration
+    location:
+      image: theseus-gog:0.38.1-auto-keyring
+      wrapper: mcporter
+    monitoring: Langfuse — трейсы
+    check: mcporter list gog
+    notes: OAuth-чтение Gmail проверено; ключи вне реестра
+
+  - id: INFRA-010
+    name: digitalocean
+    role: control plane облачного провайдера (только чтение)
+    status: active-read-only-route-verified
+    kind: provider
+    location:
+      iac_project: D:/theseus-infrastructure
+      adapter: D:/theseus-infrastructure/scripts/digitalocean_mcp.py
+      endpoints: [https://accounts.mcp.digitalocean.com/mcp, https://droplets.mcp.digitalocean.com/mcp]
+    monitoring: Grafana Cloud — расходы в finops-панели; Langfuse — вызовы MCP
+    check: mcporter list digitalocean
+    notes: мутация только по явному разрешению; ни один ресурс не зарегистрирован, пока не создан и не прочитан обратно
+
+retired:
+  - name: automem
+    retired: 2026-10-28
+    reason: живая память переведена на Hindsight; контейнеры остановлены, том сохранён
+  - name: mempalace
+    retired: 2026-10-28
+    reason: заменён Hindsight
+  - name: backup
+    retired: 2026-10-28
+    reason: заменён scheduled task (restic)
+  - name: graph-viewer
+    reason: контейнер приостановлен
+  - name: log-lattice
+    reason: логи уходят в Grafana Cloud через Alloy
+  - name: dashboard
+    reason: контейнер приостановлен, дашборды живут в Grafana
+  - name: stateful-agent-net
+    reason: отключён
+  - name: nous-route-council-sandbox
+    reason: одноразовый исследовательский стенд, не постоянная инфраструктура

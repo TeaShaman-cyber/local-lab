@@ -1,0 +1,47 @@
+revision: 2026-10-30-rules-v1
+registry: infra/registry.yaml
+doc: docs/reference/infrastructure.md
+
+# Machine-readable правила обращения с инфраструктурой.
+# Каждый id обязан присутствовать в docs/reference/infrastructure.md, и наоборот.
+# Проверка: tools/contracts/check_infra.py
+
+rules:
+  - id: RULE-001
+    obligation: MUST
+    statement: >-
+      Новый сервис разворачивается вместе с мониторингом в Grafana (health и
+      ключевые метрики) до того, как задача считается выполненной. Установка без
+      мониторинга не считается установкой.
+    verification: >-
+      В infra/registry.yaml у записи заполнено поле monitoring; дашборд или
+      правило алерта существует и отвечает в Grafana.
+
+  - id: RULE-002
+    obligation: MUST_NOT
+    statement: >-
+      Не писать локальные скрипты и ad-hoc замеры для того, что уже наблюдается
+      в Grafana или Langfuse. Сначала искать существующую панель, метрику или
+      трейс.
+    verification: >-
+      В issue приложена ссылка на дашборд или трейс, а не дамп самописного
+      скрипта.
+
+  - id: RULE-003
+    obligation: MUST
+    statement: >-
+      Инфраструктурный факт описывается один раз. Единственный источник —
+      infra/registry.yaml; документы, скиллы и issue ссылаются на id записи, а
+      не пересказывают адрес или путь.
+    verification: >-
+      grep по адресам и путям из реестра не находит их повторения в других
+      файлах репозитория, кроме ссылок на id.
+
+  - id: RULE-004
+    obligation: MUST_NOT
+    statement: >-
+      Секреты (пароли, токены, приватные ключи, содержимое .env) не попадают ни
+      в реестр, ни в репозиторий. Вместо секрета указывается место его хранения.
+    verification: >-
+      tools/contracts/check_infra.py сканирует реестр на известные префиксы
+      ключей и на поля api_key/password/token с непустым литеральным значением.

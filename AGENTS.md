@@ -213,6 +213,10 @@ stateful или внешне значимое действие.
 |---|---|
 | `IDEA.md` | замысел проекта, короткая заметка |
 | `AGENTS.md` | этот контракт |
+| `GLOSSARY.md` | термины проекта: мониторинг, сервис, плагин, провайдер |
+| `infra/registry.yaml` | единственное место фактов об инфраструктуре |
+| `docs/reference/infrastructure.md` | правила обращения с инфраструктурой (RULE-NNN) |
+| `tools/contracts/check_infra.py` | структурная проверка реестра и правил |
 | `.agents/skills/` | проектные скиллы: `local-core-router`, `sonar` |
 | `scripts/sync-skills.sh` | установка скиллов в Hermes (`$HERMES_HOME/skills/local-lab/`) с readback |
 | `docs/agents/` | конфигурация инженерных скиллов: issue tracker, triage-лейблы, доменные доки |
