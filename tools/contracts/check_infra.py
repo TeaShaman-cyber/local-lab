@@ -38,9 +38,11 @@ RULES = ROOT / "docs" / "reference" / "infrastructure.rules.yaml"
 DOC = ROOT / "docs" / "reference" / "infrastructure.md"
 
 SERVICE_ID = re.compile(r"^INFRA-\d{3}$")
+STAND_ID = re.compile(r"^LAB-\d{3}$")
 RULE_ID = re.compile(r"^RULE-\d{3}$")
 RULE_REF = re.compile(r"\bRULE-\d{3}\b")
 SERVICE_FIELDS = ("id", "name", "role", "status", "kind", "location", "monitoring", "check")
+STAND_FIELDS = ("id", "name", "role", "host", "capacity", "constraints", "priority", "monitoring", "check")
 
 SECRET_PREFIXES = [
     re.compile(r"sk-[A-Za-z0-9]{16,}"),
@@ -81,6 +83,39 @@ def check_registry(data: dict) -> list[str]:
         monitoring = svc.get("monitoring")
         if isinstance(monitoring, str) and monitoring.strip().lower() in ("", "none", "tbd", "todo"):
             errors.append(f"{label}: monitoring is a placeholder")
+    return errors
+
+
+def check_stands(data: dict) -> list[str]:
+    """Test stands: stable ids, required fields, unique priorities."""
+    errors: list[str] = []
+    stands = data.get("test_stands")
+    if not isinstance(stands, list) or not stands:
+        return ["test_stands: missing or empty"]
+
+    seen: set[str] = set()
+    priorities: dict[int, str] = {}
+    for i, stand in enumerate(stands):
+        if not isinstance(stand, dict):
+            errors.append(f"test_stands[{i}]: not a mapping")
+            continue
+        sid = str(stand.get("id", ""))
+        label = f"stand {sid or i}"
+        if not STAND_ID.match(sid):
+            errors.append(f"{label}: id must match ^LAB-\\d{{3}}$")
+        if sid in seen:
+            errors.append(f"{label}: duplicate id")
+        seen.add(sid)
+        for field in STAND_FIELDS:
+            if field not in stand or stand[field] in (None, "", [], {}):
+                errors.append(f"{label}: missing or empty field '{field}'")
+        priority = stand.get("priority")
+        if not isinstance(priority, int) or priority < 1:
+            errors.append(f"{label}: priority must be a positive integer")
+        elif priority in priorities:
+            errors.append(f"{label}: priority {priority} already used by {priorities[priority]}")
+        else:
+            priorities[priority] = sid
     return errors
 
 
@@ -157,6 +192,7 @@ def check_secrets(data: dict) -> list[str]:
 
 def run_checks(registry: dict, rules: dict, doc_text: str) -> list[str]:
     errors = check_registry(registry)
+    errors.extend(check_stands(registry))
     rule_errors, rule_ids = check_rules(rules)
     errors.extend(rule_errors)
     if rule_ids:
@@ -225,6 +261,10 @@ def self_test() -> int:
     missing_rule["rules"][0]["id"] = "RULE-999"
     cases.append(("rule missing from doc", registry, missing_rule, doc_text))
 
+    dup_stand = copy.deepcopy(registry)
+    dup_stand["test_stands"][1]["priority"] = dup_stand["test_stands"][0]["priority"]
+    cases.append(("duplicate stand priority", dup_stand, rules, doc_text))
+
     failures = 0
     for name, reg, rul, doc in cases:
         if not run_checks(reg, rul, doc):
@@ -254,7 +294,9 @@ def main(argv: list[str]) -> int:
         for err in errors:
             print("  -", err)
         return 1
-    print(f"OK: {len(registry.get('services', []))} services, {len(rules.get('rules', []))} rules, "
+    print(f"OK: {len(registry.get('services', []))} services, "
+          f"{len(registry.get('test_stands', []))} stands, "
+          f"{len(rules.get('rules', []))} rules, "
           f"{len(registry.get('retired', []))} retired")
     return 0
 

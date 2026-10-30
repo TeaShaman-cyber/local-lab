@@ -1,0 +1,27 @@
+#!/bin/sh
+set -u
+D=/mnt/pvediag
+mkdir -p "$D"
+dev=$(blkid -L PVEBOOT 2>/dev/null || true)
+if [ -z "$dev" ]; then
+    for c in /dev/sda5 /dev/sda6 /dev/sda1; do
+        [ -e "$c" ] && dev=$c && break
+    done
+fi
+[ -n "$dev" ] || exit 0
+mount -t vfat -o rw,umask=0000 "$dev" "$D" 2>/dev/null || exit 0
+f="$D/boot-$(date +%Y%m%d-%H%M%S).txt"
+{
+    echo "=== date ==="; date
+    echo "=== cmdline ==="; cat /proc/cmdline
+    echo "=== uname ==="; uname -a
+    echo "=== mounts (root) ==="; mount | grep ' / '
+    echo "=== ip ==="; ip -br a 2>&1
+    echo "=== rfkill ==="; rfkill list 2>&1
+    echo "=== lsmod ==="; lsmod 2>&1 | head -20
+    echo "=== failed units ==="; systemctl --failed --no-pager 2>&1
+    echo "=== dmesg ==="; dmesg 2>&1 | tail -300
+    echo "=== journal ==="; journalctl -b --no-pager -n 400 2>&1
+} > "$f" 2>&1
+sync
+umount "$D" 2>/dev/null || true

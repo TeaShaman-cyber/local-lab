@@ -1,0 +1,13 @@
+[Unit]
+Description=Bring up Wi-Fi (wpa_supplicant + dhcp)
+After=network-pre.target
+Wants=network-pre.target
+Before=network.target pve-cluster.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pve-wifi-up
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

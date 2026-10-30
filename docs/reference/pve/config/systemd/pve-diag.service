@@ -1,0 +1,12 @@
+[Unit]
+Description=Write boot diagnostics to FAT32 PVEBOOT partition
+After=local-fs.target systemd-journald.service
+Before=pve-cluster.service pveproxy.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pve-diag
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

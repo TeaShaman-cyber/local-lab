@@ -1,0 +1,1 @@
+GRAFANA_TOKEN=<redacted, см. PVE_ROOT_PASS/GRAFANA_API_TOKEN в env Hermes>

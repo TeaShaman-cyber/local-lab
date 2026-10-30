@@ -1,0 +1,91 @@
+logging {
+  level  = "warn"
+  format = "logfmt"
+}
+
+prometheus.exporter.unix "host" {
+  enable_collectors = ["cpu", "meminfo", "loadavg", "filesystem", "diskstats", "netdev", "uname", "time", "os"]
+}
+
+// Drop series that carry no signal on this host. ZFS is not used here (no
+// pools, no datasets) but the module is loaded, so the exporter still emits
+// ~294 ARC metrics; the rest are exporter self-metrics and kernel counters
+// nobody charts.
+prometheus.relabel "drop_low_value" {
+  forward_to = [prometheus.remote_write.grafana.receiver]
+
+  rule {
+    source_labels = ["__name__"]
+    regex         = "node_zfs_.*|node_scrape_collector_.*|node_cooling_device_.*|node_schedstat_.*|node_cpu_scaling_.*|node_cpu_frequency_.*|node_softnet_.*|node_power_.*|node_timex_.*|node_netstat_.*|node_sockstat_.*"
+    action        = "drop"
+  }
+}
+
+prometheus.scrape "host" {
+  targets         = prometheus.exporter.unix.host.targets
+  forward_to      = [prometheus.relabel.drop_low_value.receiver]
+  scrape_interval = "30s"
+}
+
+prometheus.remote_write "grafana" {
+  endpoint {
+    url = "https://prometheus-prod-65-prod-eu-west-2.grafana.net/api/prom/push"
+    basic_auth {
+      username = "3707865"
+      password = "<GRAFANA_TOKEN>"
+    }
+  }
+  external_labels = {
+    host = "pve-t490",
+    env  = "lab",
+  }
+}
+
+// Hindsight canary stand in LXC 103. Keep its metrics separate from the
+// laptop production scrape so Grafana queries cannot silently mix the routes.
+prometheus.scrape "hindsight_stand" {
+  targets         = [{ __address__ = "10.10.10.13:8888", job = "hindsight-stand" }]
+  forward_to      = [prometheus.remote_write.grafana.receiver]
+  scrape_interval = "30s"
+}
+
+// LXC 103 runtime logs. The token is supplied by /etc/default/alloy through
+// the systemd service environment; it is never stored in this file.
+local.file_match "hindsight_stand_logs" {
+  path_targets = [{
+    __path__    = "/var/log/lxc-103.log",
+    job         = "pve",
+    service     = "hindsight-stand",
+    container   = "lxc-103",
+    log_type    = "lxc",
+  }]
+}
+
+loki.source.file "hindsight_stand_logs" {
+  targets    = local.file_match.hindsight_stand_logs.targets
+  forward_to = [loki.process.hindsight_stand_logs.receiver]
+}
+
+loki.process "hindsight_stand_logs" {
+  forward_to = [loki.write.grafana.receiver]
+
+  // Redact common credential-shaped values before they leave PVE.
+  stage.replace {
+    expression = "(ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{20,}|glsa_[A-Za-z0-9]{30,}|glc_[A-Za-z0-9+/=]{30,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}|ya29[.][A-Za-z0-9_-]{20,}|1//[A-Za-z0-9_-]{20,})"
+    replace    = "[REDACTED]"
+  }
+}
+
+loki.write "grafana" {
+  endpoint {
+    url = "https://logs-prod-012.grafana.net/loki/api/v1/push"
+    basic_auth {
+      username = "1849597"
+      password = "<GRAFANA_TOKEN>"
+    }
+  }
+  external_labels = {
+    host = "pve-t490",
+    env  = "lab",
+  }
+}

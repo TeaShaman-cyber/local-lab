@@ -1,0 +1,28 @@
+#!/bin/sh
+set -u
+CONF=/etc/wpa_supplicant/wpa_supplicant-wlan0.conf
+ADDR=10.67.163.198/24
+GW=10.67.163.5
+DNS=10.67.163.5
+
+[ -e "$CONF" ] || exit 0
+
+for ifc in /sys/class/net/wl*; do
+    [ -e "$ifc" ] || continue
+    i=${ifc##*/}
+    ip link set "$i" up || true
+    pkill -f "wpa_supplicant.*$i" 2>/dev/null || true
+    wpa_supplicant -B -i "$i" -c "$CONF" || true
+    n=0
+    while [ "$n" -lt 20 ]; do
+        sleep 1
+        if iw dev "$i" link 2>/dev/null | grep -q "Connected to"; then break; fi
+        n=$((n+1))
+    done
+    ip addr flush dev "$i" scope global 2>/dev/null || true
+    ip addr add "$ADDR" dev "$i" 2>/dev/null || true
+    ip route replace default via "$GW" dev "$i" 2>/dev/null || true
+    printf 'nameserver %s\n' "$DNS" > /etc/resolv.conf
+    exit 0
+done
+exit 0

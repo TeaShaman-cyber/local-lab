@@ -159,6 +159,51 @@ services:
     check: python tools/backup_lattice/run_backup.py; затем restic snapshots --latest 3 в каждом репозитории
     notes: ручной прогон 2026-10-30 11:03-11:37 успешен во всех трёх репозиториях, restore-drill sha256_match; плановый запуск 31.10 03:00 ещё не подтверждён — LastTaskResult на момент проверки был 1 от прогона до фикса
 
+# Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
+# Признак продового/тестового — RULE-009 в infrastructure.md.
+test_stands:
+  - id: LAB-001
+    name: pve
+    role: изолированные LXC и VM для экспериментов, которые влезают в память
+    host: "pve.lab / 10.67.163.198 (host=pve-t490)"
+    capacity: "7.48 GiB RAM, ThinkPad T490, без swap"
+    constraints: >-
+      Слабый CPU; одновременная загрузка моделей приводила к global OOM при
+      свободной памяти хоста около 1.16 GiB. Требует, чтобы ноут был загружен в PVE
+      (dual-boot с Windows). ICMP закрыт: ping не отвечает при живом сервере.
+    priority: 1
+    monitoring: "Grafana Cloud, job=integrations/unix, host=pve-t490; дашборд /d/pve-t490-host"
+    check: "curl -sk https://10.67.163.198:8006/ (ожидается 200); ssh root@pve.lab 'pct list'"
+    docs: docs/reference/pve.md
+    notes: Предпочтителен по умолчанию. Продовую работу не затрагивает.
+
+  - id: LAB-002
+    name: local-docker
+    role: контейнеры на основном ноутбуке, когда нужен запас памяти или быстрый диск
+    host: "SPOKLAD, Docker Desktop VM"
+    capacity: "VM 3.83 GiB, хост 31.8 GiB / i5-10210U (4 ядра, 8 потоков), D: 32 GiB свободно"
+    constraints: >-
+      Здесь же живут продовые сервисы: Hindsight (INFRA-001), docker-exporter
+      (INFRA-004), socket-proxy (INFRA-003), бэкап. Тест не должен конкурировать
+      за память, порты и диск.
+    priority: 2
+    monitoring: "Grafana Cloud — integrations/windows для хоста; контейнеры через docker-exporter (INFRA-004)"
+    check: "docker info; docker ps"
+    notes: >-
+      Мощнее PVE, но близко к проду. Перед запуском проверить свободную память
+      и что тест не публикует занятые порты.
+
+  - id: LAB-003
+    name: timeweb-cloud
+    role: платное облако для того, что не влезает ни в PVE, ни в локальный Docker
+    host: "Timeweb Cloud"
+    capacity: по тарифу
+    constraints: Платно. Брать только когда LAB-001 и LAB-002 показали, что не влезают.
+    priority: 3
+    monitoring: "Постоянного нет. При поднятии стенда — стандартная интеграция Grafana Cloud, иначе стенд не считается поднятым"
+    check: read-only листинг через Timeweb API
+    notes: Последний вариант, не по умолчанию.
+
 retired:
   - name: automem
     retired: 2026-10-28

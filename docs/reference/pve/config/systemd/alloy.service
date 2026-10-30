@@ -1,0 +1,15 @@
+[Unit]
+Description=Grafana Alloy (host metrics and LXC Hindsight logs)
+After=network-online.target awg-quick@awg0.service
+Wants=network-online.target awg-quick@awg0.service
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=/etc/default/alloy
+ExecStart=/usr/local/bin/alloy run /etc/alloy/config.alloy --storage.path=/var/lib/alloy --server.http.listen-addr=127.0.0.1:12345
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

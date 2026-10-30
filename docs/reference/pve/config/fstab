@@ -1,0 +1,1 @@
+LABEL=pveroot  /      ext4  defaults,errors=remount-ro  0 1
