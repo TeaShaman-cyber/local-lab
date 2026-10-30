@@ -12,7 +12,8 @@
  }
  
  
-+_GITHUB_REF = re.compile(r"(?<![\w./-])#(\d{1,6})\b")
++_GITHUB_REF = re.compile(r"(?<![\w./&-])#(\d{1,6})\b")
++_REMOTE_RE = re.compile(r"(?:^|[@/])github\.com(?::\d+)?[:/]([^/]+)/([^/\s]+?)(?:\.git)?/?$")
 +_REPO_SLUG_CACHE: dict[str, tuple[float, str | None]] = {}
 +
 +
@@ -32,7 +33,7 @@
 +            timeout=5,
 +        )
 +        url = (out.stdout or "").strip()
-+        match = re.search(r"github\.com[:/]+([^/]+)/([^/\s]+?)(?:\.git)?/?$", url)
++        match = _REMOTE_RE.search(url)
 +        if match:
 +            slug = f"{match.group(1)}/{match.group(2)}"
 +    except Exception:
