@@ -3,14 +3,17 @@ name: review-gate
 # Prod changes must carry an outside review before merge (RULE-011).
 # The gate is path-scoped: docs and trivia do not pay the same price as infra.
 #
+# One verdict per commit. The workflow runs on review events only: a push leaves
+# the required check unreported, so the PR waits; a review reports pass or fail.
+# Running it on `pull_request` too produced two results for the same commit —
+# pass and fail — and branch protection blocked on the worse one.
+#
 # Passes when either:
 #   - the Codex bot reviewed the current head commit, or
 #   - the PR carries the `outside-review` label, set by a human after an
 #     independent subagent review (label = explicit human act, not a comment).
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
   pull_request_review:
     types: [submitted]
 
