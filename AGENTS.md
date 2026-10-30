@@ -215,10 +215,6 @@ stateful или внешне значимое действие.
 | `AGENTS.md` | этот контракт |
 | `GLOSSARY.md` | термины проекта: мониторинг, сервис, плагин, провайдер |
 | `infra/registry.yaml` | единственное место фактов об инфраструктуре |
-| `infra/compose/` | compose-файлы живых сервисов (hindsight, docker-exporter) |
-| `infra/monitoring/` | шаблоны конфигов мониторинга (Alloy, OTel) без секретов |
-| `scripts/apply-alloy-config.sh` | рендер шаблона Alloy из env вне репо; dry-run по умолчанию |
-| `tools/` | скрипты мониторинга и операций (push метрик, бэкап) |
 | `docs/reference/infrastructure.md` | правила обращения с инфраструктурой (RULE-NNN) |
 | `tools/contracts/check_infra.py` | структурная проверка реестра и правил |
 | `.agents/skills/` | проектные скиллы: `local-core-router`, `sonar` |
