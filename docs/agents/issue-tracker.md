@@ -14,6 +14,17 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+## Project as a coordination view
+
+The board is `TeaShaman-cyber` Project **#19 "Local Lab — Operations"** (public).
+
+- Git, Issues, PRs, CI receipts and exact remote readback remain authoritative. The Project is an overview only: it does not authorize implementation, release, publication or runtime mutation.
+- Add an issue to the board: `gh project item-add 19 --owner TeaShaman-cyber --url <issue-url>`.
+- Read the board: `gh project item-list 19 --owner TeaShaman-cyber --format json`.
+- Fields: `Status` (Triage, Ready, In Progress, Blocked, Deferred, Verify, Done, Retired), `Area` (Infra, Memory, QA, Observability, Backup, Research, Docs, Skills), `Priority` (P0–P3).
+- `Status` reflects observed state, not intent. `Priority` is set only when the issue text gives a reason. An empty field means `UNKNOWN`.
+- `Maturity`, `Blocker` and `Disposition` are deliberately not configured: in the legacy board they were filled 10/73, 1/73 and 0/73 times, and empty fields created false structure.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
