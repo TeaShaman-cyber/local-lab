@@ -218,7 +218,7 @@ stateful или внешне значимое действие.
 
 ### Issue tracker
 
-GitHub Issues в `TeaShaman-cyber/local-lab`, через `gh` CLI. See `docs/agents/issue-tracker.md`.
+GitHub Issues в `TeaShaman-cyber/local-lab`. Чтение — `gh` или GitHub MCP, запись — только `gh`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

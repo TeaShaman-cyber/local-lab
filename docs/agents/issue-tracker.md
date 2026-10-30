@@ -1,6 +1,15 @@
 # Issue tracker: GitHub
 
-Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
+Issues and specs for this repo live as GitHub issues.
+
+Two routes, chosen by what the operation does:
+
+| Operation | Route |
+|---|---|
+| Read: view, list, search, comments, linked PRs | `gh` CLI **or** GitHub MCP (`mcp__github__issue_read`, `list_issues`, `search_issues`, `pull_request_read`) |
+| Write: create, comment, label, close, assign | `gh` CLI only — the MCP server exposes no write tools |
+
+Choose the thinner route: MCP when the session already has it bound and the call is a single read; `gh` when scripting, filtering with `jq`, or doing any mutation. Neither route replaces a read-back when the result matters.
 
 ## Conventions
 
