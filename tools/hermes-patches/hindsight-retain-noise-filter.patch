@@ -1,0 +1,98 @@
+--- /c/Users/s.poklad/AppData/Local/hermes/plugins/hindsight/__init__.py.bak-noise-20261028-031753	2026-10-27 20:09:59.763910300 +0200
++++ /c/Users/s.poklad/AppData/Local/hermes/plugins/hindsight/__init__.py	2026-10-28 13:31:14.460161600 +0200
+@@ -17,6 +17,7 @@
+ import logging
+ import os
+ import queue
++import re
+ import sys
+ import threading
+ import time
+@@ -474,6 +475,77 @@
+     "cwd",
+ )
+ # Retain metadata keys, each stamped from the attribute of the same name when set.
++# Операционный шум: чистые уведомления о завершении фоновых процессов попадали
++# в память как факты. Строку с ошибкой не трогаем — там есть сигнал.
++_RETAIN_NOISE_RE = re.compile(
++    r"^\s*(?:[-*•]\s*)?(?:фоновый\s+процесс|background\s+process)\s+proc_[0-9a-z]+"
++    r".*\b(?:завершился\s+нормально|завершился\s+успешно|completed\s+normally|exit\s+code\s+0|exit\s+0)\b",
++    re.IGNORECASE,
++)
++_RETAIN_ERROR_RE = re.compile(
++    r"ошибк|сломал|упал|error|fail|исключен|traceback",
++    re.IGNORECASE,
++)
++
++# Пользовательские шаблоны шума. Файл перечитывается на каждом retain по mtime,
++# поэтому правка действует без перезапуска Hermes. Формат: одна регулярка на
++# строку, `#` — комментарий. Совпадение отбрасывает строку безусловно.
++_NOISE_PATTERNS_FILE = os.path.join(
++    os.environ.get("HERMES_HOME") or os.path.join(os.path.expanduser("~"), "AppData", "Local", "hermes"),
++    "hindsight",
++    "retain-noise-patterns.txt",
++)
++_noise_patterns_cache: dict[str, object] = {"mtime": None, "patterns": []}
++
++
++def _extra_noise_patterns() -> list[re.Pattern[str]]:
++    """Пользовательские шаблоны из файла; кеш сбрасывается при изменении mtime."""
++    try:
++        stat = os.stat(_NOISE_PATTERNS_FILE)
++    except OSError:
++        return []
++    if _noise_patterns_cache["mtime"] == stat.st_mtime:
++        return _noise_patterns_cache["patterns"]  # type: ignore[return-value]
++    patterns: list[re.Pattern[str]] = []
++    try:
++        with open(_NOISE_PATTERNS_FILE, encoding="utf-8") as handle:
++            for line in handle:
++                line = line.strip()
++                if not line or line.startswith("#"):
++                    continue
++                try:
++                    patterns.append(re.compile(line, re.IGNORECASE))
++                except re.error:
++                    logger.warning("Hindsight retain: bad noise pattern skipped: %r", line)
++    except OSError:
++        return []
++    _noise_patterns_cache["mtime"] = stat.st_mtime
++    _noise_patterns_cache["patterns"] = patterns
++    return patterns
++
++
++def _strip_retain_noise(text: str) -> str:
++    """Убирает из текста перед retain строки, которые являются только уведомлением
++    о завершении фонового процесса или подходят под пользовательский шаблон.
++    Возвращает исходный текст, если нечего резать."""
++    if not text:
++        return text
++    extra = _extra_noise_patterns()
++    lines = text.splitlines()
++    kept = []
++    for ln in lines:
++        builtin_noise = _RETAIN_NOISE_RE.search(ln) and not _RETAIN_ERROR_RE.search(ln)
++        user_noise = any(p.search(ln) for p in extra)
++        if builtin_noise or user_noise:
++            continue
++        kept.append(ln)
++    if len(kept) == len(lines):
++        return text
++    dropped = len(lines) - len(kept)
++    logger.debug("Hindsight retain: dropped %d noise line(s) before retain", dropped)
++    return "\n".join(kept).strip()
++
++
+ _METADATA_ATTRS = (
+     "session_id",
+     "platform",
+@@ -1915,8 +1987,8 @@
+         return [
+             {"role": role, "content": f"{prefix}: {content}", "timestamp": now}
+             for role, prefix, content in (
+-                ("user", self._retain_user_prefix, user_content),
+-                ("assistant", self._retain_assistant_prefix, assistant_content),
++                ("user", self._retain_user_prefix, _strip_retain_noise(user_content)),
++                ("assistant", self._retain_assistant_prefix, _strip_retain_noise(assistant_content)),
+             )
+         ]
