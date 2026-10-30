@@ -54,13 +54,32 @@ jobs:
         run: |
           set -euo pipefail
 
+          # One open issue per kind of defect, not one per merge. A stream of
+          # near-identical issues is noise that gets muted, and a muted alarm is
+          # worse than no alarm. New cases are appended to the existing issue.
+          note() {
+            local title="$1" body="$2"
+            local existing
+            existing=$(gh issue list --repo "$REPO" --state open --limit 100 \
+              --json number,title --jq "[.[] | select(.title == \"$title\")][0].number // empty")
+
+            if [ -n "$existing" ]; then
+              gh issue comment "$existing" --repo "$REPO" --body "$body" || true
+              echo "noted on existing issue #$existing"
+            else
+              gh issue create --repo "$REPO" --title "$title" --body "$body" || true
+            fi
+          }
+
           comments=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq '.[].body')
           pattern="merge-intent: ${HEAD_SHA}"
 
           if ! printf '%s\n' "$comments" | grep -qF "$pattern"; then
             echo "::warning::No merge-intent for $HEAD_SHA"
-            body="PR #${PR} merged with no merge-intent. head=${HEAD_SHA} merged_by=${MERGED_BY}. Expected: merge-intent: ${HEAD_SHA} issue: #N (or reason: ...). Either another client with account access merged it (see #15), or the agent forgot the intent. Check Langfuse/Tempo within 2 minutes. Does not block work."
-            gh issue create --repo "$REPO" --title "Merge без intent: PR #${PR}" --body "$body" || true
+            body="PR #${PR} merged with no merge-intent. head=${HEAD_SHA} merged_by=${MERGED_BY}.
+          Expected: merge-intent: ${HEAD_SHA} issue: #N (or reason: ...).
+          Either another client with account access merged it (see #15), or the agent forgot the intent. Check Langfuse/Tempo within 2 minutes. Does not block work."
+            note "Merge без intent" "$body"
             exit 0
           fi
 
@@ -70,7 +89,8 @@ jobs:
             exit 0
           fi
 
-          echo "::warning::Intent present but neither 'issue: #N' nor 'reason: ...'"
-          body="PR #${PR} merged with merge-intent: ${HEAD_SHA} but no binding. Expected issue: #N or reason: .... This is not a foreign merge, it is a process defect: the intent was declared, the basis was not. Does not block work."
-          gh issue create --repo "$REPO" --title "Merge без привязки: PR #${PR}" --body "$body" || true
+          echo "::warning::Intent present but neither issue nor reason"
+          body="PR #${PR} merged with merge-intent: ${HEAD_SHA} but no binding.
+          Expected issue: #N or reason: .... This is not a foreign merge, it is a process defect: the intent was declared, the basis was not. Does not block work."
+          note "Merge без привязки" "$body"
           exit 0
