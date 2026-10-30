@@ -185,7 +185,10 @@ test_stands:
       остатков, свободная память упала до 2 ГБ и OOM выглядел как нехватка RAM.
       При разборе OOM проверять /tmp и Shmem, а не только RSS процессов. Требует,
       чтобы ноут был загружен в PVE (dual-boot с Windows). ICMP закрыт, ping не
-      отвечает при живом сервере.
+      отвечает при живом сервере. DNS для LXC задавать явно nameserver 10.10.10.2
+      (dnsmasq на vpn-gw): Proxmox иначе наследует резолвер узла 10.67.163.5,
+      который внутри контейнера не отвечает. Правка конфига не обновляет живой
+      /etc/resolv.conf, нужен перезапуск контейнера, затем проверка getent hosts.
     priority: 1
     monitoring: "Grafana Cloud, job=integrations/unix, host=pve-t490; дашборд /d/pve-t490-host"
     check: "curl -sk https://10.67.163.198:8006/ (ожидается 200); ssh pve pct list — по ключу из ~/.ssh/config, не по паролю"
