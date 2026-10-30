@@ -11,8 +11,13 @@
 #   I  — import order, cheap and mechanical
 #
 # Deliberately not selected: pyupgrade (UP), flake8-blind-except (BLE),
-# subprocess-run-without-check (PLW1510). The last one is a false positive here:
-# these scripts inspect returncode explicitly, which is why check= is absent.
+# subprocess-run-without-check (PLW1510).
+#
+# PLW1510 was checked rather than waved away: of eight call sites, six inspect
+# returncode explicitly and two — both `rm -rf` cleanup calls — ignore it on
+# purpose, because a failed cleanup is not a reason to fail the run. So the rule
+# is not wrong in principle; it just cannot distinguish "ignored deliberately"
+# from "forgotten", and would force `check=False` noise on six correct calls.
 
 line-length = 120
 
