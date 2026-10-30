@@ -69,7 +69,7 @@ services:
       install_path: C:/Apps/OhmGraphite
       config: C:/Apps/OhmGraphite/OhmGraphite.exe.config
       service: OhmGraphite
-      endpoint: 127.0.0.1:4445/metrics
+      endpoint: "127.0.0.1:4445/metrics"
     monitoring: Grafana Cloud — scrape через Alloy, затем remote_write
     check: sc query OhmGraphite
     notes: нужен потому, что windows_exporter отдаёт статическую номинальную частоту (1801 MHz), и троттлинг по нему не выводится
@@ -92,36 +92,11 @@ services:
     status: active
     kind: mcp-integration
     location:
-      endpoint: https://huggingface.co/mcp
+      endpoint: "https://huggingface.co/mcp"
       route: hermes-native-mcp -> official-hugging-face-mcp -> hub
     monitoring: Langfuse — трейсы вызовов MCP
     check: hf auth whoami
     notes: источник справки, не канон документации
-
-  - id: INFRA-008
-    name: hermes-codex-google-workspace
-    role: маршрут Gmail и Drive через Codex app server
-    status: configured-unverified
-    kind: runtime-integration
-    location:
-      config: C:/Users/s.poklad/AppData/Local/hermes/config.yaml
-      route: hermes -> codex_app_server -> native Codex applications
-      services: [gmail, google-drive]
-    monitoring: Langfuse — трейсы; отдельных панелей нет
-    check: hermes status
-    notes: Drive также доступен через Pipedream (mcp__pipedream__google_drive_*) — этот маршрут проверен read-only
-
-  - id: INFRA-009
-    name: hermes-gog-google-workspace
-    role: Gmail-доступ через gog-обёртку
-    status: deployed
-    kind: runtime-integration
-    location:
-      image: theseus-gog:0.38.1-auto-keyring
-      wrapper: mcporter
-    monitoring: Langfuse — трейсы
-    check: mcporter list gog
-    notes: OAuth-чтение Gmail проверено; ключи вне реестра
 
   - id: INFRA-010
     name: digitalocean
@@ -135,6 +110,21 @@ services:
     monitoring: Grafana Cloud — расходы в finops-панели; Langfuse — вызовы MCP
     check: mcporter list digitalocean
     notes: мутация только по явному разрешению; ни один ресурс не зарегистрирован, пока не создан и не прочитан обратно
+
+  - id: INFRA-011
+    name: pipedream-google-workspace
+    role: Gmail, Google Calendar и Google Drive через Pipedream MCP
+    status: active
+    kind: mcp-integration
+    location:
+      server: mcp-pipedream
+      tools:
+        gmail: [gmail_send_email, gmail_create_draft, gmail_list_send_as_aliases]
+        calendar: [google_calendar_create_event, google_calendar_get_event, google_calendar_respond_to_event]
+        drive: [google_drive_upload_file, google_drive_move_file, google_drive_update_file, google_drive_list_files]
+    monitoring: Langfuse — трейсы вызовов MCP
+    check: live read-only call, e.g. google_drive_list_files with Max Results 1
+    notes: единственный маршрут к Google-сервисам; Drive проверен read-only, вернул реальный файл
 
 retired:
   - name: automem
@@ -156,3 +146,7 @@ retired:
     reason: отключён
   - name: nous-route-council-sandbox
     reason: одноразовый исследовательский стенд, не постоянная инфраструктура
+  - name: hermes-codex-google-workspace
+    reason: маршрут через Codex отброшен как legacy; Google-сервисы идут через Pipedream (INFRA-011)
+  - name: hermes-gog-google-workspace
+    reason: gog-обёртка отброшена как legacy; Google-сервисы идут через Pipedream (INFRA-011)
