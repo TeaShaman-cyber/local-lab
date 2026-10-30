@@ -47,7 +47,7 @@ def read_env(name: str) -> str:
 def loki_credentials() -> tuple[str, str, str]:
     """Extract the loki.write endpoint url + basic auth from the Alloy config."""
     text = ALLOY_CONFIG.read_text(encoding="utf-8", errors="ignore")
-    block = re.search(r'loki\.write\s+"[^"]+"\s*\{(.*?)\n\}', text, re.S)
+    block = re.search(r'loki\.write\s+"[^"]+"\s*\{(.*?)\n\}', text, re.DOTALL)
     if not block:
         raise SystemExit("loki.write block not found in Alloy config")
     body = block.group(1)

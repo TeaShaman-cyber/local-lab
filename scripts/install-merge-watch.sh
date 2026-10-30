@@ -22,7 +22,6 @@ set -euo pipefail
 
 OWNER="${OWNER:-TeaShaman-cyber}"
 SOURCE_REPO="TeaShaman-cyber/local-lab"
-SOURCE_WORKFLOW=".github/workflows/merge-watch.yml"
 PATH_IN_REPO=".github/workflows/merge-watch.yml"
 BRANCH="chore/merge-watch"
 

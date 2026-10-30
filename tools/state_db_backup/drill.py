@@ -25,10 +25,8 @@ import argparse
 import json
 import os
 import pathlib
-import shutil
 import sqlite3
 import subprocess
-import sys
 import time
 
 REPLICA = pathlib.Path("E:/theseus-backups/state-db/litestream")

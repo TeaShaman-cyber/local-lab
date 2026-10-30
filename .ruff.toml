@@ -1,0 +1,30 @@
+# Ruff configuration.
+#
+# Only rules that catch defects, not style. The full default set produced 35
+# findings on the first run — mostly pyupgrade cosmetics (percent formatting,
+# tzinfo.utc, import order). A gate that fails on cosmetics gets bypassed, and
+# a bypassed gate protects nothing.
+#
+# What is selected:
+#   E  — real errors (undefined names, broken syntax-level mistakes)
+#   F  — pyflakes: unused imports, redefinitions, shadowed names
+#   I  — import order, cheap and mechanical
+#
+# Deliberately not selected: pyupgrade (UP), flake8-blind-except (BLE),
+# subprocess-run-without-check (PLW1510). The last one is a false positive here:
+# these scripts inspect returncode explicitly, which is why check= is absent.
+
+line-length = 120
+
+[lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
+
+[lint.per-file-ignores]
+# Contract self-tests print results; a long line is a report, not a defect.
+"tools/contracts/*.py" = ["E501"]
+# E402 is deliberate in every push_* script: sys.path.insert() must run before
+# importing a sibling tool, because a flat tools/ tree shares helpers by path.
+# Moving the import to the top would break it.
+# Matched with ** because ruff compares against native separators on Windows.
+"tools/**/push_*.py" = ["E402"]

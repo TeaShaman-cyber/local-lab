@@ -8,7 +8,9 @@ set -euo pipefail
 
 PROTECTED="refs/heads/main"
 
-while read -r local_ref local_sha remote_ref remote_sha; do
+# Only remote_ref is used; the other three fields exist because git sends four.
+# ShellCheck SC2034 asks for the unused ones to be explicit rather than named.
+while read -r _ _ remote_ref _; do
     if [ "$remote_ref" = "$PROTECTED" ]; then
         echo "pre-push: direct push to 'main' is disabled." >&2
         echo "pre-push: open a pull request; review gate is RULE-011." >&2

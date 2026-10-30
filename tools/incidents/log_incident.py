@@ -23,7 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 DEFAULT_LOG = Path(os.environ.get("INCIDENT_LOG", r"D:/theseus-ops/incidents.log"))
@@ -31,7 +31,7 @@ DEFAULT_LOG = Path(os.environ.get("INCIDENT_LOG", r"D:/theseus-ops/incidents.log
 
 def append_entry(log: Path, service: str, symptom: str, action: str, verification: str) -> dict:
     entry = {
-        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "ts": datetime.now(UTC).isoformat(timespec="seconds"),
         "mode": "incident",
         "service": service,
         "symptom": symptom,

@@ -1,6 +1,6 @@
 import importlib.util
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 
 path = Path(__file__).with_name('push_nous_usage.py')
 spec = importlib.util.spec_from_file_location('push_nous_usage', path)

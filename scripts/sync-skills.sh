@@ -18,7 +18,19 @@ fi
 # Guard before any pruning: an empty or wrong source would make the prune step
 # delete every installed skill. "Source exists" is not the same as "source has
 # content", and the difference here is the whole projection.
-skill_count="$(find "$SRC" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+#
+# Count with the same rule the copy loop uses (`*/` plus -d), not `find -type d`:
+# find does not follow symlinks, so a source of symlinked skills counted as zero
+# and refused to sync while the copy loop would have handled it. Both the
+# independent reviewer and Codex flagged this asymmetry separately.
+skill_count=0
+for dir in "$SRC"/*/; do
+  # if, not `[ -d ] && count++`: under set -e the AND-OR form makes the loop's
+  # exit status depend on whether the last entry was a directory.
+  if [ -d "$dir" ]; then
+    skill_count=$((skill_count + 1))
+  fi
+done
 if [ "$skill_count" -eq 0 ]; then
   echo "refusing to sync: $SRC contains no skill directories; pruning would empty the projection" >&2
   exit 1
@@ -35,6 +47,15 @@ fi
 
 DEST="$HERMES_ROOT/skills/local-lab"
 
+# ShellCheck SC2115: with an empty HERMES_ROOT, `rm -rf "$DEST/$name"` would
+# expand to `rm -rf "/$name"`. Neither the author, nor the independent reviewer,
+# nor Codex caught this — the linter did. That is the argument for linters over
+# careful reading.
+if [ -z "$HERMES_ROOT" ]; then
+  echo "refusing to sync: HERMES_HOME resolved to an empty path" >&2
+  exit 1
+fi
+
 echo "source:    $SRC"
 echo "installed: $DEST"
 echo
@@ -43,7 +64,7 @@ mkdir -p "$DEST"
 
 for dir in "$SRC"/*/; do
   name="$(basename "$dir")"
-  rm -rf "$DEST/$name"
+  rm -rf "${DEST:?}/$name"
   mkdir -p "$DEST/$name"
   cp -R "$dir." "$DEST/$name/"
   echo "synced  $name"
@@ -74,7 +95,7 @@ done
 pruned=0
 while IFS= read -r name; do
   [ -z "$name" ] && continue
-  rm -rf "$DEST/$name"
+  rm -rf "${DEST:?}/$name"
   echo "REMOVED $name"
   pruned=1
 done < "$extras"

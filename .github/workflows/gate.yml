@@ -61,7 +61,26 @@ jobs:
       - name: Install PyYAML
         run: pip install --quiet pyyaml
 
+      # The same linters the local check uses, installed the same way. Without
+      # this, STRICT=1 would fail on every run in CI, and without STRICT the gate
+      # would silently skip linters that are missing — the failure mode RULE-016
+      # exists to prevent.
+      - name: Install linters
+        run: |
+          set -euo pipefail
+          pip install --quiet ruff yamllint
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          curl -sL https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            | tar xz -C /usr/local/bin actionlint
+          shellcheck --version | head -2
+          actionlint -version
+
       - name: Deterministic checks
+        env:
+          # A missing linter is a failure in CI. Locally the check may SKIP, and
+          # says so out loud; here silence is not acceptable.
+          STRICT: "1"
         run: bash tools/dev/check
 
       - name: Does this change need an outside review

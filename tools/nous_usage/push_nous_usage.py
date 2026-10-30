@@ -6,10 +6,10 @@ import base64
 import json
 import math
 import os
-from pathlib import Path
 import sys
 import time
 import urllib.request
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tools' / 'deepinfra_usage'))

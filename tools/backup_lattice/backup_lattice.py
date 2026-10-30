@@ -14,10 +14,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
-
 
 DEFAULT_AUTOMEM_API_URL = "http://127.0.0.1:8001"
 DEFAULT_OUTPUT_DIR = Path("backups/data")
@@ -226,7 +224,7 @@ def write_manifest(
     statuses: list[BackupStatus],
     mirror_dir: str | None,
 ) -> None:
-    created = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    created = datetime.now(UTC).isoformat(timespec="seconds")
     manifest = {
         "created_at": created,
         "archive": archive_name,
@@ -307,7 +305,7 @@ def run_once(args: argparse.Namespace) -> int:
     if not output_dir.is_absolute():
         output_dir = root / output_dir
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     archive_name = f"theseus-data-{timestamp}.tar.gz"
     archive_path = output_dir / archive_name
 
