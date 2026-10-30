@@ -1,0 +1,118 @@
+name: repo-guard-audit
+
+# Daily audit: which repositories still have no merge-watch guard.
+#
+# Runs in the cloud on GitHub's runner, so it does not depend on the laptop
+# being online. Reads the account's repositories with a fine-grained,
+# read-only token (REPO_AUDIT_TOKEN: Contents read, Metadata read) — it cannot
+# change anything in those repositories, only look.
+#
+# Output is a single tracking issue in this repository. One issue, not one per
+# repository. When nothing is missing, the issue is closed.
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: repo-guard-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.REPO_AUDIT_TOKEN }}
+      OWNER: TeaShaman-cyber
+      GUARD: .github/workflows/merge-watch.yml
+      REPORT_REPO: TeaShaman-cyber/local-lab
+      TITLE: "Репозитории без merge-watch"
+    steps:
+      - name: Check the audit token
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::REPO_AUDIT_TOKEN is not set"
+            exit 1
+          fi
+          login=$(gh api user --jq .login)
+          echo "authenticated as: $login"
+
+      - name: Collect repositories missing the guard
+        id: scan
+        run: |
+          set -euo pipefail
+          total=0
+          missing_lines=""
+          failed=0
+
+          repos=$(gh repo list "$OWNER" --limit 500 --json name --jq '.[].name')
+          for r in $repos; do
+            total=$((total + 1))
+            if gh api "repos/$OWNER/$r/contents/$GUARD" --silent >/dev/null 2>err.txt; then
+              continue
+            fi
+            if grep -qi "not found" err.txt; then
+              missing_lines="${missing_lines}- \`$r\`"$'\n'
+            else
+              failed=$((failed + 1))
+            fi
+          done
+
+          count=$(printf '%s' "$missing_lines" | grep -c '^- ' || true)
+          echo "total=$total missing=$count unreadable=$failed"
+          {
+            echo "total=$total"
+            echo "missing=$count"
+            echo "unreadable=$failed"
+          } >> "$GITHUB_OUTPUT"
+          printf '%s' "$missing_lines" > missing.md
+
+      - name: Report
+        run: |
+          set -euo pipefail
+
+          total="${{ steps.scan.outputs.total }}"
+          missing="${{ steps.scan.outputs.missing }}"
+          unreadable="${{ steps.scan.outputs.unreadable }}"
+          existing=$(gh issue list --repo "$REPORT_REPO" --state open --search "in:title $TITLE" --json number --jq '.[0].number // empty')
+
+          if [ "$missing" -eq 0 ]; then
+            echo "no repositories missing the guard"
+            if [ -n "$existing" ]; then
+              gh issue comment --repo "$REPORT_REPO" "$existing" --body "Аудит $(date -u +%F): все $total репозиториев имеют merge-watch. Закрываю."
+              gh issue close --repo "$REPORT_REPO" "$existing"
+            fi
+            exit 0
+          fi
+
+          {
+            echo "Аудит $(date -u +%F): **$missing** из $total репозиториев без \`.github/workflows/merge-watch.yml\`."
+            echo
+            echo "Нечитаемых: $unreadable."
+            echo
+            echo "## Список"
+            echo
+            cat missing.md
+            echo
+            echo "## Что это значит"
+            echo
+            echo "В этих репозиториях merge не проверяется на наличие намерения: чужой merge пройдёт незамеченным."
+            echo
+            echo "## Как закрыть"
+            echo
+            echo "Поставить файл-вызов merge-watch или выполнить установщик из local-lab. Issue закроется автоматически, когда пропусков не останется."
+          } > body.md
+
+          if [ -n "$existing" ]; then
+            gh issue edit --repo "$REPORT_REPO" "$existing" --body-file body.md
+            echo "updated issue #$existing"
+          else
+            gh issue create --repo "$REPORT_REPO" --title "$TITLE" --body-file body.md
+          fi
