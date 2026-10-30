@@ -11,6 +11,8 @@ Two routes, chosen by what the operation does:
 
 Choose the thinner route: MCP when the session already has it bound and the call is a single read; `gh` when scripting, filtering with `jq`, or doing any mutation. Neither route replaces a read-back when the result matters.
 
+**This split describes today's bound tool surface, not a permanent architecture.** Legacy `theseus-local-lab#123` (open) plans a discovery-only MCP layer with lazy tool binding: a capability search surface instead of hundreds of injected schemas, `gh`/GraphQL staying the complete route for Projects v2, and no silent fallback that changes a mutation route. When that lands, re-probe the surface before treating "MCP cannot write" as a rule.
+
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
