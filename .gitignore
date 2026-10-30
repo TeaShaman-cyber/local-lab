@@ -1,0 +1,30 @@
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Node
+node_modules/
+.npm/
+
+# Editors
+.vscode/
+.idea/
+
+# Scratch
+.scratch/tmp/
