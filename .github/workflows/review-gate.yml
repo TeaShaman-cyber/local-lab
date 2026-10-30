@@ -70,7 +70,19 @@ jobs:
             exit 0
           fi
 
+          # A human approval counts on its own. The gate must not depend on one
+          # bot: if the Codex app is down or silent, a person can still approve.
+          approved=$(gh api "repos/$REPO/pulls/$PR/reviews" \
+            --jq "[.[] | select(.state == \"APPROVED\" and .commit_id == \"$HEAD\" and ((.user.login | startswith(\"chatgpt-codex-connector\")) | not))] | length")
+          if [ "$approved" -gt 0 ]; then
+            echo "PASS: human approval on head $HEAD ($approved approval(s))"
+            exit 0
+          fi
+
           echo "::error::No outside review on head $HEAD."
-          echo "Ask for one: comment '@codex review', or run a subagent review and set the 'outside-review' label."
+          echo "Any of these satisfies the gate:"
+          echo "  - comment '@codex review' and wait for the bot;"
+          echo "  - a human presses Approve in the GitHub UI;"
+          echo "  - run a subagent review and set the 'outside-review' label."
           echo "Self-review alone does not satisfy RULE-011."
           exit 1
