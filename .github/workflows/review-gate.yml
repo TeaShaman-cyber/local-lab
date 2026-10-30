@@ -57,12 +57,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          labels=$(gh api "repos/$REPO/issues/$PR/labels" --jq '[.[].name] | join(",")')
-          if printf '%s' "$labels" | grep -qw 'outside-review'; then
-            echo "PASS: label 'outside-review' present"
-            exit 0
-          fi
-
           reviewed=$(gh api "repos/$REPO/pulls/$PR/reviews" \
             --jq "[.[] | select((.user.login | startswith(\"chatgpt-codex-connector\")) and .commit_id == \"$HEAD\")] | length")
           if [ "$reviewed" -gt 0 ]; then
@@ -70,7 +64,20 @@ jobs:
             exit 0
           fi
 
+          # A human approval counts on its own. The gate must not depend on one
+          # bot: if the Codex app is down or silent, a person can still approve.
+          approved=$(gh api "repos/$REPO/pulls/$PR/reviews" \
+            --jq "[.[] | select(.state == \"APPROVED\" and .commit_id == \"$HEAD\" and ((.user.login | startswith(\"chatgpt-codex-connector\")) | not))] | length")
+          if [ "$approved" -gt 0 ]; then
+            echo "PASS: human approval on head $HEAD ($approved approval(s))"
+            exit 0
+          fi
+
           echo "::error::No outside review on head $HEAD."
-          echo "Ask for one: comment '@codex review', or run a subagent review and set the 'outside-review' label."
+          echo "Two verifiable sources satisfy the gate:"
+          echo "  - comment '@codex review' and wait for the bot;"
+          echo "  - a human presses Approve in the GitHub UI."
+          echo "A subagent review is valuable but not proof: with a single account"
+          echo "GitHub cannot tell 'reviewed by a subagent' from 'decided to say so'."
           echo "Self-review alone does not satisfy RULE-011."
           exit 1
