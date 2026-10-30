@@ -1,0 +1,76 @@
+name: review-gate
+
+# Prod changes must carry an outside review before merge (RULE-011).
+# The gate is path-scoped: docs and trivia do not pay the same price as infra.
+#
+# One verdict per commit. The workflow runs on review events only: a push leaves
+# the required check unreported, so the PR waits; a review reports pass or fail.
+# Running it on `pull_request` too produced two results for the same commit —
+# pass and fail — and branch protection blocked on the worse one.
+#
+# Passes when either:
+#   - the Codex bot reviewed the current head commit, or
+#   - the PR carries the `outside-review` label, set by a human after an
+#     independent subagent review (label = explicit human act, not a comment).
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  review-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Which paths changed
+        id: paths
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git diff --name-only "$BASE" "$HEAD" > changed.txt
+          echo "--- changed files ---"
+          cat changed.txt
+          if grep -qE '^(infra/|scripts/|tools/|\.agents/|\.github/|docs/reference/|patches/|AGENTS\.md$)' changed.txt; then
+            echo "prod=true" >> "$GITHUB_OUTPUT"
+            echo "verdict: prod paths touched"
+          else
+            echo "prod=false" >> "$GITHUB_OUTPUT"
+            echo "verdict: no prod paths, gate not required"
+          fi
+
+      - name: Require outside review
+        if: steps.paths.outputs.prod == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          labels=$(gh api "repos/$REPO/issues/$PR/labels" --jq '[.[].name] | join(",")')
+          if printf '%s' "$labels" | grep -qw 'outside-review'; then
+            echo "PASS: label 'outside-review' present"
+            exit 0
+          fi
+
+          reviewed=$(gh api "repos/$REPO/pulls/$PR/reviews" \
+            --jq "[.[] | select((.user.login | startswith(\"chatgpt-codex-connector\")) and .commit_id == \"$HEAD\")] | length")
+          if [ "$reviewed" -gt 0 ]; then
+            echo "PASS: Codex reviewed head $HEAD ($reviewed review(s))"
+            exit 0
+          fi
+
+          echo "::error::No outside review on head $HEAD."
+          echo "Ask for one: comment '@codex review', or run a subagent review and set the 'outside-review' label."
+          echo "Self-review alone does not satisfy RULE-011."
+          exit 1

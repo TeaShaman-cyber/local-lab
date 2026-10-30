@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Refuse direct pushes to protected branches.
+#
+# Prod changes go through a pull request with outside review (RULE-011).
+# This hook is a speed bump, not a barrier: `git push --no-verify` bypasses it,
+# which is exactly why branch protection on GitHub is the real gate.
+set -euo pipefail
+
+PROTECTED="refs/heads/main"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    if [ "$remote_ref" = "$PROTECTED" ]; then
+        echo "pre-push: direct push to 'main' is disabled." >&2
+        echo "pre-push: open a pull request; review gate is RULE-011." >&2
+        echo "pre-push: the local hook is bypassable with --no-verify, GitHub protection is not." >&2
+        exit 1
+    fi
+done
+
+exit 0
