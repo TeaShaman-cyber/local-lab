@@ -27,6 +27,7 @@ REGISTRY = ROOT / "infra" / "registry.yaml"
 ALWAYS_REVIEW = (
     ".github/workflows/",
     "tools/contracts/",
+    "tools/backup_lattice/",
     "AGENTS.md",
 )
 
