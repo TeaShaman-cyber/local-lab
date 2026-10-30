@@ -106,9 +106,17 @@ services:
       # Local CPU cross-encoder reranker tuning (applies to both banks).
       # The upstream default is 300 candidates. Length-sorted bucket batching
       # is quality-identical and measured 36-54% faster on this host.
-      # The temporary 80-candidate cap was for a bounded latency probe; restore
-      # the upstream candidate pool for normal recall quality.
-      # FlashRank backend was measured slower here and was rejected.
+      #
+      # 80 candidates, because reranking is where recall time goes:
+      #   - trace 2026-10-25: recall 88 s, of which rerank 86.3 s — 98.1%;
+      #   - llm_requests, 7 days: 300 candidates -> 28.5 s average, 80 -> 8.9 s,
+      #     same host, same model (3.2x).
+      # The 300 pool was a diagnostic step while chasing an unrelated regression,
+      # not a quality decision; the owner confirmed 80 stands.
+      HINDSIGHT_API_RERANKER_MAX_CANDIDATES: "80"
+      # A lighter reranker was measured and rejected: L6/ONNX was 1.97x faster at
+      # the same strict/soft hit rate, but MRR fell 0.344 -> 0.317 (n=15), and the
+      # speed was judged not worth the accuracy. FlashRank was slower here.
       HINDSIGHT_API_RERANKER_LOCAL_BUCKET_BATCHING: "true"
       # --- Multilingual stack (2026-10-26) -------------------------------
       # Every language layer defaults to English: embeddings
