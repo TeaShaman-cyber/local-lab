@@ -103,6 +103,19 @@ jobs:
             exit 0
           fi
 
+          # Codex does not comment when it finds nothing — it reacts with 👍 on
+          # the PR. Without this branch a clean review looked like no review at
+          # all, and the gate blocked a PR that had been reviewed.
+          # The thumb must be newer than the head commit, otherwise it belongs
+          # to an earlier revision.
+          head_date=$(gh api "repos/$REPO/commits/$HEAD" --jq '.commit.committer.date')
+          thumb=$(gh api "repos/$REPO/issues/$PR/reactions" --paginate \
+            --jq "[.[] | select((.user.login | startswith(\"chatgpt-codex-connector\")) and .content == \"+1\" and .created_at > \"$head_date\")] | length")
+          if [ "$thumb" -gt 0 ]; then
+            echo "PASS: Codex reacted 👍 on this PR after $head_date — reviewed, no findings"
+            exit 0
+          fi
+
           human=$(gh api "repos/$REPO/pulls/$PR/reviews" \
             --jq "[.[] | select(.state == \"APPROVED\" and .commit_id == \"$HEAD\" and ((.user.login | startswith(\"chatgpt-codex-connector\")) | not))] | length")
           if [ "$human" -gt 0 ]; then
