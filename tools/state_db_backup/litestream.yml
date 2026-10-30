@@ -1,0 +1,19 @@
+# Litestream: continuous replication of the Hermes session database.
+#
+# Why not a periodic copy: sqlite's backup API restarts whenever the source is
+# written, and this database is written on every agent turn, so a page-by-page
+# copy can restart forever and never finish. Litestream streams WAL segments
+# instead — cheap, incremental, and it keeps a point-in-time window instead of
+# whatever happened to be on disk at the top of the hour.
+#
+# The replica is a local directory on E:, which protects against a corrupted or
+# wrongly-migrated database — not against losing the machine. Off-machine copies
+# remain the job of the daily backup (local + S3 + Drive).
+
+dbs:
+  - path: C:/Users/s.poklad/AppData/Local/hermes/state.db
+    replicas:
+      - type: file
+        path: E:/theseus-backups/state-db/litestream
+        retention: 72h
+        sync-interval: 10s
