@@ -81,6 +81,14 @@ def build_lines(checklist: dict, usage: dict) -> list[str]:
         lines.append(f"metric=stripe_balance_usd value={float(raw_balance):.4f}")
         if raw_balance > 0:
             lines.append(f"metric=owed_usd value={float(raw_balance):.4f}")
+        # Derived alongside the raw value, never instead of it. ``stripe_balance``
+        # is the Stripe credit (negative = funds paid in); the dashboard shows
+        # available = -credit - spend. Verified 2026-10-30: -(-23.00) - 13.16 =
+        # 9.84 against the panel's $9.85. Kept separate so a wrong sign stays
+        # visible in the raw fields; a suspended account must not read as money.
+        recent = checklist.get("recent")
+        if isinstance(recent, (int, float)) and not checklist.get("suspended"):
+            lines.append(f"metric=available_usd value={-float(raw_balance) - float(recent):.4f}")
     if isinstance(checklist.get("recent"), (int, float)):
         lines.append(f"metric=spend_recent_usd value={float(checklist['recent']):.4f}")
     if isinstance(checklist.get("limit"), (int, float)):
@@ -177,7 +185,8 @@ def main() -> int:
 
     balance = next((ln.split("=")[-1] for ln in lines if ln.startswith("metric=stripe_balance_usd")), "?")
     month = next((ln.split("=")[-1] for ln in lines if ln.startswith("metric=spend_month_usd")), "?")
-    print(f"loki={status} lines={len(lines)} balance_usd={balance} spend_month_usd={month}")
+    available = next((ln.split("=")[-1] for ln in lines if ln.startswith("metric=available_usd")), "n/a")
+    print(f"loki={status} lines={len(lines)} balance_usd={balance} available_usd={available} spend_month_usd={month}")
     return 0
 
 
