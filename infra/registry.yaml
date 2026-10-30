@@ -10,7 +10,7 @@ services:
     status: active
     kind: docker-compose
     location:
-      compose: C:/Users/s.poklad/Documents/Codex/2026-07-08/life-science-research-plugin-life-science-4/deploy/hindsight/docker-compose.yml
+      compose: E:/local-lab/infra/compose/hindsight/docker-compose.yml
       runtime_root: D:/hindsight
       env_file: D:/hindsight/.env
       ports: [8888, 9999, 1455]
@@ -27,7 +27,7 @@ services:
     status: active
     kind: docker-compose
     location:
-      compose: C:/Users/s.poklad/Documents/Codex/2026-07-08/life-science-research-plugin-life-science-4/deploy/hindsight/docker-compose.yml
+      compose: E:/local-lab/infra/compose/hindsight/docker-compose.yml
       runtime_root: D:/hindsight
       env_file: D:/hindsight/.env
       containers: [hermes-proxy]
@@ -56,7 +56,7 @@ services:
     status: active
     kind: docker-compose
     location:
-      compose: C:/Users/s.poklad/Documents/Codex/2026-07-08/life-science-research-plugin-life-science-4/deploy/docker-exporter/docker-compose.yml
+      compose: E:/local-lab/infra/compose/docker-exporter/docker-compose.yml
       env_file: D:/theseus-monitoring/docker-exporter.env
       containers: [theseus-otel-docker]
       network: docker-proxy-lattice_default (external, принадлежит INFRA-003)

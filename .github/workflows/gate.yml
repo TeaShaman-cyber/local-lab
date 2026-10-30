@@ -1,0 +1,124 @@
+name: gate
+
+# One gate, one verdict. Replaces the separate qa and review-gate workflows:
+# two workflows meant two check runs per commit, and branch protection blocked
+# on the worse one.
+#
+# The gate answers a single question — may this reach main? — and answers it
+# differently depending on what the change carries:
+#
+#   P1 path or P1 service touched  -> deterministic checks AND an outside review
+#   everything else                -> deterministic checks only
+#
+# The class comes from infra/registry.yaml via tools/contracts/review_needed.py,
+# not from folder names.
+#
+# merge-watch stays separate on purpose: it runs after the merge and detects a
+# merge nobody asked for. Detection is not a gate.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# A newer commit or review cancels the older run, so only one verdict survives
+# per PR head.
+concurrency:
+  group: gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the pull-request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify source identity
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          checkout_sha="$(git rev-parse HEAD)"
+          if [ "$checkout_sha" != "$EXPECTED_SHA" ]; then
+            printf 'GATE_SOURCE_MISMATCH expected=%s observed=%s\n' "$EXPECTED_SHA" "$checkout_sha" >&2
+            exit 2
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
+      - name: Deterministic checks
+        run: bash tools/dev/check
+
+      - name: Does this change need an outside review
+        id: need
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git diff --name-only "$BASE" "$HEAD" > changed.txt
+          echo "--- changed ---"
+          cat changed.txt
+          set +e
+          python tools/contracts/review_needed.py < changed.txt
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "required=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Require outside review for P1
+        if: steps.need.outputs.required == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          bot=$(gh api "repos/$REPO/pulls/$PR/reviews" \
+            --jq "[.[] | select((.user.login | startswith(\"chatgpt-codex-connector\")) and .commit_id == \"$HEAD\")] | length")
+          if [ "$bot" -gt 0 ]; then
+            echo "PASS: Codex reviewed $HEAD ($bot)"
+            exit 0
+          fi
+
+          human=$(gh api "repos/$REPO/pulls/$PR/reviews" \
+            --jq "[.[] | select(.state == \"APPROVED\" and .commit_id == \"$HEAD\" and ((.user.login | startswith(\"chatgpt-codex-connector\")) | not))] | length")
+          if [ "$human" -gt 0 ]; then
+            echo "PASS: human approval on $HEAD ($human)"
+            exit 0
+          fi
+
+          echo "::error::P1 change without outside review on $HEAD."
+          echo "Ask for one: comment '@codex review', or approve in the GitHub UI."
+          echo "Deterministic checks passed — this is the review requirement, not a code defect."
+          exit 1
+
+      - name: Verdict
+        run: |
+          if [ "${{ steps.need.outputs.required }}" = "true" ]; then
+            echo "gate: P1 change, checks and review satisfied"
+          else
+            echo "gate: deterministic checks satisfied, no outside review required"
+          fi
