@@ -65,13 +65,21 @@ FACT | INFERENCE | HYPOTHESIS | UNKNOWN
 1. Репозиторий и файлы      Git, docs, код в E:\local-lab
 2. session_search           встроенный поиск по сессиям Hermes (FTS5)
 3. Память                   memory provider, с readback
-4. MarcoPolo MCP            только его поверхность: история ChatGPT,
-                            workspace shell, Drive, workspace-локальное состояние
-5. Внешние источники        GitHub, документы, провайдеры
+4. MarcoPolo MCP            только история ChatGPT / Session Search
+5. Внешние источники        GitHub, Google Drive через Pipedream, провайдеры
 ```
 
 Переход на MarcoPolo — материальная смена маршрута: назвать причину (чего нет
 локально) и не выдавать его состояние за локальное.
+
+Проверенные внешние поверхности:
+
+```text
+Google Drive   Pipedream, mcp__pipedream__google_drive_*   read-only проверка пройдена
+shell, файлы, git, сеть   локально                        workspace shell на MarcoPolo не нужен
+```
+
+Не переносить в MarcoPolo то, что уже доступно локально или через Pipedream.
 
 Для маршрутизации локального рантайма, свежести репозитория, границ 403 и механики
 записи использовать скилл `local-core-router`.

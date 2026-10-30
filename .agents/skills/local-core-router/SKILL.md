@@ -21,7 +21,9 @@ description: Use when work involves local runtime state, Git/GitHub route select
 - Хост: Windows 11; `terminal` работает через bash (MSYS). Нативные программы (git, rg, node, python) получают пути вида `C:/...`, а не `/c/...`.
 - Репозиторий: `E:\local-lab` — канон. Remote: `origin` = GitHub.
 - `session_search` — встроенный инструмент Hermes (FTS5 по сессиям Hermes). Это не MarcoPolo.
-- MarcoPolo MCP — только когда нужна именно его поверхность (история ChatGPT, workspace shell, Drive). Не маршрут по умолчанию.
+- MarcoPolo MCP — только история ChatGPT / Session Search. Не маршрут по умолчанию.
+- Google Drive — через Pipedream (`mcp__pipedream__google_drive_*`), не через MarcoPolo.
+- Shell, файлы, git и сеть — локально; workspace shell на MarcoPolo не нужен.
 - Секреты в репозиторий не попадают; ключи живут в окружении.
 
 ## Currentness
