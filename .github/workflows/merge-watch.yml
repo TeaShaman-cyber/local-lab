@@ -1,0 +1,62 @@
+name: merge-watch
+
+# Closes two questions with one mechanism: "did we merge this at all" and
+# "was that merge bound to something".
+#
+# Before merging, the agent comments on the PR:
+#     merge-intent: <head_sha> issue: #N
+#   or
+#     merge-intent: <head_sha> reason: <why, at least 5 chars>
+#
+# After the merge this workflow looks for an intent for the exact merged commit.
+# No intent            -> somebody else merged it (incident #15).
+# Intent, no binding   -> the process slipped: merged without issue or reason.
+# Intent with binding  -> expected merge.
+#
+# Detection, not prevention: the merge already happened. The build never goes
+# red and future merges are never blocked — a noisy gate gets switched off.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  check-intent:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Look for a bound merge-intent on the merged commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MERGED_BY: ${{ github.event.pull_request.merged_by.login }}
+        run: |
+          set -euo pipefail
+
+          comments=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq '.[].body')
+          pattern="merge-intent: ${HEAD_SHA}"
+
+          if ! printf '%s\n' "$comments" | grep -qF "$pattern"; then
+            echo "::warning::No merge-intent for $HEAD_SHA"
+            body="PR #${PR} merged with no merge-intent. head=${HEAD_SHA} merged_by=${MERGED_BY}. Expected: merge-intent: ${HEAD_SHA} issue: #N (or reason: ...). Either another client with account access merged it (see #15), or the agent forgot the intent. Check Langfuse/Tempo within 2 minutes. Does not block work."
+            gh issue create --repo "$REPO" --title "Merge без intent: PR #${PR}" --body "$body" || true
+            exit 0
+          fi
+
+          bound=$(printf '%s\n' "$comments" | grep -F "$pattern" | grep -Ec 'issue: *#[0-9]+|reason: .{5,}' || true)
+          if [ "$bound" -gt 0 ]; then
+            echo "PASS: intent with binding for $HEAD_SHA"
+            exit 0
+          fi
+
+          echo "::warning::Intent present but neither 'issue: #N' nor 'reason: ...'"
+          body="PR #${PR} merged with merge-intent: ${HEAD_SHA} but no binding. Expected issue: #N or reason: .... This is not a foreign merge, it is a process defect: the intent was declared, the basis was not. Does not block work."
+          gh issue create --repo "$REPO" --title "Merge без привязки: PR #${PR}" --body "$body" || true
+          exit 0
