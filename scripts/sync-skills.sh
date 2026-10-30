@@ -15,6 +15,15 @@ if [ ! -d "$SRC" ]; then
   exit 1
 fi
 
+# Guard before any pruning: an empty or wrong source would make the prune step
+# delete every installed skill. "Source exists" is not the same as "source has
+# content", and the difference here is the whole projection.
+skill_count="$(find "$SRC" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+if [ "$skill_count" -eq 0 ]; then
+  echo "refusing to sync: $SRC contains no skill directories; pruning would empty the projection" >&2
+  exit 1
+fi
+
 # HERMES_HOME may arrive as a Windows path; normalise it for this shell.
 if [ -n "${HERMES_HOME:-}" ] && command -v cygpath >/dev/null 2>&1; then
   HERMES_ROOT="$(cygpath -u "$HERMES_HOME")"
@@ -56,7 +65,11 @@ for dir in "$DEST"/*/; do
     pruned=1
   fi
 done
-[ "$pruned" -eq 0 ] && echo "none"
+# Not `[ "$pruned" -eq 0 ] && echo "none"`: under `set -e` that form makes the
+# script's exit status depend on whether anything was pruned.
+if [ "$pruned" -eq 0 ]; then
+  echo "none"
+fi
 
 echo
 echo "--- readback (content) ---"
