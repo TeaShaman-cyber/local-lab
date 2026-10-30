@@ -37,6 +37,14 @@ PATCHES = {
         "def _normalize_github_refs(",
         "_normalize_github_refs(content, self._cwd)",
     ),
+    # Desktop and gateway sessions hand providers no cwd (upstream #144869), so
+    # normalisation is dead without this fallback: the markers above can all be
+    # present while the feature does nothing.
+    "anchor-fallback": (
+        "_NAMED_REPO = re.compile",
+        "def _repo_named_in_text(",
+        "_current_repo_slug(cwd) or _repo_named_in_text(text)",
+    ),
 }
 
 
