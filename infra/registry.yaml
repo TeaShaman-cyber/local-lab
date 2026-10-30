@@ -5,6 +5,7 @@ last_verified: 2026-10-30
 services:
   - id: INFRA-001
     name: hindsight
+    criticality: P1
     role: долговременная память — провайдер Hermes и изолированные операционные банки
     status: active
     kind: docker-compose
@@ -21,6 +22,7 @@ services:
 
   - id: INFRA-002
     name: hermes-subscription-proxy
+    criticality: P2
     role: брокер OAuth-креденшелов Nous для Solar-маршрута Hindsight
     status: active
     kind: docker-compose
@@ -36,6 +38,7 @@ services:
 
   - id: INFRA-003
     name: docker-read-proxy
+    criticality: P2
     role: узкий read-only маршрут к Docker API для наблюдателей
     status: active
     kind: standalone-compose
@@ -48,6 +51,7 @@ services:
 
   - id: INFRA-004
     name: docker-exporter
+    criticality: P2
     role: метрики контейнеров в Grafana Cloud
     status: active
     kind: docker-compose
@@ -62,6 +66,7 @@ services:
 
   - id: INFRA-005
     name: ohmgraphite
+    criticality: P2
     role: аппаратные датчики — реальная частота CPU, температуры по ядрам, package power
     status: active
     kind: windows-service
@@ -76,6 +81,7 @@ services:
 
   - id: INFRA-006
     name: guardrails-test
+    criticality: T
     role: изолированный Hermes-профиль для проверки guardrails-плагина
     status: active
     kind: hermes-profile
@@ -88,6 +94,7 @@ services:
 
   - id: INFRA-007
     name: hermes-hugging-face-hub
+    criticality: P3
     role: ограниченный справочный доступ к моделям и датасетам Hub
     status: active
     kind: mcp-integration
@@ -100,6 +107,7 @@ services:
 
   - id: INFRA-010
     name: digitalocean
+    criticality: P2
     role: control plane облачного провайдера (только чтение)
     status: active-read-only-route-verified
     kind: provider
@@ -113,6 +121,7 @@ services:
 
   - id: INFRA-011
     name: pipedream-google-workspace
+    criticality: P2
     role: Gmail, Google Calendar и Google Drive через Pipedream MCP
     status: active
     kind: mcp-integration
@@ -128,6 +137,7 @@ services:
 
   - id: INFRA-012
     name: scheduled-metrics-push
+    criticality: P2
     role: задачи Планировщика, отправляющие расходы и балансы провайдеров в Loki
     status: active
     kind: scheduled-tasks
@@ -146,6 +156,7 @@ services:
 
   - id: INFRA-013
     name: backup-lattice
+    criticality: P1
     role: резервные копии операционного состояния
     status: active
     kind: scheduled-task
@@ -164,6 +175,7 @@ services:
 test_stands:
   - id: LAB-001
     name: pve
+    criticality: T
     role: изолированные LXC и VM для экспериментов, которые влезают в память
     host: "pve.lab / 10.67.163.198 (host=pve-t490)"
     capacity: "7.48 GiB RAM, ThinkPad T490, без swap"
@@ -179,6 +191,7 @@ test_stands:
 
   - id: LAB-002
     name: local-docker
+    criticality: T
     role: контейнеры на основном ноутбуке, когда нужен запас памяти или быстрый диск
     host: "SPOKLAD, Docker Desktop VM"
     capacity: "VM 3.83 GiB, хост 31.8 GiB / i5-10210U (4 ядра, 8 потоков), D: 32 GiB свободно"
@@ -195,6 +208,7 @@ test_stands:
 
   - id: LAB-003
     name: timeweb-cloud
+    criticality: T
     role: платное облако для того, что не влезает ни в PVE, ни в локальный Docker
     host: "Timeweb Cloud"
     capacity: по тарифу
