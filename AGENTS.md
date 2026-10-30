@@ -63,18 +63,12 @@ FACT | INFERENCE | HYPOTHESIS | UNKNOWN
 1. Репозиторий и файлы      Git, docs, код в E:\local-lab
 2. session_search           встроенный поиск по сессиям Hermes (FTS5)
 3. Память                   memory provider, с readback
-4. Внешние поверхности      GitHub, Google Drive через Pipedream, провайдеры
+4. Внешние поверхности      GitHub, провайдеры; конкретные маршруты и адреса —
+                            в infra/registry.yaml
 ```
 
-Проверенные внешние поверхности:
-
-```text
-Google Drive              Pipedream, mcp__pipedream__google_drive_*
-shell, файлы, git, сеть   локально
-```
-
-Для маршрутизации локального рантайма, свежести репозитория, границ 403 и механики
-записи использовать скилл `local-core-router`.
+Маршрут локального рантайма, свежесть, границы 403 и механика записи — в скилле
+`local-core-router`.
 
 ## Precedence
 
@@ -176,8 +170,7 @@ stateful или внешне значимое действие.
 ## Verification
 
 `SUCCESS` требует наблюдаемого postcondition, соответствующего домену авторитета.
-Самый дешёвый пример: `git push` не доказывает содержимое remote — нужен readback
-(`git ls-tree origin/main`, `gh api`).
+Механика проверки и границы — в скилле `local-core-router`.
 
 ## Persistence
 
