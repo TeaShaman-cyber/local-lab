@@ -12,7 +12,15 @@ Two routes, chosen by what the operation does:
 
 Choose the thinner route: MCP when the session already has it bound and the call is a single read or a structured Project operation; `gh` when scripting, filtering with `jq`, or when a local checker or QA workflow needs a deterministic exit code. Neither route replaces a read-back when the result matters.
 
-**This split describes today's bound tool surface, not a permanent architecture.** Legacy `theseus-local-lab#123` (open) plans a discovery-only MCP layer with lazy tool binding: a capability search surface instead of hundreds of injected schemas, `gh`/GraphQL staying the complete route for Projects v2, and no silent fallback that changes a mutation route. When that lands, re-probe the surface before treating "MCP cannot write" as a rule.
+**Scope rule — measured 2026-10-30, not assumed.** `gh` is the only route that scopes a search to the whole account (`--owner`). The MCP semantic search cannot: it rejects `user:`/`owner:`/`org:` qualifiers (`HTTP 422: Semantic search does not support org:, user:, or owner: qualifiers`) and accepts only `repo:`. And it is not exhaustive even inside one repo:
+
+| Query | Route | Result |
+|---|---|---|
+| `hindsight` across the account | `gh search issues --owner TeaShaman-cyber` | **81 issues, 10 repos** |
+| `hindsight` in `theseus-local-lab` | `mcp__github__search_issues ... repo:…/theseus-local-lab` | **1 of 59** |
+| `hindsight` unscoped | `mcp__github__search_issues` | 9, including `vectorize-io/hindsight` and `NousResearch/hermes-agent` |
+
+So: account-wide and exhaustive search → `gh`. Conceptual "where was something like this discussed" inside a known repo → MCP semantic, as a top-N hint that must be confirmed by a literal search. Legacy `theseus-local-lab#123` (open) plans a discovery-only MCP layer with lazy tool binding: a capability search surface instead of hundreds of injected schemas, `gh`/GraphQL staying the complete route for Projects v2, and no silent fallback that changes a mutation route. When that lands, re-probe the surface before treating "MCP cannot write" as a rule.
 
 ## Conventions
 
