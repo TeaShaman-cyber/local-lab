@@ -41,8 +41,9 @@ SERVICE_ID = re.compile(r"^INFRA-\d{3}$")
 STAND_ID = re.compile(r"^LAB-\d{3}$")
 RULE_ID = re.compile(r"^RULE-\d{3}$")
 RULE_REF = re.compile(r"\bRULE-\d{3}\b")
-SERVICE_FIELDS = ("id", "name", "role", "status", "kind", "location", "monitoring", "check")
-STAND_FIELDS = ("id", "name", "role", "host", "capacity", "constraints", "priority", "monitoring", "check")
+SERVICE_FIELDS = ("id", "name", "role", "status", "kind", "location", "monitoring", "check", "criticality")
+STAND_FIELDS = ("id", "name", "role", "host", "capacity", "constraints", "priority", "monitoring", "check", "criticality")
+CRITICALITY = {"P1", "P2", "P3", "T"}
 
 SECRET_PREFIXES = [
     re.compile(r"sk-[A-Za-z0-9]{16,}"),
@@ -83,6 +84,9 @@ def check_registry(data: dict) -> list[str]:
         monitoring = svc.get("monitoring")
         if isinstance(monitoring, str) and monitoring.strip().lower() in ("", "none", "tbd", "todo"):
             errors.append(f"{label}: monitoring is a placeholder")
+        crit = svc.get("criticality")
+        if crit is not None and crit not in CRITICALITY:
+            errors.append(f"{label}: criticality must be one of {sorted(CRITICALITY)}, got {crit!r}")
     return errors
 
 
@@ -116,6 +120,9 @@ def check_stands(data: dict) -> list[str]:
             errors.append(f"{label}: priority {priority} already used by {priorities[priority]}")
         else:
             priorities[priority] = sid
+        crit = stand.get("criticality")
+        if crit is not None and crit not in CRITICALITY:
+            errors.append(f"{label}: criticality must be one of {sorted(CRITICALITY)}, got {crit!r}")
     return errors
 
 
@@ -264,6 +271,10 @@ def self_test() -> int:
     dup_stand = copy.deepcopy(registry)
     dup_stand["test_stands"][1]["priority"] = dup_stand["test_stands"][0]["priority"]
     cases.append(("duplicate stand priority", dup_stand, rules, doc_text))
+
+    bad_class = copy.deepcopy(registry)
+    bad_class["services"][0]["criticality"] = "P9"
+    cases.append(("invalid criticality", bad_class, rules, doc_text))
 
     failures = 0
     for name, reg, rul, doc in cases:
