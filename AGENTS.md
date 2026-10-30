@@ -214,6 +214,15 @@ stateful или внешне значимое действие.
 | `scripts/sync-skills.sh` | установка скиллов в Hermes (`$HERMES_HOME/skills/local-lab/`) с readback |
 | `docs/agents/` | конфигурация инженерных скиллов: issue tracker, triage-лейблы, доменные доки |
 
+## Code Review Rules
+
+Codex-бот читает этот файл при ревью pull request. Ниже — что считать дефектом, а не оформлением.
+
+- Изменение без issue, отката или критерия проверки — blocker (`RULE-009`).
+- Секрет в коде, конфиге или командной строке — blocker (`RULE-004`, `RULE-008`).
+- Утверждение «работает» без readback — blocker (`Truth`, `Verification`).
+- Для регулярного выражения или парсера нужен пример входа и выхода: без него false positive не виден.
+
 ## Agent skills
 
 ### Issue tracker
