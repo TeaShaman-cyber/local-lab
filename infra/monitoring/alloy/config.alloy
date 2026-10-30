@@ -1,0 +1,369 @@
+// Theseus host monitoring — Grafana Alloy config (READY TO DEPLOY).
+// Endpoint and instance ID are already filled. Only the token is missing:
+// replace <PASTE_TOKEN_HERE> with the access-policy token from policy
+// "stack-1891821-alloy" (scope set:alloy-data-write), then copy this file to
+// C:\Program Files\GrafanaLabs\Alloy\config.alloy and restart the Alloy service.
+
+logging {
+  level = "info"
+}
+
+prometheus.exporter.windows "host" {
+  enabled_collectors = [
+    "cpu",
+    "logical_disk",
+    "memory",
+    "net",
+    "os",
+    "system",
+    "process",
+    "thermalzone",
+    "textfile",
+  ]
+
+  // Provider cost/limit metrics written as .prom files by scheduled tasks
+  // (see deploy/cost-metrics). Money figures come from the provider itself.
+  textfile {
+    directories = ["C:/Apps/theseus-metrics"]
+  }
+
+  process {
+    include = "^(Hermes|python|pythonw|node|Code|chrome|msedge|opera|Docker Desktop|com.docker.backend|com.docker.build|vmmem|vmmemWSL|powershell|pwsh|alloy|svchost)$"
+    exclude = "^$"
+  }
+}
+
+discovery.relabel "host" {
+  targets = prometheus.exporter.windows.host.targets
+
+  rule {
+    action = "labeldrop"
+    regex  = "process_id"
+  }
+}
+
+// Low-value series do not reach Grafana Cloud. Free tier caps active series at
+// 10k; measured 2026-10-28 at 3,766 (peak 6,785). Keep only the CPU-time series
+// the host dashboard charts; drop the rest of per-process metrics and exporter
+// self-metrics.
+prometheus.relabel "process_keep" {
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+  rule {
+    source_labels = ["__name__", "process"]
+    regex         = "windows_process_cpu_time_total;(Hermes|python|pythonw|node|Code|chrome|msedge|opera|Docker Desktop|com\\.docker\\.backend|com\\.docker\\.build|vmmem|vmmemWSL|powershell|pwsh|alloy|svchost)"
+    action        = "keep"
+  }
+}
+
+prometheus.relabel "drop_low_value" {
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+  rule {
+    source_labels = ["__name__"]
+    regex         = "windows_process_.*|windows_net_nic_operation_status"
+    action        = "drop"
+  }
+
+  rule {
+    source_labels = ["__name__"]
+    regex         = "node_scrape_collector_.*|node_cpu_scaling_governor"
+    action        = "drop"
+  }
+
+  rule {
+    source_labels = ["__name__"]
+    regex         = "alloy_component_graph_connection|prometheus_remote_storage_.*"
+    action        = "drop"
+  }
+
+  rule {
+    source_labels = ["__name__"]
+    regex         = "ohm_nic_.*"
+    action        = "drop"
+  }
+}
+
+prometheus.scrape "host" {
+  targets         = discovery.relabel.host.output
+  forward_to      = [prometheus.relabel.process_keep.receiver, prometheus.relabel.drop_low_value.receiver]
+  scrape_interval = "30s"
+}
+
+// Latency probes. Both paths go through the active VPN, so the measured
+// round-trip is the real user-visible path, not a clean-link baseline.
+prometheus.exporter.blackbox "probes" {
+  config_file = "C:/Program Files/GrafanaLabs/Alloy/blackbox.yml"
+
+  target {
+    name    = "internet_icmp"
+    address = "1.1.1.1"
+    module  = "icmp"
+    labels  = { target_name = "1.1.1.1" }
+  }
+
+  target {
+    name    = "grafana_https"
+    address = "https://grafana.com"
+    module  = "https"
+    labels  = { target_name = "grafana.com" }
+  }
+}
+
+prometheus.scrape "probes" {
+  targets         = prometheus.exporter.blackbox.probes.targets
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+  scrape_interval = "30s"
+}
+
+// Hardware sensors from OhmGraphite + LibreHardwareMonitor, which reads MSR
+// through the PawnIO driver. This is the only source of REAL core clock and
+// per-core temperature — windows_exporter reports a static nominal frequency.
+prometheus.scrape "ohmgraphite" {
+  targets         = [{ __address__ = "127.0.0.1:4445", job = "ohmgraphite" }]
+  metrics_path    = "/metrics/"
+  forward_to      = [prometheus.relabel.drop_low_value.receiver]
+  scrape_interval = "30s"
+}
+
+// Hermes technical logs plus agent.log. Operator decision 2026-10-25: the
+// destination is the operator's own private Grafana Cloud stack, so agent.log is
+// included. Known residual risk: stray secrets inside log lines would travel
+// with them — acceptable to the owner, recorded here on purpose.
+local.file_match "hermes_logs" {
+  path_targets = [
+    { __path__ = "C:/Users/s.poklad/AppData/Local/hermes/logs/errors.log",  job = "hermes", log_type = "errors" },
+    { __path__ = "C:/Users/s.poklad/AppData/Local/hermes/logs/gateway.log", job = "hermes", log_type = "gateway" },
+    { __path__ = "C:/Users/s.poklad/AppData/Local/hermes/logs/agent.log",   job = "hermes", log_type = "agent" },
+    // Canary stream: a synthetic file used to prove that secret redaction works.
+    // Feed it a fake key and confirm [REDACTED] appears in Loki while the value
+    // never does.
+    { __path__ = "C:/Users/s.poklad/AppData/Local/hermes/logs/secret-canary.log", job = "hermes", log_type = "canary" },
+    // Backup heartbeat: one line per run. Alerting keys off the ABSENCE of a
+    // success line, because a scheduler that stops firing raises no error.
+    { __path__ = "C:/Users/s.poklad/AppData/Local/hermes/logs/backup-lattice.log", job = "backup", log_type = "heartbeat" },
+  ]
+}
+
+loki.source.file "hermes_logs" {
+  targets    = local.file_match.hermes_logs.targets
+  forward_to = [loki.process.hermes_logs.receiver]
+}
+
+// Two jobs in one pipeline:
+//  1. REDACT secret-shaped strings before they leave the host. Persisted cloud
+//     logs are exactly the artefact an attacker buys and greps later, so the
+//     value must never be stored — alerting on it afterwards would be too late.
+//  2. Turn LLM call lines from agent.log into real Prometheus metrics, so model
+//     latency/tokens can be charted against CPU, clock and temperature.
+loki.process "hermes_logs" {
+  forward_to = [loki.write.grafana_cloud.receiver]
+
+  // 1) Redaction. Covers GitHub, Grafana Cloud, OpenAI-style and AWS key shapes
+  // plus JWT-like tokens. The marker [REDACTED] is what the alert watches for.
+  stage.replace {
+    expression = "(ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{20,}|glsa_[A-Za-z0-9]{30,}|glc_[A-Za-z0-9+/=]{30,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}|ya29[.][A-Za-z0-9_-]{20,}|1//[A-Za-z0-9_-]{20,})"
+    replace    = "[REDACTED]"
+  }
+
+  // 2) LLM call lines look like:
+  //    API call #187: model=x provider=custom in=497632 out=473 ... latency=11.1s
+  stage.regex {
+    expression = "API call #(?P<apicall>\\d+): model=(?P<llm_model>\\S+).*?in=(?P<tok_in>\\d+) out=(?P<tok_out>\\d+).*?latency=(?P<llm_latency>[0-9.]+(?:ms|s))"
+  }
+
+  stage.metrics {
+    metric.counter {
+      name        = "hermes_llm_calls_total"
+      description = "Hermes LLM API calls observed in agent.log"
+      source      = "apicall"
+      action      = "inc"
+    }
+
+    metric.gauge {
+      name        = "hermes_llm_latency_seconds"
+      description = "Latency of the last Hermes LLM API call"
+      source      = "llm_latency"
+      action      = "set"
+    }
+
+    metric.counter {
+      name        = "hermes_llm_input_tokens_total"
+      description = "Input tokens reported by Hermes LLM API calls"
+      source      = "tok_in"
+      action      = "add"
+    }
+
+    metric.counter {
+      name        = "hermes_llm_output_tokens_total"
+      description = "Output tokens reported by Hermes LLM API calls"
+      source      = "tok_out"
+      action      = "add"
+    }
+  }
+}
+
+loki.write "grafana_cloud" {
+  endpoint {
+    url = "https://<LOKI_HOST>/loki/api/v1/push"
+
+    basic_auth {
+      username = "<GRAFANA_INSTANCE_ID>"
+      password = "<PASTE_TOKEN_HERE>"
+    }
+  }
+
+  external_labels = {
+    host = "theseus-laptop",
+  }
+}
+
+// Alloy's own /metrics endpoint carries the metrics generated from log lines
+// (hermes_llm_*). Scrape it so they reach the same Prometheus as host metrics.
+prometheus.scrape "alloy_self" {
+  targets         = [{ __address__ = "127.0.0.1:12345", job = "alloy-self" }]
+  forward_to      = [prometheus.relabel.drop_low_value.receiver]
+  scrape_interval = "30s"
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = "https://<PROMETHEUS_HOST>/api/prom/push"
+
+    basic_auth {
+      username = "<PROMETHEUS_USER_ID>"
+      password = "<PASTE_TOKEN_HERE>"
+    }
+
+    // Drop the per-instance PID label before the series leave the host.
+    // Without this, every process restart mints a new series and the free
+    // tier's 10k active-series budget drains over the 14-day window.
+    write_relabel_config {
+      action = "labeldrop"
+      regex  = "process_id"
+    }
+  }
+
+  external_labels = {
+    host = "theseus-laptop",
+  }
+}
+
+// Hindsight production metrics (laptop). Scrapes the container's /metrics:
+// recall phase histograms expose where recall time actually goes.
+// Hindsight отдаёт 869 серий, из них 432 — один гистограмм фаз recall:
+// 16 бакетов на 27 комбинаций, где метка diagnostic отделяет внутренние фазы.
+// Дашбордам и алертам нужны пять бакетов и пользовательские фазы; остальное
+// выкидываем на скрейпе, чтобы не платить за кардинальность в free tier.
+prometheus.relabel "hindsight_api_trim" {
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+  // Внутренние (diagnostic=true) фазы не используются ни в одной панели.
+  // Внутренние фазы: детализацию распределения режем, но частоту и сумму
+  // оставляем — иначе после инцидента нечем сравнить, сколько было вызовов и
+  // какова средняя длительность. +Inf сохраняет и общее число наблюдений.
+  rule {
+    source_labels = ["__name__", "diagnostic", "le"]
+    regex         = "hindsight_recall_phase_duration_seconds_bucket;true;(0.001|0.0025|0.005|0.01|0.025|0.05|0.075|0.1|0.25|0.5|0.75|1.0|2.5|5.0|10.0)"
+    action        = "drop"
+  }
+
+  // Оставляем 0.05, 0.25, 1.0, 5.0 и +Inf; остальные одиннадцать бакетов режем.
+  rule {
+    source_labels = ["__name__", "le"]
+    regex         = "hindsight_recall_phase_duration_seconds_bucket;(0.001|0.0025|0.005|0.01|0.025|0.075|0.1|0.5|0.75|2.5|10.0)"
+    action        = "drop"
+  }
+  // HTTP: интересует диапазон от десятых секунды до десятков.
+  rule {
+    source_labels = ["__name__", "le"]
+    regex         = "hindsight_http_duration_seconds_bucket;(0.005|0.01|0.025|0.05|0.25|0.5|2.5|10.0)"
+    action        = "drop"
+  }
+
+  // Операции: от секунды до минуты.
+  rule {
+    source_labels = ["__name__", "le"]
+    regex         = "hindsight_operation_duration_seconds_bucket;(0.1|0.25|0.5|0.75|2.0|3.0|7.5|20.0|120.0)"
+    action        = "drop"
+  }
+
+  // LLM: 76% вызовов длится дольше 10 с, быстрее 2 с — меньше процента. Поэтому
+  // держим разрешение в рабочем диапазоне (10/15/30/60), а пустые мелкие бакеты
+  // 2 и 5 убираем: на них нет массы, и они только занимают серии.
+  rule {
+    source_labels = ["__name__", "le"]
+    regex         = "hindsight_llm_duration_seconds_bucket;(0.1|0.25|0.5|1.0|2.0|3.0|5.0|120.0)"
+    action        = "drop"
+  }
+}
+
+
+prometheus.scrape "hindsight_api" {
+  targets         = [{"__address__" = "127.0.0.1:8888", "job" = "hindsight-api", "instance" = "theseus-laptop"}]
+  metrics_path    = "/metrics"
+  scrape_interval = "30s"
+  forward_to      = [prometheus.relabel.hindsight_api_trim.receiver]
+}
+
+// ---------------------------------------------------------------------------
+// Container logs (issue #51 follow-up)
+//
+// Docker Desktop keeps container output inside its own VM, so `docker logs`
+// only works interactively and leaves nothing to search afterwards. Read the
+// same stream through the existing read-only socket proxy — no raw
+// docker.sock mount, no privileged log-driver plugin — and push it to the same
+// Loki as the Hermes logs.
+//
+// Redaction runs here too: a container is exactly where a token ends up in a
+// log line by accident. The expression must stay in sync with the one in
+// loki.process "hermes_logs".
+// ---------------------------------------------------------------------------
+discovery.docker "containers" {
+  host = "http://127.0.0.1:23960"
+}
+
+discovery.relabel "containers" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "http://127.0.0.1:23960"
+  targets       = discovery.docker.containers.targets
+  labels        = { job = "docker" }
+  relabel_rules = discovery.relabel.containers.rules
+  forward_to    = [loki.process.container_logs.receiver]
+  refresh_interval = "30s"
+}
+
+loki.process "container_logs" {
+  forward_to = [loki.write.grafana_cloud.receiver]
+
+  // Same secret shapes as the Hermes log pipeline.
+  stage.replace {
+    expression = "(ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{20,}|glsa_[A-Za-z0-9]{30,}|glc_[A-Za-z0-9+/=]{30,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}|ya29[.][A-Za-z0-9_-]{20,}|1//[A-Za-z0-9_-]{20,})"
+    replace    = "[REDACTED]"
+  }
+
+  // Health-check chatter is the bulk of container output and says nothing.
+  stage.drop {
+    expression = "GET /health HTTP/1\\.1\" 200"
+    drop_counter_reason = "health_check"
+  }
+
+  stage.drop {
+    expression = "^\\s*$"
+    drop_counter_reason = "blank_line"
+  }
+}

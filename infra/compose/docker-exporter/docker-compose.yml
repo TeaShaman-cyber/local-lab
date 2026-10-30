@@ -1,0 +1,24 @@
+name: theseus-docker-exporter
+
+# Container metrics for the Theseus laptop (issue #51).
+# Reads the Docker Engine API through the existing read-only socket proxy —
+# no raw /var/run/docker.sock mount and no privileged mode.
+# Complements the host-level windows_exporter metrics from Grafana Alloy.
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib@sha256:7f22d2a6748110ffb6a59bc0df448bccbf501cdb667d610ede4c61d3863d5849
+    container_name: theseus-otel-docker
+    restart: unless-stopped
+    command: ["--config=/etc/otel/config.yaml"]
+    env_file:
+      - ${DOCKER_EXPORTER_ENV_FILE:-D:/theseus-monitoring/docker-exporter.env}
+    volumes:
+      - ./otel-config.yaml:/etc/otel/config.yaml:ro
+    networks:
+      - docker-proxy
+
+networks:
+  docker-proxy:
+    external: true
+    name: docker-proxy-lattice_default

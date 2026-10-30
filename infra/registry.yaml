@@ -126,6 +126,37 @@ services:
     check: live read-only call, e.g. google_drive_list_files with Max Results 1
     notes: единственный маршрут к Google-сервисам; Drive проверен read-only, вернул реальный файл
 
+  - id: INFRA-012
+    name: scheduled-metrics-push
+    role: задачи Планировщика, отправляющие расходы и балансы провайдеров в Loki
+    status: active
+    kind: scheduled-tasks
+    location:
+      tasks:
+        DeepInfra billing: E:/local-lab/tools/deepinfra_usage/push_deepinfra_usage.py
+        Nous credits: E:/local-lab/tools/nous_usage/push_nous_usage.py
+        Timeweb billing: E:/local-lab/tools/timeweb_usage/push_timeweb_usage.py
+        FinOps session names: E:/local-lab/tools/finops/push_session_usage.py
+        Hindsight LLM usage: E:/local-lab/tools/hindsight_usage/push_hindsight_llm_usage.py
+        Provider Metrics: C:/Apps/theseus-metrics/provider-metrics-launcher.vbs
+      prom_glob: C:/Apps/theseus-metrics/*.prom
+    monitoring: Alloy читает C:/Apps/theseus-metrics/*.prom; Grafana Cloud — панели расходов
+    check: python tools/deepinfra_usage/push_deepinfra_usage.py (ожидается loki=204)
+    notes: скрипты берут Loki-креды из активного Alloy-конфига в Program Files, а не из .env
+
+  - id: INFRA-013
+    name: backup-lattice
+    role: резервные копии операционного состояния
+    status: needs-actualization
+    kind: scheduled-task
+    location:
+      task: Theseus Backup
+      script: E:/local-lab/tools/backup_lattice/run_backup.py
+      runtime_root: D:/theseus-backups
+    monitoring: Grafana Cloud — покрытие бэкапа как метрика не подтверждено
+    check: python tools/backup_lattice/run_backup.py --help
+    notes: задача перенацелена на local-lab 2026-10-30; фактический прогон и restore-drill не проверялись, это следующий этап
+
 retired:
   - name: automem
     retired: 2026-10-28

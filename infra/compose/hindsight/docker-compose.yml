@@ -1,0 +1,178 @@
+name: hindsight-cloud
+
+# Hindsight self-host, cloud LLM via native multi-provider routing — NO local llama.cpp.
+# This file is the canonical desired configuration for the Theseus lab.
+# Runtime secrets/data stay outside Git; see README.md and .env.example.
+
+services:
+  hindsight:
+    # Upgrade: 0.8.6 -> v1.1.0 (2026-10-25). Rehearsed and verified on a
+    # disposable copy of the production bank: explicit migration
+    # c4f7a91b2d38 -> c7e2f9a4d1b8, recall/retain/consolidation gates green,
+    # and the production-format restore rehearsed under the pinned 0.8.6
+    # image. Rollback: restore the pg0 cold backup taken before migration
+    # (image revert alone does not revert the database).
+    image: ghcr.io/vectorize-io/hindsight:1.1.0
+    container_name: hindsight-api
+    restart: unless-stopped
+    depends_on:
+      hermes-proxy:
+        condition: service_healthy
+    ports:
+      - "8888:8888"   # API (Hermes would connect here)
+      - "9999:9999"   # Control Plane (optional web UI)
+      # OAuth callback for `hindsight-admin chatgpt login` (Sign in with ChatGPT).
+      # Loopback-only: the browser hands the code back to 127.0.0.1:1455.
+      - "127.0.0.1:1455:1455"
+    env_file:
+      - ${HINDSIGHT_RUNTIME_ENV_FILE:-D:/hindsight/.env}
+      - D:/hindsight/langfuse-otel.env
+    environment:
+      # Python caches bytecode into site-packages on first import. This container
+      # runs the API and several workers, so when they import the same lazy module
+      # at the same moment the atomic write races and the import raises - observed
+      # as a traceback in reflect/agent.py followed by a 300 s wall-clock timeout
+      # with no progress, while metrics showed a single 15 s LLM call.
+      # Disabling the cache removes the race; the cost is a negligible slower import.
+      PYTHONDONTWRITEBYTECODE: "1"
+      # Автоконсолидация выключена 2026-10-28 по замеру: без производных
+      # наблюдений recall находит не хуже (строгий 7/15 против 6/15) и ранжирует
+      # лучше (MRR 0.355 против 0.256), а фоновая работа забирала ядра у recall.
+      # Ручной запуск остаётся: POST /v1/default/banks/{bank_id}/consolidate.
+      HINDSIGHT_API_ENABLE_AUTO_CONSOLIDATION: "false"
+      # Emergency production priority: Nous Solar Mini through the
+      # authenticated hermes-proxy is primary while BotHub is near its limit;
+      # BotHub Mistral remains only as the last fallback member.
+      HINDSIGHT_API_LLM_PROVIDER: openai
+      HINDSIGHT_API_LLM_BASE_URL: http://hermes-proxy:8645/v1
+      HINDSIGHT_API_LLM_API_KEY: hermes-proxy-local
+      HINDSIGHT_API_LLM_MODEL: upstage/solar-mini4:free
+      # Консолидация решает, сливать ли два факта в один. solar-mini4 сливала
+      # факты с разными числами и с противоположным смыслом (0/3 на обеих
+      # ловушках, три прогона), reflection/beam — 9/9 при ~2 с. См. #81.
+      HINDSIGHT_API_CONSOLIDATION_LLM_MODEL: reflection/beam-1.0-501b-a23b:free
+      # Платный фолбэк через подписку ChatGPT: провайдер chatgpt использует
+      # OAuth «Sign in with ChatGPT» и по умолчанию модель gpt-6-luna.
+      # Каталог кредов вынесен на том, иначе авторизация исчезает при пересоздании.
+      HINDSIGHT_API_LLM_CHATGPT_HOME: /home/hindsight/.hindsight/chatgpt
+      # Фолбэк консолидации: если beam через прокси недоступен, вызов идёт на
+      # chatgpt/gpt-6-luna по подписке (OAuth, без оплаты за токены).
+      HINDSIGHT_API_CONSOLIDATION_LLM_1_PROVIDER: chatgpt
+      HINDSIGHT_API_CONSOLIDATION_LLM_1_MODEL: gpt-6-luna
+      HINDSIGHT_API_CONSOLIDATION_LLM_STRATEGY: '{"mode":"failover"}'
+      # 2026-10-25: the BotHub fallback member is DISABLED temporarily.
+      # Measured caps spend on this host: mistral-medium-3-5 = 8,271,739 of
+      # ~8,420,000 total (98.3%), because round-robin sent every 4th call here
+      # while the primary is free. Primary solar-mini4:free stays; re-enable by
+      # restoring the four LLM_1_* lines plus HINDSIGHT_API_LLM_STRATEGY.
+      # HINDSIGHT_API_LLM_1_PROVIDER: openai
+      # HINDSIGHT_API_LLM_1_BASE_URL: https://openai.bothub.chat/v1
+      # HINDSIGHT_API_LLM_1_API_KEY: ${HINDSIGHT_BOTHUB_KEY}
+      # HINDSIGHT_API_LLM_1_MODEL: mistral-medium-3-5
+      # HINDSIGHT_API_LLM_STRATEGY: '{"mode":"round-robin","weights":[3,1]}'
+      # Embedded pg0 DB: set the magic value explicitly (newer images no
+      # longer default to embedded when the var is absent -> "Database URL
+      # is required for migrations").
+      HINDSIGHT_API_DATABASE_URL: pg0
+      # pg0 startup-migration regression, vectorize-io/hindsight#2602 — на
+      # 2026-10-28 задача ЗАКРЫТА в апстриме. Настройка оставлена как явная:
+      # миграции при смене образа или схемы всё равно надо прогонять осознанно,
+      # а не полагаться на то, что флаг по умолчанию теперь другой.
+      HINDSIGHT_API_RUN_MIGRATIONS_ON_STARTUP: "true"
+      HINDSIGHT_API_PORT: "8888"
+      # Stable worker identity prevents processing rows from being orphaned
+      # when Docker recreates the container.
+      HINDSIGHT_API_WORKER_ID: hindsight-worker-1
+      HINDSIGHT_CP_PORT: "9999"
+      # Cloud LLM is fast; keep modest timeouts, allow a little concurrency.
+      HINDSIGHT_API_LLM_TIMEOUT: "120"
+      HINDSIGHT_API_LLM_MAX_CONCURRENT: "4"
+      HINDSIGHT_API_LLM_REASONING_EFFORT: "none"
+      # Reflect-only route: paid BotHub Mistral passed JSON and the full
+      # Hindsight tool contract in 2/2 independent disposable-station runs.
+      HINDSIGHT_API_REFLECT_LLM_PROVIDER: openai
+      HINDSIGHT_API_REFLECT_LLM_BASE_URL: https://openai.bothub.chat/v1
+      # Do NOT set the reflect key here. Compose interpolates ${VAR} only from
+      # the shell or the compose-directory .env, never from `env_file`, so this
+      # line silently resolved to an empty string and every reflect call failed
+      # with 401 UNAUTHORIZED. The key comes from the runtime env file instead
+      # (HINDSIGHT_API_REFLECT_LLM_API_KEY in ${HINDSIGHT_RUNTIME_ENV_FILE}),
+      # and `environment` would override that file if repeated here.
+      HINDSIGHT_API_REFLECT_LLM_MODEL: mistral-small-3.2-24b-instruct
+      HINDSIGHT_API_REFLECT_LLM_REASONING_EFFORT: "none"
+      # Real-bank reflect runs took 80–139s; 120s can abort a valid run.
+      HINDSIGHT_API_REFLECT_LLM_TIMEOUT: "300"
+      HINDSIGHT_API_REFLECT_LLM_MAX_CONCURRENT: "1"
+      # Local CPU cross-encoder reranker tuning (applies to both banks).
+      # The upstream default is 300 candidates. Length-sorted bucket batching
+      # is quality-identical and measured 36-54% faster on this host.
+      # The temporary 80-candidate cap was for a bounded latency probe; restore
+      # the upstream candidate pool for normal recall quality.
+      # FlashRank backend was measured slower here and was rejected.
+      HINDSIGHT_API_RERANKER_LOCAL_BUCKET_BATCHING: "true"
+      # --- Multilingual stack (2026-10-26) -------------------------------
+      # Every language layer defaults to English: embeddings
+      # bge-small-en, reranker ms-marco-MiniLM, PostgreSQL BM25 dictionary
+      # 'english'. Measured on the eval station against a 14-fact gold set
+      # (Russian questions): default stack recall@1 = 0.214, full
+      # multilingual stack = 0.643 at 1.23 s/query. Класс проблемы подтверждён
+      # апстримом (vectorize-io/hindsight#5519, #1569) — обе задачи ЗАКРЫТЫ на
+      # 2026-10-28, то есть дефолты могли измениться. Мультиязычный стек
+      # оставлен явно: он измерен на нашем gold-сете, а не взят по умолчанию.
+      # dimension stays 384, so the schema is unchanged.
+      HINDSIGHT_API_EMBEDDINGS_PROVIDER: local
+      HINDSIGHT_API_EMBEDDINGS_LOCAL_MODEL: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+      HINDSIGHT_API_RERANKER_PROVIDER: local
+      HINDSIGHT_API_RERANKER_LOCAL_MODEL: cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
+      HINDSIGHT_API_TEXT_SEARCH_EXTENSION_NATIVE_LANGUAGE: russian
+      HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES: "ru,en"
+      # Store extracted facts in Russian: conversations are Russian, and
+      # without this directive the extractor emitted English facts.
+      HINDSIGHT_API_LLM_OUTPUT_LANGUAGE: ru
+      # First start downloads ~1 GB of multilingual weights; the default 300 s
+      # init timeout is shorter than the download here, which makes the
+      # container exit and re-download in a loop.
+      HINDSIGHT_API_MODEL_INIT_TIMEOUT: "1800"
+      # llm_output_language only reaches reflect, not fact extraction, so the
+      # retain mission is the lever for the language facts are stored in.
+      HINDSIGHT_API_RETAIN_MISSION: "Пиши все извлекаемые факты, наблюдения и связи по-русски, даже если исходный текст на другом языке. Формулируй каждый факт как законченное утверждение: кто или что, действие, объект. Не дублируй слова и не начинай факт с отглагольного существительного. Имена, пути, идентификаторы и числа оставляй без изменений."
+    volumes:
+      # Embedded pg0 in a Docker-managed volume, NOT a Windows bind mount.
+      # A fresh pg0 on a bind mount fails initdb with
+      # 'database "postgres" does not exist' because the directory is owned by
+      # root instead of the container's uid 1000. The old bind-mount root
+      # (D:/hindsight/pg0) stays untouched as the historical archive; restore
+      # it by switching this line back.
+      - hindsight-pg0-v2:/home/hindsight/.pg0
+      # Model cache must survive container recreation, otherwise every
+      # `compose up` re-downloads ~1 GB of multilingual weights.
+      - hindsight-hf-cache:/home/hindsight/.cache/huggingface
+      # OAuth-креды «Sign in with ChatGPT» для платного фолбэка консолидации.
+      - hindsight-chatgpt-auth:/home/hindsight/.hindsight/chatgpt
+
+  hermes-proxy:
+    image: nousresearch/hermes-agent@sha256:340eb6095b79360597b7046ef0c695c874b6a62d0d170f0354df5120c944c724
+    container_name: hermes-proxy
+    restart: unless-stopped
+    command: ["proxy", "start", "--provider", "nous", "--host", "0.0.0.0", "--port", "8645"]
+    expose:
+      - "8645"
+    volumes:
+      # Dedicated Docker-managed OAuth state; never bind the Desktop auth.json.
+      - hermes-proxy-data:/opt/data
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; s=socket.create_connection(('127.0.0.1', 8645), 5); s.close()"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  hermes-proxy-data:
+    name: theseus-hermes-proxy-data
+  hindsight-pg0-v2:
+    name: theseus-hindsight-pg0-v2
+  hindsight-hf-cache:
+    name: theseus-hindsight-hf-cache
+  hindsight-chatgpt-auth:
+    name: theseus-hindsight-chatgpt-auth

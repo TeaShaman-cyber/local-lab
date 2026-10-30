@@ -1,0 +1,56 @@
+# OpenTelemetry Collector — Docker container metrics for the Theseus laptop.
+# Reads the Docker Engine API through the read-only socket proxy, writes to the
+# same Grafana Cloud Prometheus endpoint the host Alloy uses.
+# No secrets here: the token arrives as GRAFANA_API_TOKEN from a runtime env file
+# outside Git (see docker-compose.yml).
+
+receivers:
+  docker_stats:
+    endpoint: http://theseus-docker-socket-proxy:2375
+    collection_interval: 30s
+    timeout: 20s
+    metrics:
+      # container.cpu.percent не существует в receiver v0.163 (нет в metadata.yaml).
+      # container.cpu.utilization: receiver опрашивает stats без streaming, Docker
+      # отдаёт precpu_stats нулевым, поэтому метрика считается от старта контейнера
+      # и показывает среднее за всю жизнь, а не текущую нагрузку. Панели строим на
+      # rate(container_cpu_usage_nanoseconds_total), см. issue #133.
+      container.cpu.utilization:
+        enabled: false
+      container.memory.usage.total:
+        enabled: true
+      container.memory.percent:
+        enabled: true
+      container.network.io.usage.rx_bytes:
+        enabled: true
+      container.network.io.usage.tx_bytes:
+        enabled: true
+      container.pids.count:
+        enabled: true
+      container.uptime:
+        enabled: true
+
+processors:
+  batch: {}
+
+extensions:
+  basicauth/client:
+    client_auth:
+      username: "3707865"
+      password: "${env:GRAFANA_API_TOKEN}"
+
+exporters:
+  prometheusremotewrite:
+    endpoint: https://prometheus-prod-65-prod-eu-west-2.grafana.net/api/prom/push
+    auth:
+      authenticator: basicauth/client
+    resource_to_telemetry_conversion:
+      enabled: true
+
+service:
+  extensions: [basicauth/client]
+  pipelines:
+    metrics:
+      receivers: [docker_stats]
+      processors: [batch]
+      exporters: [prometheusremotewrite]
