@@ -136,6 +136,24 @@ if [ -z "${CI:-}${GITHUB_ACTIONS:-}" ] && [ -d "E:/grafana-skills" ]; then
     fi
 fi
 
+echo
+echo "=== contract consistency ==="
+# AGENTS.md said "write only via gh" while issue-tracker.md allowed MCP or gh.
+# Both files were well-formed; linters saw nothing. This checks claims, not syntax.
+if ! python tools/contracts/check_consistency.py; then
+    echo "QA FAIL: contract and referenced documents disagree" >&2
+    exit 1
+fi
+
+echo
+echo "=== contract probe ==="
+# AGENTS.md declares `Probe: LAB_PROBE -> LAB_OK_V1`. Until now nothing produced
+# that value, so the contract asserted its own verification with no mechanism.
+if ! python tools/contracts/lab_probe.py; then
+    echo "QA FAIL: contract probe drifted" >&2
+    exit 1
+fi
+
 echo "=== QA PASS ==="
 
 # Local-only: does the working tree agree with the remote? Runs last and warns
