@@ -22,7 +22,7 @@ description: Use when a change is ready to commit or open for review and the aut
 5. **Разметить находки** `blocker` / `major` / `minor`. `blocker` и `major` исправляются до коммита.
 6. **В PR написать честно:** «self-review пройден, находок N, внешнее ревью запрошено». Если внешнего не было — `внешнего ревью нет`, а не тишина.
 
-## Шесть проверок
+## Семь проверок
 
 **1. Предположения о среде.** Что код считает истинным про окружение — и верно ли это?
 - `os.getcwd()` в долгоживущем процессе — это каталог процесса, а не сессии.
@@ -44,6 +44,16 @@ description: Use when a change is ready to commit or open for review and the aut
 
 Три случая за вечер 30–31 октября: незакоммиченный `compose` (рантайм и git разошлись), два коммита без пуша (отчитался «готово», а PR head остался прежним), и третий поймал `tools/dev/state` через пять секунд после того, как механизм появился.
 
+**7. Ревью со стороны: читать оба источника, а не удобный.** «Ревью не пришло» — утверждение, которое нужно проверять, и проверять его одним запросом нельзя.
+- `gh pr view --json reviews` — только review-объекты (Approve / Request changes);
+- `gh pr view --json comments` — **здесь отвечает Codex**. Бот публикует ревью комментарием, поэтому `reviews` может быть пустым при полностью состоявшемся ревью;
+- признак состоявшегося ревью в комментарии: маркер `codex-review-state:v1` с `"status": "completed"` и `"has_any_findings": false|true`;
+- `"reviews": 0` в выводе — это «в reviews пусто», а не «ревью не было».
+
+Два случая за сутки: гейт принимал 👍 как подтверждение (форма ответа ≠ факт), и `--json reviews` показал 0 там, где Codex уже дважды отревьюил `34670b4` без замечаний. Оба раза вывод «ревью нет» был ложным.
+
+Если Codex упёрся в лимит — он об этом **пишет** (комментарий, письмо). Молчание бота и его лимит — разные состояния, и первое не доказывает второе.
+
 ## Антипаттерны
 
 - «Выглядит нормально» — это не проверка.
@@ -58,9 +68,9 @@ description: Use when a change is ready to commit or open for review and the aut
 SELF_REVIEW
 task: <issue или постановка>
 diff: <N файлов, M строк>
-checks: environment / edges / evidence / secrets / rollback — по каждому PASS или находка
+checks: environment / edges / evidence / secrets / rollback / sync / outside-review — по каждому PASS или находка
 findings: <blocker=N major=N minor=N>
-outside_review: <запрошено / нет>
+outside_review: <запрошено / получено (reviews=N comments=M) / нет>
 ```
 
 ## Границы
