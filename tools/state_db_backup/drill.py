@@ -48,6 +48,11 @@ WORKDIR = pathlib.Path(os.environ.get("TEMP", "E:/")) / "state-db-drill"
 # under test is the bug this file exists to prevent.
 EXPECTED = pathlib.Path("E:/theseus-backups/state-db/expected.json")
 TOLERANCE = 0.02
+# A row count can match while the data is a week old. The drill runs daily, so a lag
+# beyond a day plus margin means the replica has stopped following the live database —
+# that is a failure of the backup, not a number to admire in the report
+# (Shoot's review, 2026-10-31).
+MAX_LAG_HOURS = 30.0
 
 
 def restore(target: pathlib.Path) -> tuple[bool, str]:
@@ -68,11 +73,16 @@ def restore(target: pathlib.Path) -> tuple[bool, str]:
         text=True,
         timeout=900,
     )
-    if proc.returncode != 0 and not target.exists():
-        return False, f"restore failed rc={proc.returncode}: {(proc.stderr or proc.stdout).strip()[:200]}"
+    # Do not trust the exit code in either direction. Litestream on Windows returns
+    # rc=1 after "sync restore output dir" (fsync on a directory is unsupported) while
+    # writing a complete, readable database — and it can also return 0 with a file that
+    # holds nothing. The evidence that matters is read_back(): integrity_check plus row
+    # counts. The code is reported, not obeyed (Shoot's review, 2026-10-31).
     if not target.exists():
-        return False, "restore reported success but produced no file"
-    return True, target.name
+        detail = (proc.stderr or proc.stdout).strip()[:200]
+        return False, f"restore produced no file (rc={proc.returncode}): {detail}"
+    suffix = "" if proc.returncode == 0 else f" rc={proc.returncode} (output-dir sync)"
+    return True, target.name + suffix
 
 
 def read_back(path: pathlib.Path) -> tuple[bool, str]:
@@ -249,22 +259,35 @@ def main() -> int:
                 restored = int(detail.split("messages=")[1].split()[0])
                 newest_raw = detail.split("newest=")[1].split()[0] if "newest=" in detail else "None"
                 newest = None if newest_raw == "None" else float(newest_raw)
-                expected = read_expected()
+
+                # Read the live side first: the baseline has to come from the database
+                # being backed up, not from the last restore. A replica that stopped
+                # growing keeps passing a baseline taken from itself otherwise
+                # (Shoot's review, 2026-10-31).
+                live_messages, live_newest = live_counts()
+                result["live_messages"] = live_messages
+                if live_messages is not None and live_newest is not None and newest is not None:
+                    result["lag_hours"] = round((live_newest - newest) / 3600, 2)
+
+                expected = live_messages if live_messages is not None else read_expected()
                 ok, why = check_expectation(restored, expected)
                 result["stage"] = "expectation"
                 result["detail"] = why
                 result["restored_messages"] = restored
                 result["expected_messages"] = expected
-                # A failed run must never move the baseline: otherwise a shrunk
-                # snapshot becomes the new normal on the next green run.
-                if ok and expected is None:
-                    write_expected(restored)
-                    result["baseline_written"] = True
-            if ok and newest is not None:
-                live_messages, live_newest = live_counts()
-                result["live_messages"] = live_messages
-                if live_messages is not None and live_newest is not None:
-                    result["lag_hours"] = round((live_newest - newest) / 3600, 2)
+
+                # Staleness is its own failure, not a number in the report: a backup
+                # from last week can match the row count and still be useless.
+                lag = result.get("lag_hours")
+                if ok and lag is not None and lag > MAX_LAG_HOURS:
+                    ok = False
+                    result["detail"] = f"{why}; but lag {lag}h exceeds {MAX_LAG_HOURS}h"
+                    result["stage"] = "staleness"
+
+                # A failed run must never move the baseline.
+                if ok and expected is not None:
+                    write_expected(expected)
+                    result["baseline_written"] = expected
         result["ok"] = ok
         # The temporary copy is 1.4 GB; leaving it behind would slowly fill the disk.
         target.unlink(missing_ok=True)
