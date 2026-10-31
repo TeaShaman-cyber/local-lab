@@ -25,10 +25,8 @@ import argparse
 import json
 import os
 import pathlib
-import shutil
 import sqlite3
 import subprocess
-import sys
 import time
 
 REPLICA = pathlib.Path("E:/theseus-backups/state-db/litestream")
@@ -119,6 +117,7 @@ def negative_control() -> tuple[bool, str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--log", type=pathlib.Path, help="also append the JSON result to this file")
     ap.add_argument("--negative-control", action="store_true", help="verify the drill can detect a corrupt file")
     args = ap.parse_args()
 
@@ -152,8 +151,17 @@ def main() -> int:
 
     result["elapsed_s"] = round(time.time() - started, 1)
 
+    line = json.dumps(result, ensure_ascii=False)
+    if args.log:
+        # Written from inside the process: pythonw has no console, so shell
+        # redirection is not available and a launcher script would have to pass
+        # the file path through cmd quoting. One line per run, append-only.
+        args.log.parent.mkdir(parents=True, exist_ok=True)
+        with args.log.open("a", encoding="utf-8") as handle:
+            handle.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {line}\n")
+
     if args.json:
-        print(json.dumps(result, ensure_ascii=False))
+        print(line)
     else:
         status = "OK" if result["ok"] else "FAILED"
         print(f"{status} slot={result['slot']} stage={result.get('stage')} elapsed={result['elapsed_s']}s")

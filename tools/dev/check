@@ -36,12 +36,84 @@ for p in list(pathlib.Path(".").rglob("*.yml")) + list(pathlib.Path(".").rglob("
 sys.exit(bad)
 PY
 
+# Linters, not just parsers. A parser proves the file loads; a linter knows the
+# idioms that bite. ShellCheck alone caught `rm -rf "$DEST/$name"` expanding to
+# `rm -rf "/$name"` when a variable goes empty — the author, an independent
+# reviewer and Codex all read past it.
+#
+# STRICT=1 turns a missing tool into a failure; CI sets it so the gate cannot go
+# quiet. Locally the tools may be absent, and then the check says SKIP out loud
+# instead of pretending it verified something.
+STRICT="${STRICT:-0}"
+lint_fail=0
+
+find_tool() {
+    local name="$1"
+    if command -v "$name" >/dev/null 2>&1; then command -v "$name"; return 0; fi
+    # Tools installed by `uv tool install` land here, outside the Hermes venv, so
+    # they survive a Hermes update — which is the point of not using `python -m`.
+    for p in "$HOME/.local/bin/$name.exe" "E:/tools/$name/$name.exe"; do
+        if [ -x "$p" ]; then echo "$p"; return 0; fi
+    done
+    return 1
+}
+
+echo "=== shellcheck ==="
+if sc="$(find_tool shellcheck)"; then
+    bad=0
+    for f in scripts/*.sh .githooks/*; do
+        [ -f "$f" ] || continue
+        if ! "$sc" -S warning "$f"; then
+            echo "FAIL shellcheck: $f" >&2
+            bad=1
+        fi
+    done
+    if [ "$bad" -eq 0 ]; then echo "ok"; else lint_fail=1; fi
+else
+    if [ "$STRICT" -eq 1 ]; then echo "FAIL shellcheck not installed (STRICT=1)" >&2; lint_fail=1; else echo "SKIP shellcheck not installed"; fi
+fi
+
+echo "=== actionlint ==="
+if al="$(find_tool actionlint)"; then
+    if ! "$al" .github/workflows/*.yml; then
+        echo "FAIL actionlint" >&2
+        lint_fail=1
+    fi
+else
+    if [ "$STRICT" -eq 1 ]; then echo "FAIL actionlint not installed (STRICT=1)" >&2; lint_fail=1; else echo "SKIP actionlint not installed"; fi
+fi
+
+echo "=== ruff ==="
+if ruf="$(find_tool ruff)"; then
+    if ! "$ruf" check tools scripts --quiet; then
+        echo "FAIL ruff" >&2
+        lint_fail=1
+    fi
+else
+    if [ "$STRICT" -eq 1 ]; then echo "FAIL ruff not installed (STRICT=1)" >&2; lint_fail=1; else echo "SKIP ruff not installed"; fi
+fi
+
+echo "=== yamllint ==="
+if yl="$(find_tool yamllint)"; then
+    if ! "$yl" .github/workflows docs/reference infra 2>/dev/null; then
+        echo "FAIL yamllint" >&2
+        lint_fail=1
+    fi
+else
+    if [ "$STRICT" -eq 1 ]; then echo "FAIL yamllint not installed (STRICT=1)" >&2; lint_fail=1; else echo "SKIP yamllint not installed"; fi
+fi
+
 echo "=== shell syntax ==="
 for f in scripts/*.sh .githooks/*; do
     [ -f "$f" ] || continue
     bash -n "$f"
     echo "ok  $f"
 done
+
+if [ "$lint_fail" -ne 0 ]; then
+    echo "QA FAIL: linters found problems (see above)" >&2
+    exit 1
+fi
 
 echo "=== secrets scan ==="
 if grep -rnE 'glc_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|BEGIN [A-Z ]*PRIVATE KEY' \
@@ -53,3 +125,21 @@ fi
 echo "ok"
 
 echo "=== QA PASS ==="
+
+# Local-only: does the working tree agree with the remote? Runs last and warns
+# rather than fails — a dirty tree is normal mid-work, and blocking on it would
+# teach people to skip the check.
+#
+# Skipped in CI on purpose: a runner checks out a detached copy, where "no
+# upstream" is expected and would otherwise fail every build.
+#
+# Why it exists: three times in one evening work was reported as done while the
+# remote did not have it — an uncommitted compose edit, then two committed but
+# unpushed commits. Local state looked correct each time.
+if [ -z "${CI:-}${GITHUB_ACTIONS:-}" ] && git rev-parse --git-dir >/dev/null 2>&1; then
+    echo
+    echo "=== local state (not CI) ==="
+    if ! python tools/dev/state; then
+        echo "WARN: local state diverges from the remote — a 'done' report now would be wrong." >&2
+    fi
+fi

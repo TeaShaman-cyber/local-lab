@@ -1,0 +1,17 @@
+# yamllint configuration.
+#
+# new-lines is disabled on purpose. The repository stores LF (git index shows
+# i/lf), but on Windows the working copy is checked out as CRLF, so yamllint
+# reports "wrong new line character" for every file while the committed content
+# is correct. Failing the gate on a checkout artifact teaches people to ignore
+# the gate.
+#
+# line-length is disabled for the same reason: registry entries carry full paths
+# and URLs where wrapping makes them harder to read, not easier.
+
+extends: relaxed
+
+rules:
+  line-length: disable
+  new-lines: disable
+  comments-indentation: disable

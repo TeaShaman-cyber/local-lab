@@ -6,15 +6,15 @@ import base64
 import json
 import math
 import os
-from pathlib import Path
 import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tools' / 'deepinfra_usage'))
-from push_deepinfra_usage import loki_credentials  # noqa: E402
+from push_deepinfra_usage import loki_credentials
 
 API = 'https://api.timeweb.cloud/api/v1/account/finances'
 COST_API = 'https://api.timeweb.cloud/api/v1/account/services/cost'

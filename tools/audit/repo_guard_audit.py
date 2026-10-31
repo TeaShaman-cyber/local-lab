@@ -26,8 +26,7 @@ import argparse
 import json
 import os
 import subprocess
-import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 GUARD_PATH = ".github/workflows/merge-watch.yml"
@@ -78,10 +77,10 @@ def render(owner: str, repos: list[dict]) -> tuple[str, dict]:
         else:
             failed += 1
 
-    now = int(datetime.now(timezone.utc).timestamp())
+    now = int(datetime.now(UTC).timestamp())
     lines = [
         "# repo guard audit (merge-watch presence)",
-        f"# generated {datetime.now(timezone.utc).isoformat(timespec='seconds')}",
+        f"# generated {datetime.now(UTC).isoformat(timespec='seconds')}",
         f"repo_guard_total {len(repos)}",
         f"repo_guard_present {present}",
         f"repo_guard_missing {missing}",

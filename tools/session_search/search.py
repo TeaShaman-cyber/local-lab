@@ -55,7 +55,7 @@ def search(
     # whatever the current session had just written: 1254 matches for one term,
     # and the top two were both from the last minute. Rank first, then diversify.
     order = "m.timestamp DESC, m.id DESC" if recent else "rank"
-    sql = f"""
+    sql = """
         SELECT m.id, m.session_id, m.role, m.timestamp, m.tool_name,
                m.message_uid, m.compacted,
                substr(m.content, 1, ?) AS snippet,

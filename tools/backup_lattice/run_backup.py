@@ -100,7 +100,7 @@ def sha256(path: pathlib.Path) -> str:
 def backup_repo(name: str, repo: str, source: pathlib.Path, env: dict) -> dict:
     started = time.time()
     cmd = ["backup", str(source), "--tag", "lab", "--host", "theseus-laptop"]
-    if not repo[:2].upper() in ("C:", "D:"):   # network repositories only
+    if repo[:2].upper() not in ("C:", "D:"):   # network repositories only
         cmd += UPLOAD_LIMIT
     code, out = restic(repo, cmd, env)
     if code != 0:

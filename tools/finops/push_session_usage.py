@@ -11,15 +11,15 @@ import argparse
 import base64
 import json
 import os
-from pathlib import Path
 import sqlite3
 import sys
 import time
 import urllib.request
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tools' / 'deepinfra_usage'))
-from push_deepinfra_usage import loki_credentials  # noqa: E402
+from push_deepinfra_usage import loki_credentials
 
 MAX_AGE_DAYS = 30
 FIELDS = (
