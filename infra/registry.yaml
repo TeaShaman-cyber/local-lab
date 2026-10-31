@@ -168,7 +168,24 @@ services:
       heartbeat: "C:/Users/s.poklad/AppData/Local/hermes/logs/backup-lattice.log"
     monitoring: Grafana backup-guard — «нет успешного прогона 30 ч» и «прогон завершился ошибкой»; лог читает Alloy (job="backup")
     check: python tools/backup_lattice/run_backup.py; затем restic snapshots --latest 3 в каждом репозитории
-    notes: ручной прогон 2026-10-30 11:03-11:37 успешен во всех трёх репозиториях, restore-drill sha256_match; плановый запуск 31.10 03:00 ещё не подтверждён — LastTaskResult на момент проверки был 1 от прогона до фикса
+    notes: ручной прогон 2026-10-30 11:03-11:37 успешен во всех трёх репозиториях, restore-drill sha256_match. Прогон 31.10 в 03 часа отдал LastTaskResult=1 при живых снапшотах во всех трёх репозиториях — verify удалял каталог через subprocess rm, которого нет в PATH планировщика, а heartbeat писался после verify и не сохранил успех репозиториев. Исправлено 31.10 — shutil.rmtree, запись результатов по ходу, BACKUP_END ok=0|1, timestamp в каждой строке
+
+  - id: INFRA-014
+    name: grafana-gcx
+    criticality: P2
+    role: официальный CLI Grafana — дашборды и алерты как код вместо ручной правки в UI
+    status: active
+    kind: cli
+    location:
+      binary: C:/Users/s.poklad/AppData/Local/gcx/bin/gcx.exe
+      version: "1.7.1"
+      config: C:/Users/s.poklad/.config/gcx/config.yaml
+      context: tealaphid71
+      server: https://tealaphid71.grafana.net
+      dashboards_in_git: E:/local-lab/infra/grafana/dashboards
+    monitoring: не мониторится — инструмент, не сервис
+    check: gcx.exe config current-context
+    notes: не в PATH, вызывать полным путём; токен GRAFANA_API_TOKEN с префиксом glc_ для дашбордов не годится (access policy логов и метрик, запись даёт 401), нужен OAuth или service-account token; в agent-режиме браузер не открывается, gcx печатает URL и код; официальный install.ps1 падает на Get-FileHash, рабочий путь — бинарь из релиза с проверкой checksums; контур описан в docs/reference/observability/grafana-as-code.md
 
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
 # Признак продового/тестового — RULE-009 в infrastructure.md.

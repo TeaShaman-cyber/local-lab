@@ -88,17 +88,71 @@ def main() -> int:
         count = len(stash.splitlines())
         problems.append(f"{count} stash entr{'y' if count == 1 else 'ies'}")
 
+    # 4. Other worktrees. Work can be committed in a completely different directory
+    # and stay invisible from here. On 31.10 the gcx contour lived in
+    # E:/local-lab-wt/issue-81 on a branch nobody merged, while the main tree read
+    # "clean" — and the next agent spent an hour reconstructing it from session logs.
+    # A gate that watches only the directory you are standing in is not a gate.
+    code, worktrees = git("worktree", "list", "--porcelain")
+    if code == 0:
+        for block in worktrees.split("\n\n"):
+            fields: dict[str, str] = {}
+            for line in block.splitlines():
+                key, _, value = line.partition(" ")
+                fields[key] = value
+            path = fields.get("worktree", "")
+            if not path or path == root:
+                continue
+            branch = fields.get("branch", "").replace("refs/heads/", "") or "(detached)"
+            notes = []
+            code, dirty = git("-C", path, "status", "--porcelain")
+            if code == 0 and dirty:
+                notes.append(f"{len([l for l in dirty.splitlines() if l.strip()])} uncommitted")
+            if branch != "(detached)":
+                code, ahead = git("-C", path, "rev-list", "--count", f"main..{branch}")
+                if code == 0 and ahead not in ("", "0"):
+                    notes.append(f"{ahead} commit(s) not in main")
+            if notes:
+                problems.append(f"worktree {path} [{branch}]: {', '.join(notes)}")
+
+    # 5. Local branches carrying work that main does not have. A branch is visible to
+    # exactly one person: the one who created it.
+    #
+    # Reported as information, not as divergence: after a squash merge the commits are
+    # genuinely absent from main while the changes are not, so a hard failure here
+    # would cry wolf on every merged branch. The count is still worth seeing — a branch
+    # that nobody merged is work that will be reconstructed from logs later.
+    code, current = git("rev-parse", "--abbrev-ref", "HEAD")
+    code, branches = git("for-each-ref", "--format=%(refname:short)", "refs/heads")
+    unmerged = []
+    if code == 0:
+        for br in branches.splitlines():
+            if not br or br == "main" or br == current:
+                continue
+            code, ahead = git("rev-list", "--count", f"main..{br}")
+            if code == 0 and ahead not in ("", "0"):
+                unmerged.append(f"{br} ({ahead})")
+
     if problems:
         if not args.quiet:
             print("state: DIVERGED")
         for problem in problems:
             print(f"  {problem}")
+        if unmerged and not args.quiet:
+            print(
+                f"  note: {len(unmerged)} branch(es) with commits not in main: "
+                + ", ".join(sorted(unmerged)[:8])
+            )
         return 1
 
     if not args.quiet:
         print("state: clean (nothing uncommitted, nothing unpushed, no stash)")
+        if unmerged:
+            print(
+                f"  note: {len(unmerged)} branch(es) with commits not in main: "
+                + ", ".join(sorted(unmerged)[:8])
+            )
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
