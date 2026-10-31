@@ -94,10 +94,15 @@ native Linux/Proxmox on a physical partition.
 - Confirm what the base image actually ships before relying on it. Example:
   **Proxmox base has no `wpasupplicant` and no `firmware-iwlwifi`** (verified by
   listing `pve-base.squashfs`), so a Wi-Fi-only box boots *offline* after
-  install. Plan the way back: USB tethering on the phone -> `apt install`, or a
-  first-boot hook baked at image-build time — where the hook is packaged matters:
-  `source = "from-url"` needs network at first boot (chicken-and-egg), and
-  `from-iso` requires `--on-first-boot` set when running `prepare-iso`.
+  install. Plan the way back in this order:
+  1. **first-boot hook with the packages baked into the image at build time** —
+     the only route that needs no network during the install. Must be
+     `source = "from-iso"` plus `--on-first-boot` at `prepare-iso` time;
+     `from-url` does not qualify, it needs network at first boot.
+  2. **USB tethering at the console** — a *post-install rescue*, not an install
+     step. It needs a person physically at the machine and, treated as part of
+     the install, contradicts the offline rule above (see
+     `Operational constraints`).
 - If the installer writes a static IP on an interface that cannot physically
   link (e.g. ethernet NIC with no cable, wlan without association), the box is
   unreachable until someone is at the console. State that honestly and hand
