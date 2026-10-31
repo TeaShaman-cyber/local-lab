@@ -35,10 +35,10 @@ import pathlib
 import subprocess
 import sys
 
-#: Commit the installed copy was taken from (version 1.3.1).
-BASE_COMMIT = "5beb35b"
+#: Commit the installed copy was taken from (version 1.3.2).
+BASE_COMMIT = "a496f55"
 #: Human-readable version of that commit.
-BASE_VERSION = "1.3.1"
+BASE_VERSION = "1.3.2"
 #: Package identity upstream.
 UPSTREAM = "mattpocock/skills"
 
