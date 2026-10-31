@@ -8,6 +8,12 @@ name: merge-watch
 #   or
 #     merge-intent: <head_sha> reason: <why, at least 5 chars>
 #
+# The binding may sit on the same line or on any later line of the **same
+# comment**: "what" on one line and "why" on the next is the natural shape, and
+# a format that breaks on a newline forces the human to think like a parser.
+# A binding in a different comment does not count — the link must be in one
+# block, so a stray "issue: #N" elsewhere cannot vouch for this merge.
+#
 # After the merge this workflow looks for an intent for the exact merged commit.
 # No intent            -> somebody else merged it (incident #15).
 # Intent, no binding   -> the process slipped: merged without issue or reason.
@@ -44,6 +50,19 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
+      # The classifier is the thing that decides, so it lives in a file with
+      # its own self-test rather than in a shell pipeline. A reusable workflow
+      # runs in the caller's workspace, so the file has to be fetched
+      # explicitly — the caller repository is not this one.
+      - name: Fetch the merge-watch classifier
+        uses: actions/checkout@v4
+        with:
+          repository: TeaShaman-cyber/local-lab
+          ref: main
+          path: .merge-watch
+          sparse-checkout: tools/merge_watch
+          sparse-checkout-cone-mode: false
+
       - name: Look for a bound merge-intent on the merged commit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -71,26 +90,37 @@ jobs:
             fi
           }
 
-          comments=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq '.[].body')
-          pattern="merge-intent: ${HEAD_SHA}"
+          # --slurp keeps comment boundaries: a binding on the line after the
+          # intent is a binding, and splitting on newlines loses that (#63).
+          comments=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --slurp)
+          verdict=$(printf '%s' "$comments" \
+            | python3 .merge-watch/tools/merge_watch/classify.py --head "$HEAD_SHA")
 
-          if ! printf '%s\n' "$comments" | grep -qF "$pattern"; then
-            echo "::warning::No merge-intent for $HEAD_SHA"
-            body="PR #${PR} merged with no merge-intent. head=${HEAD_SHA} merged_by=${MERGED_BY}.
+          case "$verdict" in
+            BOUND)
+              echo "PASS: intent with binding for $HEAD_SHA"
+              exit 0
+              ;;
+            UNBOUND)
+              echo "::warning::Intent present but neither issue nor reason"
+              body="PR #${PR} merged with merge-intent: ${HEAD_SHA} but no binding.
+          Expected issue: #N or reason: .... This is not a foreign merge, it is a process defect: the intent was declared, the basis was not. Does not block work."
+              note "Merge без привязки" "$body"
+              exit 0
+              ;;
+            NO_INTENT)
+              echo "::warning::No merge-intent for $HEAD_SHA"
+              body="PR #${PR} merged with no merge-intent. head=${HEAD_SHA} merged_by=${MERGED_BY}.
           Expected: merge-intent: ${HEAD_SHA} issue: #N (or reason: ...).
           Either another client with account access merged it (see #15), or the agent forgot the intent. Check Langfuse/Tempo within 2 minutes. Does not block work."
-            note "Merge без intent" "$body"
-            exit 0
-          fi
-
-          bound=$(printf '%s\n' "$comments" | grep -F "$pattern" | grep -Ec 'issue: *#[0-9]+|reason: .{5,}' || true)
-          if [ "$bound" -gt 0 ]; then
-            echo "PASS: intent with binding for $HEAD_SHA"
-            exit 0
-          fi
-
-          echo "::warning::Intent present but neither issue nor reason"
-          body="PR #${PR} merged with merge-intent: ${HEAD_SHA} but no binding.
-          Expected issue: #N or reason: .... This is not a foreign merge, it is a process defect: the intent was declared, the basis was not. Does not block work."
-          note "Merge без привязки" "$body"
-          exit 0
+              note "Merge без intent" "$body"
+              exit 0
+              ;;
+            *)
+              # An unreadable verdict is not a finding. The classifier failed,
+              # and inventing an issue from its silence would be worse than
+              # saying so and stopping.
+              echo "::warning::classifier returned an unexpected verdict: ${verdict:-<empty>}"
+              exit 0
+              ;;
+          esac
