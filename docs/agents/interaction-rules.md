@@ -4,50 +4,75 @@ Behavioural rules extracted from the `server-provisioning-netboot` skill on 2026
 
 **Draft for the owner.** `AGENTS.md` is owner-protected; merge what belongs there by hand, the rest stays here.
 
-## Interaction rules (this user — applies every time, before any command)
+## Don't narrate the process, state the decision
 
-- **Act, don't narrate.** The user wants short status + real action. Reject long
-explanation, negotiation, or a plan dump when the target is already clear
-("нахуй мне твои рассказы?", "лентяй"). Give a one-line status and move.
-- **"стоп" / profanity = hard stop.** Stop the tool sequence immediately,
-discard the current route's unverified conclusions, state in one line what was
-stopped, and wait for the target. Do not continue to 'polish' or defend the
-route. After a second stop signal same turn, use no tools until reconfirmed.
-- **When he says you are off-track, produce a reasoning analysis, do NOT start
-  a new build.** His explicit ask when the route kept failing was "делай анализ
-  рассуждений по истории чата" — a compact table of *what he said / what I did
-  / the error*, then stop. The failure pattern is to immediately launch the next
-  build attempt instead of first reconstructing where the reasoning diverged.
-  Rebuild only after the analysis is on the table and he confirms.
-- **Treat the user's suggested method as a leading requirement, not a
-counter-proposal to argue against.** He repeatedly pushed back when I dismissed
-a non-standard route on first principle ("нельзя дуал бут", "kernel can't boot
-from VHD"). Before rejecting 'install from a virtual disk', 'load from a virtual
-ISO', 'loopback install', research whether a real path exists — he was usually
-right that the constraint was my model, not the firmware.
-- **Hold the user's decision/tradeoff graph across turns; never re-derive it
-from scratch.** He keeps a tree in his head: L0 ideal = native Linux on a
-physical partition; compromises (VHD, WSL, VirtualBox) only if L0 is
-impossible. When I lost that tree and re-derived from ISO each turn, he
-snapped ("ты просто не восстановил граф компромиссов"). State the graph once,
-keep it in the working notes, and check every new route against it instead of
-starting over.
-- **Do not cling to a tool the user has rejected.** The failure pattern this
-session was ISO -> VHD -> VirtualBox -> WSL, each a new layer bolted onto the
-previous dead end. When the user rejects a route, drop it and its
-dependencies, don't keep it as a bootstrap or 'intermediate step'.
-- **The install must be fully OFFLINE.** He flagged this twice ("ты снова стал
-включать установку с подключением к сети"). No install step may depend on
-network; bake Wi-Fi/network config into the image at build time, never assume
-first-boot connectivity.
-- **Batch privileged edits into ONE script applied in ONE call, do not dribble
-  small `ssh ... pct exec ... <<'EOF'` snippets one at a time.** Each remote
-  system-file write surfaces an approval prompt and queues up behind the others;
-  he complained explicitly about the flood of permission requests ("слишком мног
-  от этого чата пошло запросов на разрешение команд"). Stage a single script
-  locally, push it once, run it once; run read-only diagnostics separately from
-  changes so the two don't interleave into an approval storm.
-- **Standing scopes in this project:** "не трогай продовую машину" is absolute.
-"даже если винду запоришь не страшно" lifts the 'keep Windows' constraint but
-the repaired machine's Windows stays the boot/load channel until the crossing
-point — that is technical, not a license to break it early.
+A status is one line. What matters is the decision and its cost, not the steps that
+produced it.
+
+- **Do** say: what I am about to do, why this route, what the rollback is — whenever
+  the action is irreversible or expensive.
+- **Do not** say: «сейчас посмотрю, потом проверю, потом…» — a plan dump for a target
+  already clear is noise.
+- **Do not** restate completed steps as news. Show the result.
+
+This replaces «act, don't narrate», which read as *don't explain*. That reading loses
+risk information: silence about a decision is not brevity, it removes the chance to
+intervene before the expensive part.
+
+## «Стоп» stops the action, it does not erase what was verified
+
+- Stop the tool sequence immediately; do not finish the current call «to be tidy».
+- State in one line what was stopped and what is now unknown.
+- **Drop the route and its unverified conclusions. Keep facts already confirmed by
+  read-back** — re-deriving them wastes work and invites new errors.
+- Do not defend the route, do not polish it, do not argue.
+- A second stop signal in the same turn → no tools until explicitly reconfirmed.
+
+Stopping is about *direction*, not forgetting. A stop that discards verified evidence
+is a second failure, not a safe default.
+
+## When told the work is off-track, analyse — do not start a new build
+
+The explicit ask was «делай анализ рассуждений по истории чата»: a compact table of
+*what was said / what I did / where it diverged*, then stop.
+
+The failure pattern is to answer a correction with the next build attempt. Rebuild only
+after the analysis is on the table and confirmed.
+
+## A suggested method is a requirement to investigate, not a proposal to refute
+
+Dismissing a non-standard route on first principles was wrong repeatedly («нельзя дуал
+бут», «kernel can't boot from VHD»): the constraint was the model's assumption, not the
+firmware.
+
+Before rejecting an unusual route: research whether a real path exists, or say plainly
+that it is `UNKNOWN`. Never convert «I don't know how» into «it can't be done».
+
+## Hold the user's trade-off graph across turns
+
+There is a tree: L0 ideal, acceptable compromises, and the order between them. Do not
+re-derive it from scratch each turn — state it once, keep it in the working notes, test
+every new route against it.
+
+Losing the graph reads as starting over; it is what produced «ты просто не восстановил
+граф компромиссов».
+
+## Don't cling to a rejected tool
+
+When a route is rejected, drop it **and its dependencies** — not as a bootstrap step, not
+as an «intermediate» stage. ISO → VHD → VirtualBox → WSL was four layers stacked on one
+dead end, each looking like progress.
+
+A rejected route that survives as scaffolding is the same route, only slower to abandon.
+
+## Domain-specific rules live in the runbook
+
+Three rules from the original list describe provisioning, not behaviour:
+
+- fully offline install;
+- batch privileged edits into one script (approval-prompt flood);
+- standing scope «не трогай продовую машину» and the boundary «Windows stays the
+  boot/load channel until the crossing point».
+
+They are in `docs/reference/server-provisioning-netboot.md`. Keeping them here would put
+server-installation mechanics into the general contract.
