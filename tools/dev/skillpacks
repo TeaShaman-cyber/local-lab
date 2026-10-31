@@ -27,12 +27,14 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
-import re
 import subprocess
 import sys
 import time
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
+# Sync record: when we last read upstream. mtime cannot serve this — after a fresh
+# `git checkout` it is the checkout time, not the read time (Codex P2 on #74).
+STATE = pathlib.Path("E:/skillpacks-state.json")
 
 # clone dir, upstream repo, where our copy lives, how to compare
 SOURCES = [
@@ -82,21 +84,62 @@ def upstream_date(clone: pathlib.Path) -> float | None:
     return None
 
 
-def copy_date(path: pathlib.Path) -> float | None:
-    """Newest mtime in our copy: when we last wrote it."""
-    if not path.exists():
-        return None
-    newest = 0.0
-    for f in path.rglob("*"):
-        if f.is_file():
-            newest = max(newest, f.stat().st_mtime)
-    return newest or None
+def fetch(clone: pathlib.Path) -> bool:
+    """True only if the fetch actually succeeded.
+
+    The previous version ignored the return code and compared against a stale
+    origin/main, printing `current` on a network failure — a silent pass on the one
+    question this tool exists to answer (Codex P2 on #74).
+    """
+    res = subprocess.run(["git", "fetch", "-q", "origin"], cwd=clone, capture_output=True)
+    return res.returncode == 0
+
+
+def load_state() -> dict:
+    if STATE.is_file():
+        try:
+            return json.loads(STATE.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+    return {}
+
+
+def save_state(state: dict) -> None:
+    STATE.write_text(
+        json.dumps(state, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8"
+    )
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument(
+        "--record",
+        nargs="*",
+        metavar="PACK",
+        help="mark packs as synced now (all when no name is given)",
+    )
     args = ap.parse_args()
+
+    state = load_state()
+
+    if args.record is not None:
+        wanted = args.record or [s["name"] for s in SOURCES]
+        now = time.time()
+        for src in SOURCES:
+            if src["name"] not in wanted:
+                continue
+            clone: pathlib.Path = src["clone"]
+            up = upstream_date(clone) if (clone / ".git").is_dir() else None
+            state[src["name"]] = {
+                "synced_at": now,
+                "synced_at_human": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now)),
+                "upstream_commit_date": up,
+            }
+            print(f"recorded: {src['name']}")
+        save_state(state)
+        print(f"state: {STATE}")
+        return 0
 
     rows = []
     stale_count = 0
@@ -112,8 +155,13 @@ def main() -> int:
             rows.append(row)
             continue
 
-        # Fetch is cheap and makes the comparison honest; failure is not fatal.
-        subprocess.run(["git", "fetch", "-q", "origin"], cwd=clone, capture_output=True)
+        # A failed fetch leaves origin/main stale; continuing anyway would report
+        # `current` on a network error (Codex P2 on #74).
+        if not fetch(clone):
+            row["detail"] = "git fetch failed — upstream state unknown, not current"
+            unknown_count += 1
+            rows.append(row)
+            continue
 
         up = upstream_date(clone)
         if up is None:
@@ -122,7 +170,7 @@ def main() -> int:
             rows.append(row)
             continue
 
-        row["upstream_commit_date"] = time.strftime("%Y-%m-%d", time.localtime(up))
+        row["upstream_commit_date"] = time.strftime("%Y-%m-%d %H:%M", time.localtime(up))
 
         if src["copy"] is None:
             row["status"] = "hash-checked"
@@ -130,18 +178,28 @@ def main() -> int:
             rows.append(row)
             continue
 
-        ours = copy_date(src["copy"])
-        if ours is None:
+        if not src["copy"].exists():
             row["detail"] = f"our copy missing: {src['copy'].relative_to(REPO)}"
             unknown_count += 1
             rows.append(row)
             continue
 
-        row["our_copy_date"] = time.strftime("%Y-%m-%d", time.localtime(ours))
-        # A day of slack: mtime is when the file was written, not when upstream was read.
-        if up > ours + 86400:
+        record = state.get(src["name"])
+        if not record:
+            row["detail"] = "no sync record — run `--record` once the copy is confirmed"
+            unknown_count += 1
+            rows.append(row)
+            continue
+
+        synced = float(record.get("synced_at", 0))
+        row["our_sync_date"] = time.strftime("%Y-%m-%d %H:%M", time.localtime(synced))
+
+        # No slack. Two fixed dates are compared, so a 12-hour gap never closes on its
+        # own — "current within a day" was a permanent blind spot, not rounding
+        # (Codex P2 on #74).
+        if up > synced:
             row["status"] = "stale"
-            row["detail"] = "upstream moved after our copy"
+            row["detail"] = "upstream moved after our sync — re-read"
             stale_count += 1
         else:
             row["status"] = "current"
@@ -151,12 +209,12 @@ def main() -> int:
     if args.json:
         print(json.dumps({"rows": rows, "stale": stale_count, "unknown": unknown_count}, indent=2, ensure_ascii=False))
     else:
-        print(f"{'source':<14} {'upstream':<12} {'our copy':<12} status")
-        print("-" * 62)
+        print(f"{'source':<14} {'upstream':<18} {'synced':<18} status")
+        print("-" * 70)
         for r in rows:
             print(
-                f"{r['name']:<14} {r.get('upstream_commit_date', '?'):<12} "
-                f"{r.get('our_copy_date', '—'):<12} {r['status']}"
+                f"{r['name']:<14} {r.get('upstream_commit_date', '?'):<18} "
+                f"{r.get('our_sync_date', '—'):<18} {r['status']}"
             )
             if r["status"] in ("stale", "unknown"):
                 print(f"{'':<14} {r['detail']}")
