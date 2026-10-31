@@ -1,9 +1,9 @@
 ---
 name: tool-docs-retrieval
-version: 0.1.0
+version: 0.2.0
 author: Semyon Poklad, Svarog
 license: MIT
-description: 'Use when tool capabilities are unknown. Fetch docs first.'
+description: 'Use before web_extract on vendor or tool docs, and whenever a page returns truncated (char_limit below 15000, [TRUNCATED], head+tail window). Never lower char_limit.'
 metadata:
   hermes:
     tags: [docs, reference, mcp, retrieval, tools, github]
