@@ -33,15 +33,70 @@ AGENTS = ROOT / "AGENTS.md"
 # Paths AGENTS.md is allowed to reference; each must exist.
 POINTER = re.compile(r"`(docs/agents/[a-z-]+\.md)`")
 
-# Statements that must exist in exactly one place. If a phrase appears in both the
-# contract and the detail document, the two will drift apart the moment one changes.
-WRITE_ROUTE = re.compile(r"запись[^.]{0,80}(?:только\s+`gh`|`gh`\s+или\s+MCP|MCP)", re.IGNORECASE)
+# A statement that assigns the write route inside the contract. The contract must
+# point, not opine: the moment it carries its own rule, issue-tracker.md becomes a
+# second opinion and the two drift.
+#
+# Both languages, because an English sentence is exactly how this defect returns
+# (Codex P2 on #73 reproduced it with "Issue writes must use `gh` only").
+WRITE_ROUTE = re.compile(
+    r"(?:запис[ьи]|write[s]?)[^.\n]{0,90}"
+    r"(?:только\s+`?gh`?|only\s+`?gh`?|запрещ|forbidden|MCP\s+(?:or|или)|(?:or|или)\s+MCP)",
+    re.IGNORECASE,
+)
+
+# The section that must defer rather than decide.
+ISSUE_SECTION = "### Issue tracker"
+POINTER_TO = "docs/agents/issue-tracker.md"
+
+
+def issue_tracker_block(text: str) -> str:
+    """The `### Issue tracker` section, up to the next heading of the same level."""
+    start = text.find(ISSUE_SECTION)
+    if start == -1:
+        return ""
+    rest = text[start + len(ISSUE_SECTION):]
+    end = rest.find("\n### ")
+    return rest if end == -1 else rest[:end]
+
+
+def self_test() -> tuple[bool, str]:
+    """Fixed examples for both languages: the defect must not return through English.
+
+    Codex reproduced the gap by adding "Issue writes must use `gh` only" to a temp
+    copy — the Russian check passed it. A rule with no input/output example is a
+    rule nobody can falsify.
+    """
+    cases = [
+        ("### Issue tracker\n\nЗапись — только `gh`. See `docs/agents/issue-tracker.md`.", False,
+         "russian claim must be caught"),
+        ("### Issue tracker\n\nIssue writes must use `gh` only.", False,
+         "english claim must be caught"),
+        ("### Issue tracker\n\nДетали и границы — `docs/agents/issue-tracker.md`.", True,
+         "pointer without a claim is fine"),
+        ("### Issue tracker\n\nЧтение — `gh` или MCP; детали — `docs/agents/issue-tracker.md`.", True,
+         "pointing at both routes is still a pointer"),
+    ]
+    failures = []
+    for body, want_clean, note in cases:
+        found = bool(WRITE_ROUTE.search(issue_tracker_block(body))) or POINTER_TO not in body
+        if found == want_clean:
+            failures.append(f"{note}: expected clean={want_clean}, got clean={not found}")
+    if failures:
+        return False, "; ".join(failures)
+    return True, f"{len(cases)} cases, all match"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
+
+    if args.self_test:
+        ok, detail = self_test()
+        print(detail, file=sys.stdout if ok else sys.stderr)
+        return 0 if ok else 1
 
     if not AGENTS.is_file():
         print(f"AGENTS.md not found at {AGENTS}", file=sys.stderr)
@@ -55,14 +110,18 @@ def main() -> int:
         if not (ROOT / rel).is_file():
             findings.append(f"AGENTS.md points at {rel}, which does not exist")
 
-    # 2. The contract must defer, not duplicate. "только `gh`" was the stale claim
-    #    that contradicted issue-tracker.md; a pointer removes the second opinion.
-    for match in WRITE_ROUTE.finditer(text):
-        claim = match.group(0)
-        if "только `gh`" in claim:
+    # 2. The contract must defer, not duplicate. Checked inside the Issue tracker
+    #    section only: elsewhere the same words may legitimately appear as prose.
+    block = issue_tracker_block(text)
+    if not block:
+        findings.append(f"AGENTS.md has no {ISSUE_SECTION!r} section")
+    else:
+        if POINTER_TO not in block:
+            findings.append(f"{ISSUE_SECTION} does not point at {POINTER_TO}")
+        for match in WRITE_ROUTE.finditer(block):
             findings.append(
-                f"AGENTS.md carries its own write-route rule ({claim.strip()!r}); "
-                "issue-tracker.md is the single source — leave a pointer instead"
+                f"{ISSUE_SECTION} carries its own write-route rule ({match.group(0).strip()!r}); "
+                f"{POINTER_TO} is the single source — leave a pointer instead"
             )
 
     # 3. A deferred document must actually describe a route, or the pointer is empty.
