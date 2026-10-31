@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+"""Report whether the working tree and the remote agree.
+
+Why this exists: three times in one evening, work was reported as done while it
+was not on the remote — an uncommitted compose change, then two commits that were
+committed but never pushed. Each time the local state looked correct and the
+report said "ready", and each time the reviewer saw something else.
+
+That is a class, not an accident: local state and remote state are different
+facts, and nothing was checking the second one.
+
+Exit codes:
+  0  clean: nothing uncommitted, nothing unpushed, no stash
+  1  divergence found (details on stdout)
+  2  not a git worktree, or no upstream configured
+"""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+
+
+def git(*args: str) -> tuple[int, str]:
+    proc = subprocess.run(["git", *args], capture_output=True, text=True, timeout=30)
+    return proc.returncode, (proc.stdout or "").strip()
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--quiet", action="store_true", help="only print problems")
+    args = ap.parse_args()
+
+    code, root = git("rev-parse", "--show-toplevel")
+    if code != 0 or not root:
+        print("not a git worktree", file=sys.stderr)
+        return 2
+
+    problems: list[str] = []
+
+    # 1. Uncommitted work. Reported as a count, not a diff: the point is "is there
+    # anything not yet in a commit", and a diff would bury that.
+    code, status = git("status", "--porcelain")
+    if code == 0 and status:
+        lines = [ln for ln in status.splitlines() if ln.strip()]
+        problems.append(f"{len(lines)} uncommitted change(s):")
+        for line in lines[:8]:
+            problems.append(f"    {line}")
+        if len(lines) > 8:
+            problems.append(f"    ... and {len(lines) - 8} more")
+
+    # 2. Commits that exist locally but not on the remote. This is the one that
+    # actually bit us: the work was committed, so it looked finished.
+    code, upstream = git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+    if code != 0:
+        problems.append("no upstream branch: cannot tell whether commits are pushed")
+    else:
+        code, ahead = git("rev-list", "--count", "@{u}..HEAD")
+        if code == 0 and ahead not in ("", "0"):
+            problems.append(f"{ahead} commit(s) not pushed to {upstream}:")
+            code, log = git("log", "--oneline", "@{u}..HEAD")
+            for line in log.splitlines()[:8]:
+                problems.append(f"    {line}")
+        code, behind = git("rev-list", "--count", "HEAD..@{u}")
+        if code == 0 and behind not in ("", "0"):
+            problems.append(f"{behind} commit(s) on {upstream} not pulled")
+
+    # 3. Stash. Easy to forget, and it hides work that is neither in a commit nor
+    # in the tree, so every later "where did that change go" starts here.
+    code, stash = git("stash", "list")
+    if code == 0 and stash:
+        count = len(stash.splitlines())
+        problems.append(f"{count} stash entr{'y' if count == 1 else 'ies'}")
+
+    if problems:
+        if not args.quiet:
+            print("state: DIVERGED")
+        for problem in problems:
+            print(f"  {problem}")
+        return 1
+
+    if not args.quiet:
+        print("state: clean (nothing uncommitted, nothing unpushed, no stash)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

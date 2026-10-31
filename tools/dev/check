@@ -125,3 +125,21 @@ fi
 echo "ok"
 
 echo "=== QA PASS ==="
+
+# Local-only: does the working tree agree with the remote? Runs last and warns
+# rather than fails — a dirty tree is normal mid-work, and blocking on it would
+# teach people to skip the check.
+#
+# Skipped in CI on purpose: a runner checks out a detached copy, where "no
+# upstream" is expected and would otherwise fail every build.
+#
+# Why it exists: three times in one evening work was reported as done while the
+# remote did not have it — an uncommitted compose edit, then two committed but
+# unpushed commits. Local state looked correct each time.
+if [ -z "${CI:-}${GITHUB_ACTIONS:-}" ] && git rev-parse --git-dir >/dev/null 2>&1; then
+    echo
+    echo "=== local state (not CI) ==="
+    if ! python tools/dev/state; then
+        echo "WARN: local state diverges from the remote — a 'done' report now would be wrong." >&2
+    fi
+fi
