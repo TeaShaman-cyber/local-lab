@@ -4,7 +4,7 @@
 нельзя рассчитывать на загрузочный ISO. Описывает фактически выполненный и
 проверенный маршрут, а не теоретическую схему.
 
-Связанный issue: [#83](https://github.com/TeaShaman-cyber/theseus-local-lab/issues/83).
+Связанный issue: `theseus-local-lab` [#83](https://github.com/TeaShaman-cyber/theseus-local-lab/issues/83) (historical, in the archive: живой трекер — `local-lab`).
 
 Это не Docker-стек: запись в `infrastructure-registry.yaml` для него не
 требуется. Здесь описан отдельный физический гипервизор.
