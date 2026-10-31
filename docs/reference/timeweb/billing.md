@@ -40,8 +40,8 @@ account answers read-only over REST with the API key the host already holds
 (`TW_API_KEY`, in the environment or the agent's `.env`):
 
 ```bash
-curl -s -H "Authorization: Bearer $TW_API_KEY" \
-  https://api.timeweb.cloud/api/v1/account/finances
+printf 'header = "Authorization: Bearer %s"\n' "${TW_API_KEY:?set TW_API_KEY}" | \
+  curl -s --config - https://api.timeweb.cloud/api/v1/account/finances
 ```
 
 Path is **singular `account`** — `/api/v1/accounts/finances` and
@@ -54,8 +54,8 @@ The per-service breakdown has its own path — this is the REST twin of
 `get_account_services_costs` and the one place AI and infrastructure separate:
 
 ```bash
-curl -s -H "Authorization: Bearer $TW_API_KEY" \
-  https://api.timeweb.cloud/api/v1/account/services/cost
+printf 'header = "Authorization: Bearer %s"\n' "${TW_API_KEY:?set TW_API_KEY}" | \
+  curl -s --config - https://api.timeweb.cloud/api/v1/account/services/cost
 ```
 
 `services_costs[]` entries look like `{type, total_cost, info:{name}, services:[]}`.
