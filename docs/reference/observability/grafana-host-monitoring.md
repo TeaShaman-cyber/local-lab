@@ -8,8 +8,11 @@ limit (10k series, 14 days retention, 50 GB logs) becomes relevant.
 
 Covers the host-metrics, container-metrics and Hermes-log pipeline: Grafana Alloy on
 Windows, OhmGraphite sensors, the OTel collector and Grafana Cloud as the single sink.
-Tracking issue: theseus-local-lab #51. Canonical sources: `deploy/alloy/` and
-`deploy/docker-exporter/` in that repo.
+Tracking issue: theseus-local-lab #51 (historical, in the archive). Canonical sources
+live in **this** repository: `infra/monitoring/alloy/config.alloy` and
+`infra/compose/docker-exporter/docker-compose.yml` (registered in
+`infra/registry.yaml`). `theseus-local-lab` is a reference archive — editing its
+`deploy/` copies changes nothing that runs.
 
 ## Architecture
 
@@ -71,7 +74,7 @@ payload format was wrong. Never conclude "the token is broken" from the API 401 
    the expected `localID`s are present. A 200 from reload means the file parsed, not that
    the graph changed.
 3. Regenerate the repo copy with placeholders and confirm zero real values:
-   `grep -c '<account-id>\|<host>' deploy/alloy/config.alloy` must be 0.
+   `grep -c '<account-id>\|<host>' infra/monitoring/alloy/config.alloy` must be 0.
 4. Commit and push (own repo: routine, no per-action approval).
 
 ## Container logs (Docker Desktop)
