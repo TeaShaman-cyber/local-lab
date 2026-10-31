@@ -5,9 +5,16 @@ Why this exists: a backup that is only checked for presence and size is not a
 backup, it is a file. The failures that matter here — truncated archive, missing
 WAL segment, incompatible page format — leave the files looking fine.
 
-So this restores into a temporary file and **reads rows out of it**. It also
-supports a negative control (``--negative-control``): a drill that cannot fail on
-a deliberately corrupt file proves nothing, so that path is exercised on demand.
+So this restores into a temporary file and **reads rows out of it**. Three
+controls keep the drill honest:
+
+* ``--negative-control``: a corrupt file must be rejected.
+* ``--positive-control``: a clean file with rows missing must be rejected — the
+  branch a corrupt-file control never reaches.
+* ``--self-test``: fixed input/output pairs for the expectation classifier.
+
+The row count is compared against ``expected.json``, written by the previous
+successful run. A failed run never moves the baseline forward.
 
 Exit codes: 0 = restored and readable, 1 = drill failed to restore or read,
 2 = configuration problem (missing source / missing tool).
@@ -16,6 +23,8 @@ Usage::
 
     python tools/state_db_backup/drill.py                 # check the Litestream replica
     python tools/state_db_backup/drill.py --negative-control
+    python tools/state_db_backup/drill.py --positive-control
+    python tools/state_db_backup/drill.py --self-test
     python tools/state_db_backup/drill.py --json
 """
 
@@ -34,6 +43,11 @@ CONFIG = pathlib.Path("E:/tools/litestream/litestream.yml")
 LITESTREAM = pathlib.Path("E:/tools/litestream/litestream.exe")
 LIVE_DB = pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "hermes" / "state.db"
 WORKDIR = pathlib.Path(os.environ.get("TEMP", "E:/")) / "state-db-drill"
+# The expectation lives outside the repository and outside the snapshot. Numbers
+# change daily, so committing them is noise; deriving them from the snapshot
+# under test is the bug this file exists to prevent.
+EXPECTED = pathlib.Path("E:/theseus-backups/state-db/expected.json")
+TOLERANCE = 0.02
 
 
 def restore(target: pathlib.Path) -> tuple[bool, str]:
@@ -102,6 +116,39 @@ def live_counts() -> tuple[int | None, int | None]:
         return None, None
 
 
+def check_expectation(restored: int, expected: int | None, tolerance: float = TOLERANCE) -> tuple[bool, str]:
+    """Compare the restored count against a number written down *before* the run.
+
+    ``messages > 0`` catches total loss and nothing else: a snapshot that
+    restores 100k rows instead of 158k passes integrity_check and passes any
+    "greater than zero" test. The only thing that catches it is a count fixed
+    by a different process at an earlier time, so the check cannot re-derive
+    its own denominator from the thing it is checking.
+    """
+    if expected is None:
+        return True, f"no prior expectation: baseline ({restored} messages)"
+    floor = int(expected * (1 - tolerance))
+    if restored < floor:
+        return False, f"restored {restored} < expected {expected} (floor {floor}, tolerance {tolerance:.0%})"
+    return True, f"restored {restored} >= floor {floor} (expected {expected})"
+
+
+def read_expected() -> int | None:
+    if not EXPECTED.is_file():
+        return None
+    try:
+        return int(json.loads(EXPECTED.read_text(encoding="utf-8"))["messages"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def write_expected(messages: int) -> None:
+    """Only a run that passed may move the baseline forward."""
+    EXPECTED.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"messages": messages, "written_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    EXPECTED.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+
 def negative_control() -> tuple[bool, str]:
     """A drill that cannot fail proves nothing: corrupt a copy and require failure."""
     WORKDIR.mkdir(parents=True, exist_ok=True)
@@ -114,19 +161,80 @@ def negative_control() -> tuple[bool, str]:
     return True, f"correctly rejected corrupt file ({detail[:80]})"
 
 
+def positive_control() -> tuple[bool, str]:
+    """Poison the *output*, not the input: a clean snapshot with rows missing.
+
+    The corrupt-file control only protects the branch it poisons. A snapshot
+    that restores cleanly with half the rows travels the success branch and
+    never meets the corrupt one, so it needs its own control.
+    """
+    WORKDIR.mkdir(parents=True, exist_ok=True)
+    shrunk = WORKDIR / "shrunk.db"
+    shrunk.unlink(missing_ok=True)
+    try:
+        conn = sqlite3.connect(shrunk)
+        try:
+            conn.execute("CREATE TABLE messages (id INTEGER PRIMARY KEY, timestamp REAL)")
+            conn.execute("CREATE TABLE sessions (id INTEGER PRIMARY KEY)")
+            conn.executemany("INSERT INTO messages (timestamp) VALUES (?)", [(1.0,)] * 50)
+            conn.commit()
+        finally:
+            conn.close()
+        ok, detail = read_back(shrunk)
+        if not ok:
+            return False, f"control fixture is not readable: {detail}"
+        # The fixture holds 50 rows; the expectation says 100. A drill that
+        # trusts its own snapshot accepts this, which is the defect.
+        verdict, why = check_expectation(50, 100)
+        return (not verdict), f"{'correctly flagged' if not verdict else 'WRONGLY accepted'} 50 of 100 rows ({why})"
+    finally:
+        shrunk.unlink(missing_ok=True)
+
+
+def self_test() -> tuple[bool, str]:
+    """Fixed input/output pairs for the classifier: no network, no restore."""
+    cases = [
+        # (restored, expected, tolerance, want_ok)
+        (1000, None, 0.02, True),    # baseline run, nothing to compare
+        (1000, 1000, 0.02, True),    # exact match
+        (985, 1000, 0.02, True),     # inside tolerance
+        (979, 1000, 0.02, False),    # just below the floor
+        (500, 1000, 0.02, False),    # silent partial loss: the case that motivated this
+        (0, 1000, 0.02, False),      # total loss
+        (0, None, 0.02, True),       # empty baseline is caught by read_back, not here
+        (2000, 1000, 0.02, True),    # growth is not a failure
+    ]
+    failures = []
+    for restored, expected, tolerance, want in cases:
+        got, why = check_expectation(restored, expected, tolerance)
+        if got != want:
+            failures.append(f"restored={restored} expected={expected} tolerance={tolerance}: want ok={want} got ok={got} ({why})")
+    if failures:
+        return False, "; ".join(failures)
+    return True, f"{len(cases)} cases, all match"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--log", type=pathlib.Path, help="also append the JSON result to this file")
     ap.add_argument("--negative-control", action="store_true", help="verify the drill can detect a corrupt file")
+    ap.add_argument("--positive-control", action="store_true", help="verify the drill rejects a clean snapshot with rows missing")
+    ap.add_argument("--self-test", action="store_true", help="check the expectation classifier against fixed cases")
     args = ap.parse_args()
 
     started = time.time()
     result: dict = {"slot": "litestream", "ok": False}
 
-    if args.negative_control:
+    if args.self_test:
+        ok, detail = self_test()
+        result.update({"ok": ok, "stage": "self_test", "detail": detail})
+    elif args.negative_control:
         ok, detail = negative_control()
         result.update({"ok": ok, "stage": "negative_control", "detail": detail})
+    elif args.positive_control:
+        ok, detail = positive_control()
+        result.update({"ok": ok, "stage": "positive_control", "detail": detail})
     else:
         WORKDIR.mkdir(parents=True, exist_ok=True)
         target = WORKDIR / "drill-restore.db"
@@ -138,13 +246,25 @@ def main() -> int:
             result["stage"] = "read_back"
             result["detail"] = detail
             if ok:
+                restored = int(detail.split("messages=")[1].split()[0])
+                newest_raw = detail.split("newest=")[1].split()[0] if "newest=" in detail else "None"
+                newest = None if newest_raw == "None" else float(newest_raw)
+                expected = read_expected()
+                ok, why = check_expectation(restored, expected)
+                result["stage"] = "expectation"
+                result["detail"] = why
+                result["restored_messages"] = restored
+                result["expected_messages"] = expected
+                # A failed run must never move the baseline: otherwise a shrunk
+                # snapshot becomes the new normal on the next green run.
+                if ok and expected is None:
+                    write_expected(restored)
+                    result["baseline_written"] = True
+            if ok and newest is not None:
                 live_messages, live_newest = live_counts()
                 result["live_messages"] = live_messages
                 if live_messages is not None and live_newest is not None:
-                    restored = int(detail.split("messages=")[1].split()[0])
-                    lag_h = (live_newest - float(detail.split("newest=")[1].split()[0])) / 3600 if "newest=" in detail else None
-                    result["restored_messages"] = restored
-                    result["lag_hours"] = None if lag_h is None else round(lag_h, 2)
+                    result["lag_hours"] = round((live_newest - newest) / 3600, 2)
         result["ok"] = ok
         # The temporary copy is 1.4 GB; leaving it behind would slowly fill the disk.
         target.unlink(missing_ok=True)
