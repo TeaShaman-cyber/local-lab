@@ -11,6 +11,26 @@ Goal for THIS user: turn an existing laptop/PC into a Linux/Proxmox server when
 you can only talk to it through Windows (RDP), there are no flash drives, no
 wired ethernet, and the only network is a phone Wi-Fi hotspot.
 
+## Operational constraints (provisioning-specific)
+
+These came from the original «interaction rules» list. They are about installing a
+machine, not about how to talk, so they live here and not in the general contract
+(`docs/agents/interaction-rules.md`).
+
+- **The install must be fully OFFLINE.** Flagged twice («ты снова стал включать
+  установку с подключением к сети»). No install step may depend on the network. Bake
+  Wi-Fi/network configuration into the image at build time; never assume first-boot
+  connectivity.
+- **Batch privileged edits into ONE script, applied in ONE call.** Dribbling small
+  `ssh … pct exec … <<'EOF'` snippets one at a time floods the user with approval
+  prompts («слишком много от этого чата пошло запросов на разрешение команд»). Stage
+  the script locally, push it once, run it once. Run read-only diagnostics separately
+  from changes so the two do not interleave into an approval storm.
+- **Standing scope:** «не трогай продовую машину» is absolute. «даже если винду
+  запоришь не страшно» lifts the keep-Windows constraint, but the repaired machine's
+  Windows stays the boot/load channel until the crossing point — that is technical,
+  not a licence to break it early.
+
 ## Establish a command channel to Windows first (in order of preference)
 
 1. **SSH** — best. `Add-WindowsCapability OpenSSH.Client~~~...` may stall on
