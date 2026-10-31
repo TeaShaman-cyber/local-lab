@@ -11,8 +11,11 @@ answer-file retrieval mode into the image; a stock ISO has none.
 
 - `bcdedit /create /d "PVE" /application bootloader` -> assign a `{guid}`;
   `bcdedit /set {guid} device partition=<esp>`; `bcdedit /set {guid} path
-  \EFI\BOOT\BOOTX64.EFI`; `bcdedit /displayorder {guid} /addfirst`. Put the
-  entry first in firmware order so it boots without a boot-menu keypress.
+  \EFI\BOOT\BOOTX64.EFI`. Then put it first in the **firmware** boot order:
+  `bcdedit /set {fwbootmgr} displayorder {guid} /addfirst`.
+  `bcdedit /displayorder {guid} /addfirst` only reorders the *Windows Boot Manager
+  menu* and does not change what the firmware boots — on UEFI the reboot returns to
+  Windows, which is exactly the failure this recipe must not have.
 - A signed shim/grub at `\EFI\BOOT\BOOTX64.EFI` (Secure Boot) -> `grubx64.efi`
   -> `grub.cfg`. `grub.cfg` boots the custom initrd.
 - The custom initrd (contains the installer) plus a config partition the
@@ -24,9 +27,11 @@ answer-file retrieval mode into the image; a stock ISO has none.
    [...iso]`, `disk-list = ["sda"]` (whole-disk wipe — confirms Windows can
    still be surrendered), `[network]` static IP + gateway + DNS, `[global-key]`
    or `[global-password]`.
-2. `proxmox-auto-install-assistant prepare-iso --answer-file answer.toml
-   proxmox-ve_<v>.iso` — MUST run before embedding; this writes the
-   answer-file retrieval mode into the image (stock ISO has none).
+2. `proxmox-auto-install-assistant prepare-iso --fetch-from iso
+   --answer-file answer.toml proxmox-ve_<v>.iso` — MUST run before embedding.
+   `--fetch-from` is required and is not inferred from `--answer-file`; `iso`
+   means the answer file travels inside the image itself, which is the only mode
+   that works on a machine with no network at install time.
 3. Build a custom `initrd` embedding the prepared ISO (`cpoint`/unmkinitramfs
    + `update-initramfs`-style repack), verified by `sha256`.
 4. Transfer the initrd to the Windows host (background scp) and to the

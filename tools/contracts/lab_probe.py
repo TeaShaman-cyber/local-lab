@@ -32,17 +32,32 @@ EXPECTED = "LAB_OK_V1"
 
 # Sections whose disappearance would mean the contract lost a promise, not just a
 # heading. Order does not matter; presence does.
+#
+# This list is deliberately the FULL set of substantive obligations, not a sample:
+# a probe that checks half the contract reports LAB_OK_V1 for a file that dropped
+# `## Permission` or `## Authority`. It cannot be derived from the file under test —
+# a deleted section would then vanish from the expectations too (Codex P2 on #73).
 REQUIRED_SECTIONS = [
     "## Scope",
     "## Epistemics",
     "## Truth",
+    "## WorkingCulture",
+    "## OperationalBootstrap",
     "## Precedence",
     "## ChangeControl",
     "## Continuity",
+    "## Currentness",
+    "## Authority",
+    "## Capabilities",
+    "## Routing",
+    "## QADiscovery",
+    "## Fallback",
+    "## Permission",
     "## Verification",
     "## Persistence",
     "## RuntimeBoundary",
     "## DegradedMode",
+    "## Action",
     "## Agent skills",
 ]
 

@@ -227,7 +227,7 @@ Codex-бот читает этот файл при ревью pull request. Ни
 
 ### Issue tracker
 
-GitHub Issues в `TeaShaman-cyber/local-lab`. Чтение — `gh` или GitHub MCP. Запись в issues, Projects v2 и pull requests — `gh` или MCP; файлы и код — только `git`/`gh`. Детали и границы — `docs/agents/issue-tracker.md`, он же единственный источник по маршрутам.
+GitHub Issues в `TeaShaman-cyber/local-lab`. Маршруты чтения и записи — в `docs/agents/issue-tracker.md`, он же единственный источник по маршрутам: контракт не дублирует их, чтобы два файла не разошлись.
 
 ### Triage labels
 
