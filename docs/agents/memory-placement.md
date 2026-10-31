@@ -46,8 +46,17 @@ wc -c "$LOCALAPPDATA/hermes/memories/MEMORY.md" "$LOCALAPPDATA/hermes/memories/U
 ```
 
 A user-profile-shaped line in `MEMORY.md` is the specific defect this file exists to
-prevent. `tools/dev/memory_placement` flags it; it is a warning, not a block, because
-the phrasing boundary is fuzzy and a false rejection teaches people to bypass the check.
+prevent.
+
+**There is no automated check for it yet.** A checker was named in the first draft of
+this document and then never written — claiming otherwise would be exactly the false
+assurance this contract is supposed to prevent, so it is stated plainly: the discipline
+is manual. Before writing to `MEMORY.md`, ask one question: does the sentence describe
+the *person* (then `USER.md`) or the agent's own world (then `MEMORY.md`)?
+
+The detector is tracked as item 4 of #52, together with the phrase patterns it would
+need and the warning-not-block behaviour: false rejection teaches people to bypass a
+check, which is worse than no check.
 
 ## Why not one file
 

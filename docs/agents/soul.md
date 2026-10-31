@@ -5,8 +5,11 @@
 > exists so the text can be reviewed, diffed and checked like any other contract,
 > instead of changing silently outside version control.
 >
-> To apply: copy the block below into the live file. To check: `python
-> tools/contracts/check_consistency.py`.
+> To apply: copy the block below into the live file (`%LOCALAPPDATA%\hermes\SOUL.md`).
+> To check: **by hand for now** — `tools/contracts/check_consistency.py` does not read
+> this draft yet, and the first version of this note claimed it did. The check it will
+> run is the one that matters: no retired system named, no memory system named at all.
+> Until then, compare the live file against this block with `diff`.
 
 ---
 
