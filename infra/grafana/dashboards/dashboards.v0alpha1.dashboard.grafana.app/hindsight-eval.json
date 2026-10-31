@@ -62,7 +62,7 @@
               "type": "tempo",
               "uid": "grafanacloud-traces"
             },
-            "query": "{ resource.service.name = \"hindsight-eval\" && name = \"hindsight.recall\" } | quantile_over_time(span:duration, 0.95)",
+            "query": "{ resource.service.name = \"hindsight-api\" && name = \"hindsight.recall\" } | quantile_over_time(span:duration, 0.95)",
             "queryType": "traceql",
             "refId": "A"
           },
@@ -71,7 +71,7 @@
               "type": "tempo",
               "uid": "grafanacloud-traces"
             },
-            "query": "{ resource.service.name = \"hindsight-eval\" && name = \"hindsight.recall\" } | quantile_over_time(span:duration, 0.50)",
+            "query": "{ resource.service.name = \"hindsight-api\" && name = \"hindsight.recall\" } | quantile_over_time(span:duration, 0.50)",
             "queryType": "traceql",
             "refId": "B"
           }
@@ -109,7 +109,7 @@
               "type": "tempo",
               "uid": "grafanacloud-traces"
             },
-            "query": "{ resource.service.name = \"hindsight-eval\" && name = \"hindsight.rerank\" } | quantile_over_time(span:duration, 0.95)",
+            "query": "{ resource.service.name = \"hindsight-api\" && name = \"hindsight.rerank\" } | quantile_over_time(span:duration, 0.95)",
             "queryType": "traceql",
             "refId": "A"
           }
@@ -147,7 +147,7 @@
               "type": "tempo",
               "uid": "grafanacloud-traces"
             },
-            "query": "{ resource.service.name = \"hindsight-eval\" && name = \"hindsight.embedding_query\" } | quantile_over_time(span:duration, 0.95)",
+            "query": "{ resource.service.name = \"hindsight-api\" && name = \"hindsight.embedding_query\" } | quantile_over_time(span:duration, 0.95)",
             "queryType": "traceql",
             "refId": "A"
           },
@@ -156,7 +156,7 @@
               "type": "tempo",
               "uid": "grafanacloud-traces"
             },
-            "query": "{ resource.service.name = \"hindsight-eval\" && name = \"hindsight.recall_retrieval\" } | quantile_over_time(span:duration, 0.95)",
+            "query": "{ resource.service.name = \"hindsight-api\" && name = \"hindsight.recall_retrieval\" } | quantile_over_time(span:duration, 0.95)",
             "queryType": "traceql",
             "refId": "B"
           }
@@ -194,7 +194,7 @@
               "type": "tempo",
               "uid": "grafanacloud-traces"
             },
-            "query": "{ resource.service.name = \"hindsight-eval\" && name = \"hindsight.recall\" } | count_over_time()",
+            "query": "{ resource.service.name = \"hindsight-api\" && name = \"hindsight.recall\" } | count_over_time()",
             "queryType": "traceql",
             "refId": "A"
           }
@@ -236,7 +236,7 @@
               "type": "prometheus",
               "uid": "grafanacloud-prom"
             },
-            "expr": "histogram_quantile(0.95, sum by (le, phase) (rate(hindsight_recall_phase_duration_seconds_bucket{job=\"hindsight-eval\"}[5m])))",
+            "expr": "histogram_quantile(0.95, sum by (le, phase) (rate(hindsight_recall_phase_duration_seconds_bucket{job=~\"hindsight-api|hindsight-stand\"}[5m])))",
             "legendFormat": "{{phase}}",
             "refId": "A"
           }
@@ -298,7 +298,7 @@
               "type": "prometheus",
               "uid": "grafanacloud-prom"
             },
-            "expr": "histogram_quantile(0.95, sum by (le) (rate(hindsight_recall_phase_duration_seconds_bucket{job=\"hindsight-eval\", phase=\"reranking\"}[5m])))",
+            "expr": "histogram_quantile(0.95, sum by (le) (rate(hindsight_recall_phase_duration_seconds_bucket{job=~\"hindsight-api|hindsight-stand\", phase=\"reranking\"}[5m])))",
             "legendFormat": "rerank p95",
             "refId": "A"
           },
@@ -307,7 +307,7 @@
               "type": "prometheus",
               "uid": "grafanacloud-prom"
             },
-            "expr": "histogram_quantile(0.50, sum by (le) (rate(hindsight_recall_phase_duration_seconds_bucket{job=\"hindsight-eval\", phase=\"reranking\"}[5m])))",
+            "expr": "histogram_quantile(0.50, sum by (le) (rate(hindsight_recall_phase_duration_seconds_bucket{job=~\"hindsight-api|hindsight-stand\", phase=\"reranking\"}[5m])))",
             "legendFormat": "rerank p50",
             "refId": "B"
           }
@@ -379,7 +379,7 @@
             "refId": "A"
           }
         ],
-        "title": "Recall p95: продакшен (laptop) и станция (VPS)",
+        "title": "Recall p95: прод и стенд",
         "type": "timeseries"
       },
       {
@@ -415,7 +415,7 @@
               "type": "prometheus",
               "uid": "grafanacloud-prom"
             },
-            "expr": "sum by (job, scope) (rate(hindsight_llm_calls_total{job=~\"hindsight-api|hindsight-eval\"}[5m]))",
+            "expr": "sum by (job, scope) (rate(hindsight_llm_calls_total{job=~\"hindsight-api|hindsight-stand\"}[5m]))",
             "legendFormat": "{{job}} · {{scope}}",
             "refId": "A"
           }
@@ -456,7 +456,7 @@
               "type": "prometheus",
               "uid": "grafanacloud-prom"
             },
-            "expr": "sum by (job, scope) (rate(hindsight_llm_tokens_input_tokens_total{job=~\"hindsight-api|hindsight-eval\"}[5m]))",
+            "expr": "sum by (job, scope) (rate(hindsight_llm_tokens_input_tokens_total{job=~\"hindsight-api|hindsight-stand\"}[5m]))",
             "legendFormat": "{{job}} · {{scope}}",
             "refId": "A"
           }
@@ -497,7 +497,7 @@
               "type": "prometheus",
               "uid": "grafanacloud-prom"
             },
-            "expr": "histogram_quantile(0.95, sum by (le, job, scope) (rate(hindsight_llm_duration_seconds_bucket{job=~\"hindsight-api|hindsight-eval\"}[5m])))",
+            "expr": "histogram_quantile(0.95, sum by (le, job, scope) (rate(hindsight_llm_duration_seconds_bucket{job=~\"hindsight-api|hindsight-stand\"}[5m])))",
             "legendFormat": "{{job}} · {{scope}}",
             "refId": "A"
           }
@@ -522,7 +522,8 @@
     },
     "timepicker": {},
     "timezone": "browser",
-    "title": "Hindsight — eval station",
-    "weekStart": ""
+    "title": "Hindsight — прод и стенд",
+    "weekStart": "",
+    "description": "Прод (hindsight-api, ноутбук) и стенд (hindsight-stand, LXC 103 на PVE). Прежний hindsight-eval — легаси-стенд на Timeweb, снят с эксплуатации."
   }
 }
