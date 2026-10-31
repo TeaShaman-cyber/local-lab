@@ -66,7 +66,9 @@ eligibility: `langfuse/quota-and-plans.md`.
 ## Provider-neutral usage reconciliation (open work)
 
 Cross-provider FinOps reconciliation (Langfuse ↔ Hermes/Loki ↔ provider billing) is an
-**open feature request** (theseus-local-lab #122), not an implemented contract. Do not
+**open feature request** (tracked as [local-lab #82](https://github.com/TeaShaman-cyber/local-lab/issues/82);
+historical context — `theseus-local-lab` #122, in the archive), not an implemented
+contract. Do not
 treat a local edit of the installed Hermes Langfuse plugin/runtime copy in
 `%LOCALAPPDATA%\hermes` as the implementation: that copy is Hermes-owned, not canonical.
 If a change is needed for this, roll it back locally and file a feature-request issue in

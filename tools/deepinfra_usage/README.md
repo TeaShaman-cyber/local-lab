@@ -4,7 +4,8 @@
 (Alloy → Grafana Cloud). Нужен потому, что Langfuse считает эту модель по
 неверному прайсу, а панель DeepInfra иначе доступна только глазами.
 
-Issue: [#58](https://github.com/TeaShaman-cyber/theseus-local-lab/issues/58).
+Tracking issue: [local-lab #81](https://github.com/TeaShaman-cyber/local-lab/issues/81).
+Исторический контекст — `theseus-local-lab` #58 (historical, in the archive).
 
 ## Источник данных
 
