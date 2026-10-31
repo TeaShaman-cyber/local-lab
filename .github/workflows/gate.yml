@@ -130,11 +130,15 @@ jobs:
           head_date=$(gh api "repos/$REPO/commits/$HEAD" --jq '.commit.committer.date')
           echo "waiting for review of $HEAD (committed $head_date)"
 
-          # A review lands in one of three shapes. All three are evidence that
+          # A review lands in one of four shapes. All four are evidence that
           # someone outside looked at this exact commit:
           #   1. a review object pinned to the head commit;
-          #   2. a thumbs-up reaction — Codex stays silent when it finds nothing;
-          #   3. an APPROVED review from a human.
+          #   2. a plain comment carrying a "Reviewed commit: <sha>" receipt —
+          #      Codex answers this way when it has nothing to say inline, and
+          #      ignoring it made the gate wait ten minutes and fail on #73 while
+          #      the review sat in the thread;
+          #   3. a thumbs-up reaction — Codex stays silent when it finds nothing;
+          #   4. an APPROVED review from a human.
           # Waiting here instead of being re-run on the review event is what
           # keeps one verdict per commit.
           for attempt in $(seq 1 30); do
@@ -142,6 +146,15 @@ jobs:
               --jq "[.[] | select((.user.login | startswith(\"chatgpt-codex-connector\")) and .commit_id == \"$HEAD\")] | length")
             if [ "$bot" -gt 0 ]; then
               echo "PASS: Codex reviewed $HEAD ($bot)"
+              exit 0
+            fi
+
+            # The receipt names the commit it read, so it identifies the same thing a
+            # review object does — only the transport differs.
+            receipt=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+              --jq "[.[] | select((.user.login | startswith(\"chatgpt-codex-connector\")) and (.body | test(\"Reviewed commit\")) and (.body | test(\"${HEAD:0:10}\"))) ] | length")
+            if [ "$receipt" -gt 0 ]; then
+              echo "PASS: Codex receipt for ${HEAD:0:10} found in a comment ($receipt)"
               exit 0
             fi
 
