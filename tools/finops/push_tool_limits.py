@@ -37,6 +37,43 @@ DB = pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "hermes" / "state.db"
 DEFAULT_MIN = 15000
 
 
+def _iter_calls(raw: str):
+    """Yield (tool_name, args) for direct calls and for MCP calls wrapped in tool_call.
+
+    MCP tools never appear as a top-level tool name: they arrive inside a `tool_call`
+    with `{"calls": [{"name": ..., "arguments": {...}}]}`. The first version of this
+    script counted only direct names, so every Exa and Tavily extraction was invisible
+    — the exact blindness the script exists to measure.
+    """
+    try:
+        data = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return
+    for call in data or []:
+        fn = call.get("function") or {}
+        name = fn.get("name")
+        args = fn.get("arguments")
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError:
+                args = {}
+        args = args or {}
+        if name == "tool_call":
+            for item in args.get("calls") or []:
+                yield (item.get("name") or "", item.get("arguments") or {})
+        elif name:
+            yield (name, args)
+
+
+# Tool -> (limit parameter, that tool's own default). Reported separately, because
+# "15000" means nothing for Exa, whose default is 3000.
+GUARDED = {
+    "web_extract": ("char_limit", 15000),
+    "mcp__exa__web_fetch_exa": ("maxCharacters", 3000),
+}
+
+
 def collect(window_hours: float) -> dict:
     since = time.time() - window_hours * 3600
     con = sqlite3.connect(f"file:{DB.as_posix()}?mode=ro", uri=True)
@@ -49,52 +86,52 @@ def collect(window_hours: float) -> dict:
     finally:
         con.close()
 
-    calls = 0
-    limits: list[int] = []
+    per_tool: dict[str, dict] = {t: {"calls": 0, "limits": []} for t in GUARDED}
     for (raw,) in rows:
-        try:
-            data = json.loads(raw)
-        except (TypeError, json.JSONDecodeError):
-            continue
-        for call in data or []:
-            fn = (call.get("function") or {})
-            if fn.get("name") != "web_extract":
+        for name, args in _iter_calls(raw):
+            if name not in GUARDED:
                 continue
-            calls += 1
-            args = fn.get("arguments")
-            if isinstance(args, str):
-                try:
-                    args = json.loads(args)
-                except json.JSONDecodeError:
-                    continue
-            if not isinstance(args, dict):
-                continue
-            value = args.get("char_limit")
+            param, _default = GUARDED[name]
+            per_tool[name]["calls"] += 1
+            value = args.get(param)
             if isinstance(value, (int, float)):
-                limits.append(int(value))
+                per_tool[name]["limits"].append(int(value))
 
-    below = [v for v in limits if v < DEFAULT_MIN]
-    return {
-        "window_hours": window_hours,
-        "calls": calls,
-        "with_limit": len(limits),
-        "below_default": len(below),
-        "min_limit": min(limits) if limits else None,
-        "median_limit": int(statistics.median(limits)) if limits else None,
-        "share_below_pct": round(100 * len(below) / calls, 1) if calls else 0.0,
-    }
+    stats: dict = {"window_hours": window_hours, "tools": {}}
+    total_calls = total_below = 0
+    for name, info in per_tool.items():
+        _param, default = GUARDED[name]
+        limits = info["limits"]
+        below = [v for v in limits if v < default]
+        total_calls += info["calls"]
+        total_below += len(below)
+        stats["tools"][name] = {
+            "calls": info["calls"],
+            "with_limit": len(limits),
+            "below_default": len(below),
+            "default": default,
+            "min_limit": min(limits) if limits else None,
+            "median_limit": int(statistics.median(limits)) if limits else None,
+        }
+    stats["calls"] = total_calls
+    stats["below_default"] = total_below
+    stats["share_below_pct"] = round(100 * total_below / total_calls, 1) if total_calls else 0.0
+    return stats
 
 
 def publish(stats: dict) -> int | None:
     lines = [
-        f"metric=web_extract_calls value={stats['calls']}",
-        f"metric=web_extract_with_limit value={stats['with_limit']}",
-        f"metric=web_extract_below_default value={stats['below_default']}",
+        f"metric=tool_limit_calls_total value={stats['calls']}",
+        f"metric=tool_limit_below_default_total value={stats['below_default']}",
+        f"metric=tool_limit_share_below_pct value={stats['share_below_pct']}",
         f"metric=char_limit_below_default value={1 if stats['below_default'] else 0}",
-        f"metric=web_extract_share_below_pct value={stats['share_below_pct']}",
     ]
-    if stats["min_limit"] is not None:
-        lines.append(f"metric=web_extract_min_limit value={stats['min_limit']}")
+    for name, info in stats["tools"].items():
+        short = name.replace("mcp__exa__", "exa_").replace("__", "_")
+        lines.append(f"metric={short}_calls value={info['calls']}")
+        lines.append(f"metric={short}_below_default value={info['below_default']}")
+        if info["min_limit"] is not None:
+            lines.append(f"metric={short}_min_limit value={info['min_limit']}")
 
     try:
         import base64
@@ -139,13 +176,16 @@ def main() -> int:
     if args.json:
         print(json.dumps(stats, ensure_ascii=False))
     else:
-        print(
-            f"web_extract за {stats['window_hours']:.0f} ч: вызовов {stats['calls']}, "
-            f"с char_limit {stats['with_limit']}, ниже дефолта {stats['below_default']} "
-            f"({stats['share_below_pct']}%)"
-        )
-        if stats["median_limit"] is not None:
-            print(f"  медиана лимита: {stats['median_limit']}, минимум: {stats['min_limit']}")
+        print(f"окно {stats['window_hours']:.0f} ч: вызовов {stats['calls']}, "
+              f"ниже дефолта {stats['below_default']} ({stats['share_below_pct']}%)")
+        for name, info in stats["tools"].items():
+            if not info["calls"]:
+                continue
+            line = (f"  {name}: {info['calls']} вызовов, ниже дефолта "
+                    f"{info['below_default']}/{info['calls']} (дефолт {info['default']})")
+            if info["median_limit"] is not None:
+                line += f", медиана {info['median_limit']}, минимум {info['min_limit']}"
+            print(line)
 
     if args.dry_run:
         return 0
