@@ -45,6 +45,16 @@ PATCHES = {
         "def _repo_named_in_text(",
         "_current_repo_slug(cwd) or _repo_named_in_text(text)",
     ),
+    # Reflect must not inherit the recall budget. On a large bank the synthesis input
+    # grows with the graph, and a recall-grade budget pushes the call past the server's
+    # wall: measured 56 s at `low` against 228 s at `mid`. Ported from the sibling
+    # integration `coding-agents`, which already has `reflectBudget`.
+    "reflect-budget": (
+        'self._reflect_budget = "low"',
+        '"key": "reflect_budget"',
+        'reflect_budget = cfg.get("reflect_budget")',
+        '"budget": self._reflect_budget',
+    ),
 }
 
 
