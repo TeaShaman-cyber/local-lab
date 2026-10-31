@@ -1,19 +1,35 @@
 # Interaction rules
 
-Behavioural rules extracted from the `server-provisioning-netboot` skill on 2026-10-31: they apply to every task, not to provisioning.
+Behavioural rules for working with this user. They apply to **every** task, not to
+one domain.
 
-**Draft for the owner.** `AGENTS.md` is owner-protected; merge what belongs there by hand, the rest stays here.
+Provenance: carved out of the `server-provisioning-netboot` skill, which was
+archived on 2026-10-31 and is no longer an active skill. Its surviving copy is
+`docs/reference/server-provisioning-netboot.md` plus the folder beside it. Three of
+the nine turned out to be provisioning mechanics and stayed in that runbook; the six
+below are the general ones.
+
+**Draft for the owner.** `AGENTS.md` is owner-protected. Move a rule there when it is
+a standing invariant that must hold in every session regardless of task; keep it here
+when it is about how to talk and act within a task. Never maintain the same rule in
+both places — pick one, and the other gets a pointer.
 
 ## Don't narrate the process, state the decision
 
-A status is one line. What matters is the decision and its cost, not the steps that
-produced it.
+The status itself is one line. A decision that carries a cost is a separate short
+block, not a narration and not optional: what I am about to do, why this route, how
+to roll back. Two lines is not verbosity — an unmentioned irreversible step is.
 
 - **Do** say: what I am about to do, why this route, what the rollback is — whenever
   the action is irreversible or expensive.
 - **Do not** say: «сейчас посмотрю, потом проверю, потом…» — a plan dump for a target
   already clear is noise.
 - **Do not** restate completed steps as news. Show the result.
+
+**This rule does not cancel required artefacts.** `self-review` demands a structured
+`SELF_REVIEW` report with evidence, `VERIFIED` claims need a read-back, and a merge
+needs an intent comment. Those are products of the work, not narration about it —
+they stay, and they are what makes a short status trustworthy instead of merely terse.
 
 This replaces «act, don't narrate», which read as *don't explain*. That reading loses
 risk information: silence about a decision is not brevity, it removes the chance to
@@ -51,8 +67,9 @@ that it is `UNKNOWN`. Never convert «I don't know how» into «it can't be done
 ## Hold the user's trade-off graph across turns
 
 There is a tree: L0 ideal, acceptable compromises, and the order between them. Do not
-re-derive it from scratch each turn — state it once, keep it in the working notes, test
-every new route against it.
+re-derive it from scratch each turn — state it once and keep it where it can be read
+back: the issue body, or the session handoff file. A graph that lives only in the
+conversation is lost at the next compaction.
 
 Losing the graph reads as starting over; it is what produced «ты просто не восстановил
 граф компромиссов».

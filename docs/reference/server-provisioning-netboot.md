@@ -61,9 +61,11 @@ assuming you need removable media.
 - **Boot a Linux installer over the network / from a staged ESP file.** For
 Proxmox the working path is auto-install via `prepare-iso` + a custom initrd
 with the ISO embedded (see `server-provisioning-netboot/pve-auto-install.md`).
-- **Don't conclude 'impossible' from a storage-format constraint.** Verifying
-the actual loader capabilities (GRUB loopback, PXE, initrd embedding) is
-cheaper than the argument; prove it before rejecting.
+- **Don't conclude 'impossible' from a constraint.** The general rule lives in
+`docs/agents/interaction-rules.md` («A suggested method is a requirement to
+investigate, not a proposal to refute»). Provisioning-specific cases: GRUB
+loopback, PXE, initrd embedding — verify what the loader actually does before
+rejecting a route on the grounds of a storage format.
 
 ## Preferred path: write a native Linux partition directly from Windows (L0)
 
