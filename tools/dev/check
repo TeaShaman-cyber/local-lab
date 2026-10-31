@@ -124,6 +124,18 @@ if grep -rnE 'glc_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{
 fi
 echo "ok"
 
+echo
+echo "=== external skill packs ==="
+# Four packs are copied from upstream repos: matt-pocock, grafana, langfuse,
+# timeweb. Three of them had no tracker at all until today, so a pack could go
+# stale and nobody would notice until something silently stopped matching the
+# vendor's docs. Local-only: the clones live on this machine, never in CI.
+if [ -z "${CI:-}${GITHUB_ACTIONS:-}" ] && [ -d "E:/grafana-skills" ]; then
+    if ! python tools/dev/skillpacks; then
+        echo "WARN: at least one external skill pack moved upstream — re-read before trusting it." >&2
+    fi
+fi
+
 echo "=== QA PASS ==="
 
 # Local-only: does the working tree agree with the remote? Runs last and warns
