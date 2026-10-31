@@ -120,23 +120,19 @@ $4.35 из $4.67 разрыва. Сумма же сходится (`84.2M + 2435
 ## Дашборд как код (gcx)
 
 Дашборды ведутся файлами в `infra/grafana/dashboards/` и применяются официальным
-`gcx` (grafana/gcx), а не руками в UI. Токен `GRAFANA_API_TOKEN` (`glc_`) для этого
-не годится — это access policy для логов и метрик; нужен OAuth-логин или
-service-account token.
+`gcx` (grafana/gcx), а не руками в UI.
+
+Полный контур — установка, авторизация в agent-режиме, workflow, проверки и границы —
+в `docs/reference/observability/grafana-as-code.md`. Здесь не дублируется намеренно:
+два экземпляра одной инструкции расходятся, и тогда непонятно, какой верный.
+
+Короткая версия для этой папки:
 
 ```bash
-gcx login tealaphid71 --server https://tealaphid71.grafana.net --oauth
-gcx resources pull     dashboards/hermes-providers -p ./infra/grafana/dashboards
-gcx resources validate -p ./infra/grafana/dashboards
-gcx resources push     -p ./infra/grafana/dashboards --dry-run
-gcx resources push     -p ./infra/grafana/dashboards
-gcx dashboards snapshot hermes-providers --panel 14 --output-dir ./.snap
+GCX="C:/Users/s.poklad/AppData/Local/gcx/bin/gcx.exe"   # не в PATH
+"$GCX" resources validate -p ./infra/grafana/dashboards
+"$GCX" resources push     -p ./infra/grafana/dashboards
 ```
 
-Две вещи, на которых легко потерять время:
-
-- в agent-режиме gcx браузер не открывает: печатает URL и код, который надо сверить
-  глазами, и ждёт подтверждения;
-- официальный `install.ps1` на этой машине падает на `Get-FileHash`. Рабочий путь —
-  бинарь из релиза (`gcx_*_windows_amd64.zip`), сверенный по `gcx_<ver>_checksums.txt`
-  через `sha256sum`.
+Токен `GRAFANA_API_TOKEN` (`glc_`) для дашбордов не годится — это access policy для
+логов и метрик, запись даёт `401`. Нужен OAuth-логин или service-account token.
