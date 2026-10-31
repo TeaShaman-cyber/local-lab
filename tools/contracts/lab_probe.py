@@ -61,14 +61,56 @@ REQUIRED_SECTIONS = [
     "## Agent skills",
 ]
 
-REVISION = re.compile(r"^Revision\s+(\S+)$", re.MULTILINE)
-PROBE = re.compile(r"^Probe\s+LAB_PROBE\s*->\s*(\S+)$", re.MULTILINE)
+# `[ \t]+`, not `\s+`: `\s` matches a newline, so "Revision\ninvalid" parsed as the
+# revision "invalid" and the probe returned LAB_OK_V1 for a malformed contract. A
+# separator that accepts a line break is not a separator.
+REVISION = re.compile(r"^Revision[ \t]+(\S+)[ \t]*$", re.MULTILINE)
+PROBE = re.compile(r"^Probe[ \t]+LAB_PROBE[ \t]*->[ \t]*(\S+)[ \t]*$", re.MULTILINE)
+
+
+def self_test() -> tuple[bool, str]:
+    """Input/output pairs for both parsers, including the malformed shapes.
+
+    Without these the probe cannot be falsified: it returned ok=true for a contract
+    whose Revision line was broken across two lines, and nothing in the file said what
+    a valid or an invalid input looks like (Codex P1 on #73).
+    """
+    cases = [
+        # (text, want_revision, want_probe, note)
+        ("Revision 2026-10-local-v1\n", "2026-10-local-v1", None, "single space"),
+        ("Revision          2026-10-local-v1\n", "2026-10-local-v1", None, "aligned with spaces"),
+        ("Revision\t2026-10-local-v1\n", "2026-10-local-v1", None, "tab separator"),
+        ("Revision\ninvalid\n", None, None, "revision split across a newline"),
+        ("Revision \n", None, None, "revision with no value"),
+        ("Probe LAB_PROBE -> LAB_OK_V1\n", None, "LAB_OK_V1", "probe, spaced arrow"),
+        ("Probe LAB_PROBE->LAB_OK_V1\n", None, "LAB_OK_V1", "probe, tight arrow"),
+        ("Probe\nLAB_PROBE -> LAB_OK_V1\n", None, None, "probe split across a newline"),
+    ]
+    failures = []
+    for text, want_rev, want_probe, note in cases:
+        m_rev = REVISION.search(text)
+        m_probe = PROBE.search(text)
+        got_rev = m_rev.group(1) if m_rev else None
+        got_probe = m_probe.group(1) if m_probe else None
+        if got_rev != want_rev:
+            failures.append(f"{note}: revision want {want_rev!r} got {got_rev!r}")
+        if got_probe != want_probe:
+            failures.append(f"{note}: probe want {want_probe!r} got {got_probe!r}")
+    if failures:
+        return False, "; ".join(failures)
+    return True, f"{len(cases)} cases, all match"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
+
+    if args.self_test:
+        ok, detail = self_test()
+        print(detail, file=sys.stdout if ok else sys.stderr)
+        return 0 if ok else 1
 
     if not AGENTS.is_file():
         print(f"AGENTS.md not found at {AGENTS}", file=sys.stderr)
