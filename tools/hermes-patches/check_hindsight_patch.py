@@ -54,6 +54,10 @@ PATCHES = {
         '"key": "reflect_budget"',
         'reflect_budget = cfg.get("reflect_budget")',
         '"budget": self._reflect_budget',
+        # The startup line must name it too: a setting that works but is invisible turns
+        # "did it take effect?" into archaeology — which is exactly what happened here,
+        # and the answer had to come from reading the code instead of the log.
+        "reflect_budget=%s",
     ),
 }
 

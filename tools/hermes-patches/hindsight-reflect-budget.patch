@@ -1,5 +1,5 @@
 diff --git a/hindsight-integrations/hermes/__init__.py b/hindsight-integrations/hermes/__init__.py
-index d194a89..acceddc 100644
+index d194a89..994d9c5 100644
 --- a/hindsight-integrations/hermes/__init__.py
 +++ b/hindsight-integrations/hermes/__init__.py
 @@ -491,6 +491,9 @@ class HindsightMemoryProvider(MemoryProvider):
@@ -25,7 +25,21 @@ index d194a89..acceddc 100644
              {
                  "key": "memory_mode",
                  "description": "Memory integration mode",
-@@ -1344,6 +1353,8 @@ class HindsightMemoryProvider(MemoryProvider):
+@@ -1173,11 +1182,12 @@ class HindsightMemoryProvider(MemoryProvider):
+ 
+             client_version = pkg_version("hindsight-client")
+         logger.info(
+-            "Hindsight initialized: mode=%s, api_url=%s, bank=%s, budget=%s, memory_mode=%s, prefetch_method=%s, client=%s",
++            "Hindsight initialized: mode=%s, api_url=%s, bank=%s, budget=%s, reflect_budget=%s, memory_mode=%s, prefetch_method=%s, client=%s",
+             self._mode,
+             self._api_url,
+             self._bank_id,
+             self._budget,
++            self._reflect_budget,
+             self._memory_mode,
+             self._prefetch_method,
+             client_version,
+@@ -1344,6 +1354,8 @@ class HindsightMemoryProvider(MemoryProvider):
          )
          budget = cfg.get("recall_budget") or cfg.get("budget") or banks.get("budget", "mid")
          self._budget = budget if budget in _VALID_BUDGETS else "mid"
@@ -34,12 +48,15 @@ index d194a89..acceddc 100644
          memory_mode = cfg.get("memory_mode", "hybrid")
          self._memory_mode = memory_mode if memory_mode in _SYSTEM_PROMPT_TAILS else "hybrid"
          prefetch_method = cfg.get("recall_prefetch_method") or cfg.get("prefetch_method", "recall")
-@@ -1586,7 +1597,7 @@ class HindsightMemoryProvider(MemoryProvider):
+@@ -1586,7 +1598,10 @@ class HindsightMemoryProvider(MemoryProvider):
          return results
  
      def _reflect(self, query: str) -> str | None:
 -        kwargs: Dict[str, Any] = {"bank_id": self._bank_id, "query": query, "budget": self._budget}
 +        kwargs: Dict[str, Any] = {"bank_id": self._bank_id, "query": query, "budget": self._reflect_budget}
++        logger.debug(
++            "Reflect: bank=%s, budget=%s, query_len=%d", self._bank_id, self._reflect_budget, len(query)
++        )
          if self._reflect_tags:
              kwargs.update(tags=self._reflect_tags, tags_match=self._reflect_tags_match)
          try:
