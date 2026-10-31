@@ -111,6 +111,55 @@ def _skill_paths(clone: pathlib.Path, ref: str, name: str) -> list[str]:
     return [p for p in listing if pathlib.PurePosixPath(p).parent.name == name and pathlib.PurePosixPath(p).name == "SKILL.md"]
 
 
+def _skill_files(clone: pathlib.Path, ref: str, name: str) -> list[str]:
+    """Every tracked file of one skill, not just SKILL.md.
+
+    Comparing only SKILL.md hid edits to `references/`: a fixture that changed one
+    reference file and nothing else was classified `unchanged` (Shoot's review,
+    2026-10-31). A skill is the directory, not the index file.
+    """
+    try:
+        listing = subprocess.run(
+            ["git", "ls-tree", "-r", "--name-only", ref, "--", "skills"],
+            cwd=clone, capture_output=True, text=True, check=True,
+        ).stdout.splitlines()
+    except (subprocess.CalledProcessError, OSError):
+        return []
+    return [p for p in listing if f"/{name}/" in p]
+
+
+def _dir_digest_git(clone: pathlib.Path, ref: str, name: str) -> str | None:
+    files = _skill_files(clone, ref, name)
+    if not files:
+        return None
+    hasher = hashlib.sha256()
+    # Sort by file name, not by path: Path ordering is case-insensitive on Windows
+    # ('agents' < 'skill.md') while str ordering in git is case-sensitive
+    # ('SKILL.md' < 'agents/…'). Mixing the two produced a different order, hence a
+    # different hash, hence "our-edit" for every skill (Shoot's review, 2026-10-31).
+    for path in sorted(files, key=lambda p: pathlib.PurePosixPath(p).name):
+        data = subprocess.run(
+            ["git", "show", f"{ref}:{path}"], cwd=clone, capture_output=True
+        ).stdout
+        hasher.update(pathlib.PurePosixPath(path).name.encode())
+        hasher.update(b"\0")
+        hasher.update(data.replace(b"\r\n", b"\n"))
+    return hasher.hexdigest()[:12]
+
+
+def _dir_digest_local(name: str) -> str | None:
+    root = INSTALLED / name
+    if not root.is_dir():
+        return None
+    hasher = hashlib.sha256()
+    files = [p for p in root.rglob("*") if p.is_file()]
+    for path in sorted(files, key=lambda p: p.name):
+        hasher.update(path.name.encode())
+        hasher.update(b"\0")
+        hasher.update(path.read_bytes().replace(b"\r\n", b"\n"))
+    return hasher.hexdigest()[:12]
+
+
 def classify_verdict(installed: str, base: str, head: str) -> str:
     """Decide who moved, given three hashes. The one place this decision lives."""
     if installed == base and base == head:
@@ -128,18 +177,15 @@ def three_way(clone: pathlib.Path, names: set[str]) -> dict[str, str]:
     """Classify each installed skill: unmoved, stale, ours, or conflicted."""
     verdicts: dict[str, str] = {}
     for name in sorted(names):
-        paths = _skill_paths(clone, BASE_COMMIT, name)
-        if not paths:
+        if not _skill_files(clone, BASE_COMMIT, name):
             verdicts[name] = "not-in-base"
             continue
-        path = paths[0]
-        inst_file = INSTALLED / name / "SKILL.md"
-        if not inst_file.is_file():
+        inst = _dir_digest_local(name)
+        if inst is None:
             verdicts[name] = "missing-locally"
             continue
-        inst = hashlib.sha256(inst_file.read_bytes()).hexdigest()[:12]
-        old = _blob_sha(clone, BASE_COMMIT, path)
-        new = _blob_sha(clone, "origin/main", path)
+        old = _dir_digest_git(clone, BASE_COMMIT, name)
+        new = _dir_digest_git(clone, "origin/main", name)
         if old is None or new is None:
             verdicts[name] = "unreadable"
         else:

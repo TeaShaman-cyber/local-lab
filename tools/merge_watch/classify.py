@@ -46,12 +46,20 @@ def flatten(raw: object) -> list[str]:
 
 
 def classify(bodies: list[str], head_sha: str) -> str:
+    """BOUND when *any* comment carrying this intent also carries the basis.
+
+    Stopping at the first comment with the intent was wrong: if an earlier comment
+    declared the intent without a basis and a later one corrected it with `issue: #N`,
+    the verdict was UNBOUND — a false warning, and the kind of noise that teaches
+    people to ignore the check (Shoot's review, 2026-10-31).
+    """
     intent = re.compile(INTENT.format(sha=re.escape(head_sha)))
     binding = re.compile(BINDING)
-    for body in bodies:
-        if intent.search(body):
-            return "BOUND" if binding.search(body) else "UNBOUND"
-    return "NO_INTENT"
+
+    matching = [body for body in bodies if intent.search(body)]
+    if not matching:
+        return "NO_INTENT"
+    return "BOUND" if any(binding.search(body) for body in matching) else "UNBOUND"
 
 
 def self_test() -> tuple[bool, str]:
@@ -68,6 +76,8 @@ def self_test() -> tuple[bool, str]:
         ([f"see merge-intent: {sha} issue: #60"], "BOUND", "intent quoted mid-sentence"),
         (["unrelated comment", f"merge-intent: {sha} issue: #7"], "BOUND", "intent in a later comment"),
         (["issue: #60", f"merge-intent: {sha}"], "UNBOUND", "binding in a different comment does not count"),
+        ([f"merge-intent: {sha}", f"merge-intent: {sha}\nissue: #42"], "BOUND",
+         "a later comment corrects an earlier unbound intent"),
         ([], "NO_INTENT", "no comments at all"),
     ]
     failures = []

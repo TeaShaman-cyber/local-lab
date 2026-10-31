@@ -30,6 +30,11 @@ def git(*args: str) -> tuple[int, str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--quiet", action="store_true", help="only print problems")
+    ap.add_argument(
+        "--offline",
+        action="store_true",
+        help="skip the fetch and compare against the last known remote state",
+    )
     args = ap.parse_args()
 
     code, root = git("rev-parse", "--show-toplevel")
@@ -38,6 +43,16 @@ def main() -> int:
         return 2
 
     problems: list[str] = []
+
+    # 0. Refresh the remote-tracking refs before comparing. Without this, everything
+    # below runs against whatever origin/<branch> was at the last fetch — which is how
+    # two clones, one of them stale, both reported "clean" while the remote had moved
+    # (Shoot's review, 2026-10-31). A failed fetch is reported as unknown, not as clean:
+    # not being able to look is not evidence of agreement.
+    if not args.offline:
+        code, _ = git("fetch", "--quiet", "--prune")
+        if code != 0:
+            problems.append("cannot reach the remote: remote state is UNKNOWN, not clean")
 
     # 1. Uncommitted work. Reported as a count, not a diff: the point is "is there
     # anything not yet in a commit", and a diff would bury that.
