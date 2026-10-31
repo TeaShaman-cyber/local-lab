@@ -238,11 +238,59 @@ def _run_body(env: dict, started: float) -> int:
 
     # A single line summarising the run, so the alert can read one value instead of
     # reconstructing state from a sequence of events.
-    heartbeat({"event": "BACKUP_END", "ok": int(not failed and v["ok"]),
-               "repos_ok": len([r for r in results if r["ok"]]), "repos_total": len(results),
-               "total_s": round(time.time() - started, 1)})
+    run_ok = int(not failed and v["ok"])
+    repos_ok = len([r for r in results if r["ok"]])
+    duration = round(time.time() - started, 1)
+
+    heartbeat({"event": "BACKUP_END", "ok": run_ok,
+               "repos_ok": repos_ok, "repos_total": len(results),
+               "total_s": duration})
+
+    push_metrics(run_ok, repos_ok, len(results), duration)
 
     return 0 if (not failed and v["ok"]) else 1
+
+
+def push_metrics(ok: int, repos_ok: int, repos_total: int, duration_s: float) -> None:
+    """Publish the run outcome as state, not as history (#58).
+
+    The alert used to ask "was there a failure in the last 24 hours". That answer stays
+    true for a whole day after the failure is fixed, and stays false when the run never
+    started at all — the two cases where a person needs to know the opposite.
+
+    A metric carrying the last run's result answers the question that matters: is the
+    backup healthy right now.
+
+    Never raises: a metrics outage must not turn a successful backup into a failed one.
+    """
+    lines = [
+        f"metric=backup_last_run_ok value={ok}",
+        f"metric=backup_repos_ok value={repos_ok}",
+        f"metric=backup_repos_total value={repos_total}",
+        f"metric=backup_duration_s value={duration_s}",
+    ]
+    try:
+        import base64
+        import json as jsonlib
+        import urllib.request
+
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "deepinfra_usage"))
+        from push_deepinfra_usage import loki_credentials  # noqa: PLC0415 - optional route
+
+        url, user, password = loki_credentials()
+        payload = {"streams": [{
+            "stream": {"service_name": "backup", "log_type": "run", "job": "theseus-backup"},
+            "values": [[str(time.time_ns()), line] for line in lines],
+        }]}
+        auth = base64.b64encode(f"{user}:{password}".encode()).decode()
+        request = urllib.request.Request(
+            url, data=jsonlib.dumps(payload).encode(), method="POST",
+            headers={"Content-Type": "application/json", "Authorization": f"Basic {auth}"},
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
+            log(f"metrics pushed: status={response.status} lines={len(lines)}")
+    except Exception as exc:  # noqa: BLE001 - metrics must never fail the backup
+        log(f"metrics push failed: {type(exc).__name__}: {exc}")
 
 
 if __name__ == "__main__":
