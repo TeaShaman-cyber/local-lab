@@ -20,6 +20,7 @@ import shutil
 import subprocess
 import sys
 import time
+import traceback
 
 # A scheduled task has no console; without this every child process would flash one.
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
@@ -45,10 +46,6 @@ KEEP = ["--keep-daily", "14", "--keep-weekly", "8", "--keep-monthly", "6"]
 # probes, model calls, interactive work — degrades. 2 MiB/s leaves headroom and
 # costs nothing at night.
 UPLOAD_LIMIT = ["--limit-upload", "2048"]
-
-
-def log(msg: str) -> None:
-    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
 def env_with_s3() -> dict:
@@ -129,7 +126,10 @@ def verify(env: dict) -> dict:
         return {"ok": False, "detail": "no dump to verify"}
 
     if RESTORE_CHECK.exists():
-        subprocess.run(["rm", "-rf", str(RESTORE_CHECK)], timeout=300, creationflags=_NO_WINDOW)
+        # `rm -rf` was the 31.10 failure: the scheduled task runs with a minimal PATH
+        # where rm does not exist, so verify() raised FileNotFoundError and the run
+        # died after a successful backup, before any repository result was written.
+        shutil.rmtree(RESTORE_CHECK, ignore_errors=True)
 
     code, out = restic(
         FULL_REPOS["local"],
@@ -147,12 +147,38 @@ def verify(env: dict) -> dict:
     return {"ok": same, "detail": "sha256 match" if same else "sha256 MISMATCH"}
 
 
+def _append(line: str) -> None:
+    """Every line lands in the file first, stdout second.
+
+    The scheduled task runs under pythonw, which has no stdout at all: anything
+    printed only there is lost, and the log then looks like a run that started and
+    did nothing. That is exactly how the 31.10 failure was read as a mystery.
+    """
+    try:
+        HEARTBEAT.parent.mkdir(parents=True, exist_ok=True)
+        with HEARTBEAT.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError:
+        pass
+    try:
+        print(line, flush=True)
+    except (OSError, ValueError):
+        pass
+
+
+def log(msg: str) -> None:
+    _append(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {msg}")
+
+
 def heartbeat(parts: dict) -> None:
-    HEARTBEAT.parent.mkdir(parents=True, exist_ok=True)
-    line = " ".join(f"{k}={v}" for k, v in parts.items())
-    with HEARTBEAT.open("a", encoding="utf-8") as f:
-        f.write(line + "\n")
-    log(line)
+    """Machine-readable event line, with the time it happened.
+
+    The timestamp is not decoration: the previous format made it impossible to tell
+    which run a line belonged to, or whether a `BACKUP_RUN ok` was from today or from
+    the day before.
+    """
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%S")
+    _append(f"{stamp} " + " ".join(f"{k}={v}" for k, v in parts.items()))
 
 
 def main() -> int:
@@ -164,6 +190,19 @@ def main() -> int:
     # because every other line is written only after its step completes.
     heartbeat({"event": "BACKUP_START", "pid": os.getpid()})
 
+    try:
+        return _run_body(env, started)
+    except Exception as exc:  # noqa: BLE001 - the point is to log, not to classify
+        # Under pythonw a traceback has nowhere to go: stderr does not exist. Without
+        # this the run dies silently and leaves only BACKUP_START behind, which is
+        # what made 31.10 look like a hang instead of a crash.
+        _append(traceback.format_exc())
+        heartbeat({"event": "BACKUP_CRASH", "stage": "unhandled",
+                   "detail": f"{type(exc).__name__}_{str(exc)[:160]}".replace(" ", "_")})
+        return 1
+
+
+def _run_body(env: dict, started: float) -> int:
     log("preparing snapshot")
     code, out = run([sys.executable, str(pathlib.Path(__file__).with_name("prepare_snapshot.py"))], env, 3600)
     if code != 0:
@@ -172,28 +211,35 @@ def main() -> int:
         return 1
 
     results = []
-    for name, repo in FULL_REPOS.items():
-        log(f"backup -> {name}")
-        results.append(backup_repo(name, repo, STAGING, env))
-    for name, repo in SMALL_REPOS.items():
-        log(f"backup -> {name} (survival kit)")
-        results.append(backup_repo(name, repo, SURVIVAL, env))
+    for group, repos, source in (("full", FULL_REPOS, STAGING),
+                                 ("survival", SMALL_REPOS, SURVIVAL)):
+        for name, repo in repos.items():
+            log(f"backup -> {name}")
+            r = backup_repo(name, repo, source, env)
+            results.append(r)
+            # Written as soon as the repository finishes, not at the end: a later
+            # crash used to erase the fact that three repositories had already
+            # succeeded.
+            if r["ok"]:
+                heartbeat({"event": "BACKUP_RUN", "status": "ok", "repo": r["repo"],
+                           "snapshots": r["snapshots"], "duration_s": r["duration_s"]})
+            else:
+                heartbeat({"event": "BACKUP_RUN", "status": "fail", "repo": r["repo"],
+                           "stage": r["stage"], "detail": r["detail"].replace(" ", "_")[:200]})
 
     failed = [r for r in results if not r["ok"]]
 
     log("verifying by restore")
     v = verify(env)
 
-    for r in results:
-        if r["ok"]:
-            heartbeat({"event": "BACKUP_RUN", "status": "ok", "repo": r["repo"],
-                       "snapshots": r["snapshots"], "duration_s": r["duration_s"]})
-        else:
-            heartbeat({"event": "BACKUP_RUN", "status": "fail", "repo": r["repo"],
-                       "stage": r["stage"], "detail": r["detail"].replace(" ", "_")[:200]})
-
     heartbeat({"event": "BACKUP_DRILL", "status": "ok" if v["ok"] else "fail",
                "detail": v["detail"].replace(" ", "_"),
+               "total_s": round(time.time() - started, 1)})
+
+    # A single line summarising the run, so the alert can read one value instead of
+    # reconstructing state from a sequence of events.
+    heartbeat({"event": "BACKUP_END", "ok": int(not failed and v["ok"]),
+               "repos_ok": len([r for r in results if r["ok"]]), "repos_total": len(results),
                "total_s": round(time.time() - started, 1)})
 
     return 0 if (not failed and v["ok"]) else 1
