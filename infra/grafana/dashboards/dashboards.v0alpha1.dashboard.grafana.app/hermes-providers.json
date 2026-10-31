@@ -1,0 +1,691 @@
+{
+  "apiVersion": "dashboard.grafana.app/v0alpha1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.app/message": "fix(providers): сырой stripe_balance вместо выведенного «баланса»"
+    },
+    "labels": {},
+    "name": "hermes-providers",
+    "namespace": "stacks-1891821"
+  },
+  "spec": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "links": [],
+    "panels": [
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "grafanacloud-logs"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "targets": [
+          {
+            "expr": "sum by (provider) (sum_over_time({service_name=\"hermes\"} |= \"API call #\" | regexp \"provider=(?P<provider>[a-z0-9_-]+) in=(?P<t>[0-9]+)\" | unwrap t [$__interval]))",
+            "legendFormat": "{{provider}}",
+            "refId": "A"
+          }
+        ],
+        "title": "Входные токены по провайдерам",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "grafanacloud-logs"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
+        "id": 2,
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "targets": [
+          {
+            "expr": "sum by (provider) (sum_over_time({service_name=\"hermes\"} |= \"API call #\" | regexp \"provider=(?P<provider>[a-z0-9_-]+).* out=(?P<o>[0-9]+)\" | unwrap o [$__interval]))",
+            "legendFormat": "{{provider}}",
+            "refId": "A"
+          }
+        ],
+        "title": "Выходные токены по провайдерам",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "grafanacloud-logs"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 60
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 0,
+          "y": 8
+        },
+        "id": 3,
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "targets": [
+          {
+            "expr": "sum by (provider) (count_over_time({service_name=\"hermes\"} |= \"API call #\" | regexp \"provider=(?P<provider>[a-z0-9_-]+)\" [$__interval]))",
+            "legendFormat": "{{provider}}",
+            "refId": "A"
+          }
+        ],
+        "title": "Вызовов по провайдерам",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "grafanacloud-logs"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 0,
+              "lineWidth": 2
+            },
+            "unit": "s"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 8,
+          "y": 8
+        },
+        "id": 4,
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "targets": [
+          {
+            "expr": "quantile_over_time(0.5, {service_name=\"hermes\"} |= \"API call #\" | regexp \"provider=deepinfra.*latency=(?P<l>[0-9.]+)s\" | unwrap l [$__interval])",
+            "legendFormat": "p50",
+            "refId": "A"
+          },
+          {
+            "expr": "quantile_over_time(0.9, {service_name=\"hermes\"} |= \"API call #\" | regexp \"provider=deepinfra.*latency=(?P<l>[0-9.]+)s\" | unwrap l [$__interval])",
+            "legendFormat": "p90",
+            "refId": "B"
+          }
+        ],
+        "title": "Латентность p50 / p90 — DeepInfra",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "grafanacloud-logs"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 3,
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 8
+        },
+        "id": 5,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": ""
+          }
+        },
+        "targets": [
+          {
+            "expr": "sum(sum_over_time({service_name=\"hermes\"} |= \"API call #\" | regexp \"provider=deepinfra.* in=(?P<t>[0-9]+)\" | unwrap t [$__range]))",
+            "queryType": "instant",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(sum_over_time({service_name=\"hermes\"} |= \"API call #\" | regexp \"provider=deepinfra.* out=(?P<o>[0-9]+)\" | unwrap o [$__range]))",
+            "queryType": "instant",
+            "refId": "B"
+          },
+          {
+            "expr": "sum(sum_over_time({service_name=\"hermes\"} |= \"API call #\" | regexp \"provider=deepinfra.*cache=(?P<c>[0-9]+)/\" | unwrap c [$__range]))",
+            "queryType": "instant",
+            "refId": "C"
+          },
+          {
+            "datasource": {
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "expression": "($A - $C) * 0.098 / 1000000 + $C * 0.003 / 1000000 + $B * 0.294 / 1000000",
+            "refId": "D",
+            "type": "math"
+          }
+        ],
+        "title": "DeepInfra — стоимость за период (с кэшем), $",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "grafanacloud-logs"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 2,
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 12,
+          "x": 0,
+          "y": 16
+        },
+        "id": 6,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": ""
+          }
+        },
+        "targets": [
+          {
+            "expr": "sum(sum_over_time({service_name=\"hermes\"} |= \"API call #\" | regexp \"provider=custom.* in=(?P<t>[0-9]+)\" | unwrap t [$__range]))",
+            "queryType": "instant",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(sum_over_time({service_name=\"hermes\"} |= \"API call #\" | regexp \"provider=custom.*cache=(?P<c>[0-9]+)/\" | unwrap c [$__range]))",
+            "queryType": "instant",
+            "refId": "B"
+          },
+          {
+            "expr": "sum(sum_over_time({service_name=\"hermes\"} |= \"API call #\" | regexp \"provider=custom.* out=(?P<o>[0-9]+)\" | unwrap o [$__range]))",
+            "queryType": "instant",
+            "refId": "C"
+          },
+          {
+            "datasource": {
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "expression": "($A - $B) * 0.15 / 1000000 + $B * 0.01 / 1000000 + $C * 0.6 / 1000000",
+            "refId": "D",
+            "type": "math"
+          }
+        ],
+        "title": "RunInfra (provider=custom) — оценка стоимости за период, $",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "grafanacloud-logs"
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        },
+        "id": 7,
+        "options": {
+          "showTime": true,
+          "sortOrder": "Descending",
+          "wrapLogMessage": true
+        },
+        "targets": [
+          {
+            "expr": "{service_name=\"hermes\"} |= \"API call #\" |= \"provider=deepinfra\"",
+            "refId": "A"
+          }
+        ],
+        "title": "Последние вызовы DeepInfra",
+        "type": "logs"
+      },
+      {
+        "gridPos": {
+          "h": 6,
+          "w": 24,
+          "x": 0,
+          "y": 23
+        },
+        "id": 8,
+        "options": {
+          "content": "### Источник\\nВсе панели — Loki `service_name=\\\"hermes\\\"`, строки `API call #`. Со стороны провайдеров ничего не пушится, кроме биллинга DeepInfra (панели 9–13).\\n\\n### Имена\\n- `provider=custom` — это **RunInfra** (кастомный endpoint в конфиге Hermes).\\n- `provider=deepinfra` — DeepInfra.\\n- `provider=nous` — бесплатные модели, стоимость не считается.\\n\\n### Деньги\\n- Кэш считается отдельно у обоих: RunInfra $0.01/1M, DeepInfra $0.003/1M; некэш. вход $0.15 / $0.098; выход $0.60 / $0.294.\\n- **Оба провайдера отдают кэш в логах** (`cache=X/Y`), поэтому панели 5–6 — расчёт по факту токенов, а не оценка сверху.\\n- Фактические списания DeepInfra — панели 9–13 (`payment/usage`).\\n- Langfuse для этой модели врёт в обе стороны: DeepInfra завышает, RunInfra занижает ~50×. Верить панелям, не Langfuse.\\n- Промо DeepInfra -51% (`discount_ends_at: null`): если кончится — станет $0.20/$0.60.",
+          "mode": "markdown"
+        },
+        "title": "Как читать и что не врёт",
+        "type": "text"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "grafanacloud-logs"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 2,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red"
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                },
+                {
+                  "color": "green",
+                  "value": 3
+                }
+              ]
+            },
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 6,
+          "x": 0,
+          "y": 29
+        },
+        "id": 9,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": ""
+          }
+        },
+        "targets": [
+          {
+            "expr": "last_over_time({service_name=\"deepinfra\", log_type=\"billing\"} | logfmt | metric=\"stripe_balance_usd\" | unwrap value [$__range])",
+            "queryType": "instant",
+            "refId": "A"
+          }
+        ],
+        "title": "DeepInfra — stripe_balance (сырой; минус = предоплата), $",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "grafanacloud-logs"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 2,
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 6,
+          "x": 6,
+          "y": 29
+        },
+        "id": 10,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": ""
+          }
+        },
+        "targets": [
+          {
+            "expr": "last_over_time({service_name=\"deepinfra\", log_type=\"billing\"} | logfmt | metric=\"spend_month_usd\" | unwrap value [$__range])",
+            "queryType": "instant",
+            "refId": "A"
+          }
+        ],
+        "title": "DeepInfra — расход за месяц (факт), $",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "grafanacloud-logs"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 70,
+              "stacking": {
+                "mode": "normal"
+              }
+            },
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 12,
+          "x": 12,
+          "y": 29
+        },
+        "id": 11,
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "targets": [
+          {
+            "expr": "sum by (pricing_type) (last_over_time({service_name=\"deepinfra\", log_type=\"billing\"} | logfmt | metric=\"cost_cents\" | unwrap value [$__interval])) / 100",
+            "legendFormat": "{{pricing_type}}",
+            "refId": "A"
+          }
+        ],
+        "title": "DeepInfra — расход по типам токенов, $",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "grafanacloud-logs"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "min": 0,
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 12,
+          "x": 0,
+          "y": 36
+        },
+        "id": 12,
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "targets": [
+          {
+            "expr": "last_over_time({service_name=\"deepinfra\", log_type=\"billing\"} | logfmt | metric=\"stripe_balance_usd\" | unwrap value [$__interval])",
+            "legendFormat": "баланс",
+            "refId": "A"
+          }
+        ],
+        "title": "DeepInfra — stripe_balance во времени, $",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "grafanacloud-logs"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "options": {
+                  "0": {
+                    "color": "green",
+                    "text": "активен"
+                  },
+                  "1": {
+                    "color": "red",
+                    "text": "ЗАБЛОКИРОВАН"
+                  }
+                },
+                "type": "value"
+              }
+            ],
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 12,
+          "x": 12,
+          "y": 36
+        },
+        "id": 13,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": ""
+          }
+        },
+        "targets": [
+          {
+            "expr": "last_over_time({service_name=\"deepinfra\", log_type=\"billing\"} | logfmt | metric=\"suspended\" | unwrap value [$__range])",
+            "queryType": "instant",
+            "refId": "A"
+          }
+        ],
+        "title": "DeepInfra — статус аккаунта",
+        "type": "stat"
+      },
+      {
+        "id": 15,
+        "type": "text",
+        "title": "Окно сверки: что можно и нельзя сравнивать",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 43
+        },
+        "options": {
+          "mode": "markdown",
+          "content": "### Период billing\n\n`2026-10-01 07:00` → `2026-11-01 06:59` UTC — 31 день. Живые границы: `usage_period_start_unix`, `usage_period_end_unix`.\n\n### Телеметрия Loki\n\nПервый снапшот пушера: `2026-10-26 00:37` UTC. Покрыто **5.7 дня из 31**.\n\n### Правило сверки\n\nСравнивать только пересечение окон. **25.3 дня периода не имеют телеметрии — это `UNKNOWN`, а не ноль.** Полная сумма `spend_month_usd` и сумма по логам за сутки не сопоставимы.\n\nПересчёт доли (рассчитано 2026-10-31):\n\n```\nstart=1790838000   end=1793516399.999   first=1792975035\ncoverage = (now - first) / (end - start) = 18%\n```\n\n`vector(time())` в этом Loki не поддерживается, поэтому `now` в запросе недоступен и доля остаётся расчётом, а не метрикой.\n"
+        }
+      },
+      {
+        "id": 14,
+        "type": "bargauge",
+        "title": "DeepInfra — расход по моделям, $ (факт billing)",
+        "datasource": {
+          "type": "loki",
+          "uid": "grafanacloud-logs"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 43
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "decimals": 2,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                },
+                {
+                  "color": "red",
+                  "value": 5
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient",
+          "showUnfilled": true,
+          "valueMode": "color",
+          "namePlacement": "auto",
+          "sizing": "auto",
+          "minVizHeight": 16,
+          "minVizWidth": 8,
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "legend": {
+            "show": false,
+            "displayMode": "list",
+            "placement": "bottom",
+            "calcs": []
+          }
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "sum by (model) (last_over_time({service_name=\"deepinfra\", log_type=\"billing\"} | logfmt | metric=\"cost_cents\" | unwrap value [$__range])) / 100 > 0",
+            "legendFormat": "{{model}}"
+          }
+        ]
+      }
+    ],
+    "refresh": "1m",
+    "schemaVersion": 42,
+    "tags": [
+      "hermes",
+      "provider",
+      "cost",
+      "deepinfra",
+      "theseus"
+    ],
+    "templating": {
+      "list": []
+    },
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Hermes — провайдеры (DeepInfra / RunInfra / free)",
+    "weekStart": ""
+  }
+}

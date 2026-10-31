@@ -63,7 +63,7 @@ LogQL-панели читают их так:
 last_over_time({service_name="deepinfra", log_type="billing"} | logfmt | metric="balance_usd" | unwrap value [1h])
 ```
 
-Дашборд: `https://tealaphid71.grafana.net/d/hermes-providers` (панели 9–13).
+Дашборд: `https://tealaphid71.grafana.net/d/hermes-providers` (панели 9–15).
 
 ## Креды
 
@@ -80,7 +80,46 @@ python tools/deepinfra_usage/push_deepinfra_usage.py
 
 ## Алерты
 
-Группа `deepinfra-billing` в папке Theseus:
+Группа `deepinfra-billing`:
 
-- `DeepInfra: баланс ниже $1` (warning, `for: 10m`)
-- `DeepInfra: аккаунт заблокирован (suspended)` (critical, `for: 5m`)
+- `DeepInfra: отказы по балансу (HTTP 402)` (critical) — срабатывает только когда
+  запрос действительно ушёл и был отклонён; фильтры литеральные и привязаны к
+  провайдеру, поэтому чужой 402 сюда не попадёт;
+- `DeepInfra: аккаунт заблокирован (suspended)` (critical) — **на паузе**:
+  `suspended` — известное постоянное состояние, а не событие, письма раз в 4 часа
+  про него были шумом. Включать обратно после пополнения баланса.
+
+## Окно сверки: почему суммы не сравниваются напрямую
+
+- Период billing: `2026-10-01 07:00` → `2026-11-01 06:59` UTC (31 день), поля
+  `usage_period_start_unix` / `usage_period_end_unix`.
+- Телеметрия Loki начинается `2026-10-26 00:37` UTC — **5.7 дня из 31**.
+- Оставшиеся 25.3 дня периода не имеют логов: это `UNKNOWN`, а не ноль.
+  Сравнение `spend_month_usd` с суммой по логам за сутки даёт ложное расхождение.
+
+`vector(time())` в этом Loki не поддерживается (`parse error`), поэтому текущее
+время внутри запроса недоступно и доля покрытия остаётся расчётом, а не метрикой.
+
+## Дашборд как код (gcx)
+
+Дашборды ведутся файлами в `infra/grafana/dashboards/` и применяются официальным
+`gcx` (grafana/gcx), а не руками в UI. Токен `GRAFANA_API_TOKEN` (`glc_`) для этого
+не годится — это access policy для логов и метрик; нужен OAuth-логин или
+service-account token.
+
+```bash
+gcx login tealaphid71 --server https://tealaphid71.grafana.net --oauth
+gcx resources pull     dashboards/hermes-providers -p ./infra/grafana/dashboards
+gcx resources validate -p ./infra/grafana/dashboards
+gcx resources push     -p ./infra/grafana/dashboards --dry-run
+gcx resources push     -p ./infra/grafana/dashboards
+gcx dashboards snapshot hermes-providers --panel 14 --output-dir ./.snap
+```
+
+Две вещи, на которых легко потерять время:
+
+- в agent-режиме gcx браузер не открывает: печатает URL и код, который надо сверить
+  глазами, и ждёт подтверждения;
+- официальный `install.ps1` на этой машине падает на `Get-FileHash`. Рабочий путь —
+  бинарь из релиза (`gcx_*_windows_amd64.zip`), сверенный по `gcx_<ver>_checksums.txt`
+  через `sha256sum`.
