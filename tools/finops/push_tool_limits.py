@@ -27,6 +27,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import sqlite3
 import statistics
 import sys
@@ -119,13 +120,89 @@ def collect(window_hours: float) -> dict:
     return stats
 
 
-def publish(stats: dict) -> int | None:
+TRUNCATED_MARK = "[TRUNCATED]"
+# The footer names the stored file: To read the omitted middle: read_file path="...".
+# The stored message may be JSON-escaped, so the quotes arrive as \" — a plain
+# [^"]+ pattern silently matched almost nothing and reported 0 follow-ups.
+STORED_PATH_RE = re.compile(r'read_file path="(.+?)"')
+SAVED_PATH_RE = re.compile(r'Full text saved to:\s*(.+?\.md)')
+
+
+def _unescape(text: str) -> str:
+    """The footer survives two JSON layers, so quotes arrive as \\" and slashes doubled.
+
+    A pattern written for the raw text matched almost nothing, which read as "nobody
+    ever followed the pointer" — a false zero. Unescape first, then match normally.
+    """
+    return text.replace("\\\\", "\\").replace('\\"', '"')
+
+
+def collect_truncation(window_hours: float) -> dict:
+    """Did the agent read only a fragment, and did it ever go back for the rest?
+
+    Cutting a page is half the problem. The other half: web_extract stores the full text
+    on disk and prints the exact read_file call for the omitted middle, so a truncated
+    response is a pointer, not a loss. An agent that never follows the pointer made the
+    loss real.
+
+    Counted per session in message order: a truncation is "followed" when a later
+    read_file in the same session names the stored path.
+    """
+    since = time.time() - window_hours * 3600
+    con = sqlite3.connect(f"file:{DB.as_posix()}?mode=ro", uri=True)
+    try:
+        rows = con.execute(
+            "SELECT session_id, role, content, tool_calls FROM messages "
+            "WHERE timestamp >= ? ORDER BY id",
+            (since,),
+        ).fetchall()
+    finally:
+        con.close()
+
+    truncated: list[tuple[str, str]] = []          # (session, stored_path)
+    reads: dict[str, list[str]] = {}               # session -> paths passed to read_file
+
+    for session, role, content, tool_calls in rows:
+        if content and TRUNCATED_MARK in content:
+            text = _unescape(content)
+            match = STORED_PATH_RE.search(text) or SAVED_PATH_RE.search(text)
+            truncated.append((session, match.group(1) if match else ""))
+        if not tool_calls:
+            continue
+        for name, args in _iter_calls(tool_calls):
+            if name != "read_file":
+                continue
+            path = (args or {}).get("path")
+            if isinstance(path, str):
+                reads.setdefault(session, []).append(path)
+
+    followed = 0
+    for session, path in truncated:
+        if not path:
+            continue
+        if any(path in r or r in path for r in reads.get(session, [])):
+            followed += 1
+
+    return {
+        "truncated": len(truncated),
+        "followed": followed,
+        "share_followed_pct": round(100 * followed / len(truncated), 1) if truncated else 0.0,
+    }
+
+
+def publish(stats: dict, trunc: dict | None = None) -> int | None:
     lines = [
         f"metric=tool_limit_calls_total value={stats['calls']}",
         f"metric=tool_limit_below_default_total value={stats['below_default']}",
         f"metric=tool_limit_share_below_pct value={stats['share_below_pct']}",
         f"metric=char_limit_below_default value={1 if stats['below_default'] else 0}",
     ]
+    if trunc is not None:
+        lines += [
+            f"metric=web_extract_truncated_total value={trunc['truncated']}",
+            f"metric=web_extract_truncated_followed value={trunc['followed']}",
+            f"metric=web_extract_truncated_followed_pct value={trunc['share_followed_pct']}",
+        ]
     for name, info in stats["tools"].items():
         short = name.replace("mcp__exa__", "exa_").replace("__", "_")
         lines.append(f"metric={short}_calls value={info['calls']}")
@@ -172,6 +249,8 @@ def main() -> int:
         return 2
 
     stats = collect(args.window_hours)
+    trunc = collect_truncation(args.window_hours)
+    stats["truncation"] = trunc
 
     if args.json:
         print(json.dumps(stats, ensure_ascii=False))
@@ -186,11 +265,13 @@ def main() -> int:
             if info["median_limit"] is not None:
                 line += f", медиана {info['median_limit']}, минимум {info['min_limit']}"
             print(line)
+        print(f"обрезано страниц: {trunc['truncated']}, дочитано {trunc['followed']} "
+              f"({trunc['share_followed_pct']}%)")
 
     if args.dry_run:
         return 0
 
-    status = publish(stats)
+    status = publish(stats, trunc)
     if status is None:
         return 1
     if not args.json:
