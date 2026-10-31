@@ -1,0 +1,528 @@
+{
+  "apiVersion": "dashboard.grafana.app/v0alpha1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.app/message": "Compare recall p95 across production and station"
+    },
+    "labels": {},
+    "name": "hindsight-eval",
+    "namespace": "stacks-1891821"
+  },
+  "spec": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "links": [],
+    "panels": [
+      {
+        "datasource": {
+          "type": "tempo",
+          "uid": "grafanacloud-traces"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "tempo",
+              "uid": "grafanacloud-traces"
+            },
+            "query": "{ resource.service.name = \"hindsight-eval\" && name = \"hindsight.recall\" } | quantile_over_time(span:duration, 0.95)",
+            "queryType": "traceql",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "tempo",
+              "uid": "grafanacloud-traces"
+            },
+            "query": "{ resource.service.name = \"hindsight-eval\" && name = \"hindsight.recall\" } | quantile_over_time(span:duration, 0.50)",
+            "queryType": "traceql",
+            "refId": "B"
+          }
+        ],
+        "title": "Recall: p95 и p50",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "tempo",
+          "uid": "grafanacloud-traces"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        },
+        "id": 2,
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "tempo",
+              "uid": "grafanacloud-traces"
+            },
+            "query": "{ resource.service.name = \"hindsight-eval\" && name = \"hindsight.rerank\" } | quantile_over_time(span:duration, 0.95)",
+            "queryType": "traceql",
+            "refId": "A"
+          }
+        ],
+        "title": "Реренк cross-encoder: p95",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "tempo",
+          "uid": "grafanacloud-traces"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        },
+        "id": 3,
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "tempo",
+              "uid": "grafanacloud-traces"
+            },
+            "query": "{ resource.service.name = \"hindsight-eval\" && name = \"hindsight.embedding_query\" } | quantile_over_time(span:duration, 0.95)",
+            "queryType": "traceql",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "tempo",
+              "uid": "grafanacloud-traces"
+            },
+            "query": "{ resource.service.name = \"hindsight-eval\" && name = \"hindsight.recall_retrieval\" } | quantile_over_time(span:duration, 0.95)",
+            "queryType": "traceql",
+            "refId": "B"
+          }
+        ],
+        "title": "Embedding и retrieval: p95",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "tempo",
+          "uid": "grafanacloud-traces"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 16
+        },
+        "id": 4,
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "tempo",
+              "uid": "grafanacloud-traces"
+            },
+            "query": "{ resource.service.name = \"hindsight-eval\" && name = \"hindsight.recall\" } | count_over_time()",
+            "queryType": "traceql",
+            "refId": "A"
+          }
+        ],
+        "title": "Число recall-запросов",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "grafanacloud-prom"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 24
+        },
+        "id": 5,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "right"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "grafanacloud-prom"
+            },
+            "expr": "histogram_quantile(0.95, sum by (le, phase) (rate(hindsight_recall_phase_duration_seconds_bucket{job=\"hindsight-eval\"}[5m])))",
+            "legendFormat": "{{phase}}",
+            "refId": "A"
+          }
+        ],
+        "title": "Фазы recall: p95 (Prometheus)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "grafanacloud-prom"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "thresholdsStyle": {
+                "lineWidth": 1,
+                "mode": "dashed"
+              }
+            },
+            "max": 20,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 15
+                }
+              ]
+            },
+            "unit": "s"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 33
+        },
+        "id": 6,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "right"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "grafanacloud-prom"
+            },
+            "expr": "histogram_quantile(0.95, sum by (le) (rate(hindsight_recall_phase_duration_seconds_bucket{job=\"hindsight-eval\", phase=\"reranking\"}[5m])))",
+            "legendFormat": "rerank p95",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "grafanacloud-prom"
+            },
+            "expr": "histogram_quantile(0.50, sum by (le) (rate(hindsight_recall_phase_duration_seconds_bucket{job=\"hindsight-eval\", phase=\"reranking\"}[5m])))",
+            "legendFormat": "rerank p50",
+            "refId": "B"
+          }
+        ],
+        "title": "Реренк: p95/p50 и порог 15 с",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "grafanacloud-prom"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "thresholdsStyle": {
+                "lineWidth": 1,
+                "mode": "dashed"
+              }
+            },
+            "max": 120,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "orange",
+                  "value": 60
+                },
+                {
+                  "color": "red",
+                  "value": 90
+                }
+              ]
+            },
+            "unit": "s"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 41
+        },
+        "id": 7,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "right"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "grafanacloud-prom"
+            },
+            "expr": "histogram_quantile(0.95, sum by (le, job) (rate(hindsight_operation_duration_seconds_bucket{operation=\"recall\", source=\"api\"}[10m])))",
+            "legendFormat": "{{job}}",
+            "refId": "A"
+          }
+        ],
+        "title": "Recall p95: продакшен (laptop) и станция (VPS)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "grafanacloud-prom"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 50
+        },
+        "id": 8,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "displayMode": "table",
+            "placement": "right"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "grafanacloud-prom"
+            },
+            "expr": "sum by (job, scope) (rate(hindsight_llm_calls_total{job=~\"hindsight-api|hindsight-eval\"}[5m]))",
+            "legendFormat": "{{job}} · {{scope}}",
+            "refId": "A"
+          }
+        ],
+        "title": "LLM-вызовы по операции (прод + станция)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "grafanacloud-prom"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 58
+        },
+        "id": 9,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "displayMode": "table",
+            "placement": "right"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "grafanacloud-prom"
+            },
+            "expr": "sum by (job, scope) (rate(hindsight_llm_tokens_input_tokens_total{job=~\"hindsight-api|hindsight-eval\"}[5m]))",
+            "legendFormat": "{{job}} · {{scope}}",
+            "refId": "A"
+          }
+        ],
+        "title": "LLM вход: токены по операции",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "grafanacloud-prom"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 66
+        },
+        "id": 10,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "displayMode": "table",
+            "placement": "right"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "grafanacloud-prom"
+            },
+            "expr": "histogram_quantile(0.95, sum by (le, job, scope) (rate(hindsight_llm_duration_seconds_bucket{job=~\"hindsight-api|hindsight-eval\"}[5m])))",
+            "legendFormat": "{{job}} · {{scope}}",
+            "refId": "A"
+          }
+        ],
+        "title": "LLM p95 по операции",
+        "type": "timeseries"
+      }
+    ],
+    "refresh": "1m",
+    "schemaVersion": 42,
+    "tags": [
+      "theseus",
+      "hindsight",
+      "eval"
+    ],
+    "templating": {
+      "list": []
+    },
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Hindsight — eval station",
+    "weekStart": ""
+  }
+}
