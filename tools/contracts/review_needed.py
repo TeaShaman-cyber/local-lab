@@ -29,6 +29,11 @@ ALWAYS_REVIEW = (
     ".github/workflows/",
     "tools/contracts/",
     "tools/backup_lattice/",
+    # Both were added after #49: a change to the state.db backup contour and to the
+    # merge gate itself went through as P2, i.e. without review. The classifier's list
+    # had stopped matching what the repository actually protects.
+    "tools/state_db_backup/",
+    "tools/merge_watch/",
     "AGENTS.md",
 )
 
@@ -56,6 +61,10 @@ def self_test() -> int:
         ("docs/reference/infrastructure.md", 1, "not P1"),
         ("infra/registry.yaml", 1, "registry stays P2 by decision"),
         ("tools/dev/check", 1, "not P1"),
+        # #49: these two passed as P2, which is how a backup change and a change to
+        # the merge gate itself got merged without review.
+        ("tools/state_db_backup/drill.py", 0, "P1 path: backup contour"),
+        ("tools/merge_watch/classify.py", 0, "P1 path: merge gate"),
     ]
     failures = 0
     for path, expected, why in cases:
