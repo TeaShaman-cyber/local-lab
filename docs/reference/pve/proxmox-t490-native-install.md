@@ -37,10 +37,13 @@ Hermes `PVE_ROOT_PASS`.
 
 ```bash
 # 1. Образ из реестра в OCI-архив (skopeo уже стоит на хосте)
-skopeo copy docker://ghcr.io/vectorize-io/hindsight:1.1.0 oci-archive:/tmp/hindsight-oci.tar
+#    Пишем в /var/tmp, не в /tmp: /tmp на этом хосте — tmpfs в RAM (3.8 ГБ),
+#    а образ Hindsight занимает 3.79 ГБ. Это инцидент #38: «дефицит памяти»,
+#    который оказался нашими же архивами в памяти.
+skopeo copy docker://ghcr.io/vectorize-io/hindsight:1.1.0 oci-archive:/var/tmp/hindsight-oci.tar
 
 # 2. Развернуть как контейнер; entrypoint и ENV переносятся из образа
-pct restore 103 /tmp/hindsight-oci.tar \
+pct restore 103 /var/tmp/hindsight-oci.tar \
   --rootfs local:12 --memory 3072 --cores 4 \
   --net0 name=eth0,bridge=vmbr0,ip=10.10.10.13/24,gw=10.10.10.2
 
