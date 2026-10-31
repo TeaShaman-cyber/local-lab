@@ -75,10 +75,18 @@ Pass the hook with `--on-first-boot <script>` at `prepare-iso` time and set in
 source = "from-iso"
 ordering = "before-network"
 ```
-The hook script should: (1) add Debian `trixie` `main contrib
-non-free-firmware` sources and `apt-get install wpasupplicant
-firmware-iwlwifi isc-dhcp-client` (USB tethering can supply the temporary
-internet for this step); (2) write `/etc/wpa_supplicant/wpa_supplicant.conf`
+The hook script should: (1) install `wpasupplicant`, `firmware-iwlwifi` and
+`isc-dhcp-client` from **packages baked into the install artifact at build time**,
+never by `apt-get` over the network. Downloading them in a first-boot hook is a
+chicken-and-egg on a machine whose only link is the Wi-Fi it is trying to bring up,
+and it contradicts the offline rule at the top of
+`docs/reference/server-provisioning-netboot.md`. Stage the `.deb` files on the
+Windows host while it still has internet, carry them inside the image, and install
+from the local path:
+```sh
+dpkg -i /root/wifi/*.deb || apt-get -f install --no-download
+```
+(2) write `/etc/wpa_supplicant/wpa_supplicant.conf`
 with the SSID/PSK (escape quotes/backslashes when templating the values in);
 (3) install a `systemd` oneshot `pve-wifi-connect.service` that brings up the
 `wl*` interface, runs `wpa_supplicant -B -i <iface> -c <conf>`, then
