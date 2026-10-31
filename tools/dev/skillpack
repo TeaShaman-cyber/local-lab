@@ -111,6 +111,19 @@ def _skill_paths(clone: pathlib.Path, ref: str, name: str) -> list[str]:
     return [p for p in listing if pathlib.PurePosixPath(p).parent.name == name and pathlib.PurePosixPath(p).name == "SKILL.md"]
 
 
+def classify_verdict(installed: str, base: str, head: str) -> str:
+    """Decide who moved, given three hashes. The one place this decision lives."""
+    if installed == base and base == head:
+        return "unchanged"
+    if installed == base and base != head:
+        return "stale"
+    if installed != base and base == head:
+        return "our-edit"
+    if installed == head:
+        return "up-to-date"
+    return "conflict"
+
+
 def three_way(clone: pathlib.Path, names: set[str]) -> dict[str, str]:
     """Classify each installed skill: unmoved, stale, ours, or conflicted."""
     verdicts: dict[str, str] = {}
@@ -129,21 +142,18 @@ def three_way(clone: pathlib.Path, names: set[str]) -> dict[str, str]:
         new = _blob_sha(clone, "origin/main", path)
         if old is None or new is None:
             verdicts[name] = "unreadable"
-        elif inst == old and old == new:
-            verdicts[name] = "unchanged"
-        elif inst == old and old != new:
-            verdicts[name] = "stale"
-        elif inst != old and old == new:
-            verdicts[name] = "our-edit"
-        elif inst == new:
-            verdicts[name] = "up-to-date"
         else:
-            verdicts[name] = "conflict"
+            verdicts[name] = classify_verdict(inst, old, new)
     return verdicts
 
 
 def self_test() -> tuple[bool, str]:
-    """The classifier's own inputs and outputs, without touching git."""
+    """Fixed inputs and outputs for the classifier.
+
+    This must call ``classify_verdict`` rather than re-implement it: a test that
+    copies the logic passes while the function it is supposed to guard is
+    broken.
+    """
     cases = [
         # (installed, base, head, want)
         ("aaa", "aaa", "aaa", "unchanged"),
@@ -151,19 +161,11 @@ def self_test() -> tuple[bool, str]:
         ("bbb", "aaa", "aaa", "our-edit"),
         ("bbb", "aaa", "bbb", "up-to-date"),
         ("ccc", "aaa", "bbb", "conflict"),
+        ("aaa", "bbb", "aaa", "up-to-date"),  # we are the old side, upstream is base
     ]
     failures = []
     for inst, old, new, want in cases:
-        if inst == old and old == new:
-            got = "unchanged"
-        elif inst == old and old != new:
-            got = "stale"
-        elif inst != old and old == new:
-            got = "our-edit"
-        elif inst == new:
-            got = "up-to-date"
-        else:
-            got = "conflict"
+        got = classify_verdict(inst, old, new)
         if got != want:
             failures.append(f"{inst}/{old}/{new}: want {want} got {got}")
     if failures:
