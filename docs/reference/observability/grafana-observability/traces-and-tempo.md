@@ -110,6 +110,81 @@ Bucket boundaries are coarse relative to a real observation, so the percentile
 reads higher than the actual measurement — treat it as a trend signal, not a
 stopwatch.
 
+### The 25-hour ceiling is server-side
+
+A metrics query covering more than 25 hours fails outright:
+
+```
+tempo API returned 400: metrics query time range exceeds the maximum allowed duration of 25h0m0s
+```
+
+`query_frontend.metrics.max_duration` is a server setting; no query hint or
+syntax lifts it. For a week you have two options, and only one is honest:
+
+- **Span metrics → PromQL** (the documented path). The metrics generator counts
+  spans at ingest and writes `traces_spanmetrics_calls_total` to Mimir, where no
+  25-hour limit applies: `sum(increase(traces_spanmetrics_calls_total[7d]))`.
+  Check the name first — Alloy/OTel emits `traces_span_metrics_calls_total`.
+  These numbers drift slightly from TraceQL: the generator counts at ingest, so
+  spans arriving later than `metrics_ingestion_time_range_slack` (30 s default)
+  are missing.
+- **Seven separate ≤24 h queries, summed.** A workaround, not a fix. Say so in
+  the panel description rather than letting the next reader assume it is a limit
+  of the data.
+
+Confirm which case applies before building: `list_prometheus_metric_names`
+with regex `traces_span.*calls_total`. An empty result means span metrics are
+not enabled on the stack, and the week window is genuinely unavailable.
+
+## Attribute names containing dots
+
+TraceQL parses `.` as a path separator, so a literal attribute like
+`hermes.tool.command` is read as "attribute `hermes`, field `tool`" and fails:
+
+```
+{ hermes.tool.command =~ ".*" }
+  → parse error at line 1, col 3: unknown identifier: hermes
+```
+
+Quote the whole name and prefix the scope:
+
+```
+{ span."hermes.tool.command" =~ ".*" }
+```
+
+Same for `langfuse.observation.input`, `hermes.turn.tool_commands`, and any
+other dotted attribute. The scope prefix (`span.`, `resource.`) is not optional
+here — it tells the parser that what follows is one attribute name.
+
+## Consulting Grafana Assistant from the CLI
+
+`gcx` ships an Assistant client over A2A:
+
+```
+gcx assistant prompt "<question>" --agent
+```
+
+It streams JSON events (`status`, `tool_call`, `message`, `stream_end`); the
+answer is the `text` field of the `message` event. Requires OAuth (`gcx login`)
+and is **billed per token** — worth it for a question about Grafana's own
+semantics (limits, datasource behaviour), not for something a probe answers.
+
+Two paths to the same binary, and they are not interchangeable:
+
+| path | sees local files | use for |
+|---|---|---|
+| `mcp__grafana__exec_gcx` | no (sandbox) | reads, discovery, `help-tree`, `skills get` |
+| local `gcx` in PATH | yes | `resources validate`, `resources push -p <file>` |
+
+On Windows the local binary lives in `%LOCALAPPDATA%\gcx\bin`. Adding it to
+`.bashrc` needs the **MSYS** form — a native path with backslashes loses them to
+escape processing and `which gcx` comes back empty:
+
+```bash
+export PATH="$PATH:/c/Users/<user>/AppData/Local/gcx/bin"   # works
+export PATH="$PATH:C:\Users\<user>\AppData\Local/gcx/bin"   # silently broken
+```
+
 ## Panels over Tempo
 
 - datasource type `tempo`, uid of the tempo datasource, `queryType: "traceql"`,
