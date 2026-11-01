@@ -163,8 +163,13 @@ services:
     container_name: hermes-proxy
     restart: unless-stopped
     command: ["proxy", "start", "--provider", "nous", "--host", "0.0.0.0", "--port", "8645"]
-    expose:
-      - "8645"
+    # expose published it to the Docker network only, so the PVE stand could not
+    # reach it: 10.77.61.199:8645 timed out from both the host and LXC 103.
+    # Published so the stand can borrow the same provider routing and OAuth state
+    # instead of carrying its own credentials. Loopback would not help — the stand
+    # lives on another machine.
+    ports:
+      - "8645:8645"
     volumes:
       # Dedicated Docker-managed OAuth state; never bind the Desktop auth.json.
       - hermes-proxy-data:/opt/data

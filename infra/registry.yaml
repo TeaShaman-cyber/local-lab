@@ -114,7 +114,9 @@ services:
     location:
       iac_project: D:/theseus-infrastructure
       adapter: D:/theseus-infrastructure/scripts/digitalocean_mcp.py
-      endpoints: [https://accounts.mcp.digitalocean.com/mcp, https://droplets.mcp.digitalocean.com/mcp]
+      endpoints:
+        - https://accounts.mcp.digitalocean.com/mcp
+        - https://droplets.mcp.digitalocean.com/mcp
     monitoring: Grafana Cloud — расходы в finops-панели; Langfuse — вызовы MCP
     check: mcporter list digitalocean
     notes: мутация только по явному разрешению; ни один ресурс не зарегистрирован, пока не создан и не прочитан обратно
@@ -195,7 +197,7 @@ test_stands:
     criticality: T
     role: изолированные LXC и VM для экспериментов, которые влезают в память
     host: "pve.lab / 10.67.163.198 (host=pve-t490)"
-    capacity: "7.48 GiB RAM, ThinkPad T490, без swap"
+    capacity: "7.48 GiB RAM, swap 4 GiB (/swapfile), ThinkPad T490"
     constraints: >-
       Слабый CPU. /tmp здесь это tmpfs в RAM размером 3.8 GiB, архивы образов и
       моделей класть только на диск. 30 октября 2026 в /tmp накопилось 3,8 ГБ
