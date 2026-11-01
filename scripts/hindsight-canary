@@ -60,17 +60,33 @@ case "$cmd" in
         canary_sha=$(sha "$CANARY" 2>/dev/null || echo none)
 
         if [ "$live_sha" = "$prod_sha" ]; then
-            echo "LIVE = production"
+            echo "DISK = production"
         elif [ "$live_sha" = "$canary_sha" ]; then
-            echo "LIVE = canary  ← experiment is running"
+            echo "DISK = canary  ← experiment file is in place"
         else
-            echo "LIVE = UNKNOWN build — does not match either stored version"
+            echo "DISK = UNKNOWN build — does not match either stored version"
             echo "       this is the state that silently happened on 2026-11-01"
             echo "       run 'diff' and decide, do not guess"
         fi
         echo "  live   $live_sha"
         echo "  prod   $prod_sha"
         echo "  canary $canary_sha"
+
+        # The plugin is imported once at gateway start. There is no hot reload, so
+        # the disk can be newer than the running code — the file says one thing,
+        # the agent does another. We cannot read the process start time reliably
+        # on Windows (ps -W gives no timestamp, and PowerShell start-time queries
+        # hang), so we do not guess: we print the file time and the rule.
+        if [ -f "$LIVE" ]; then
+            live_mtime=$(stat -c %Y "$LIVE" 2>/dev/null || echo 0)
+            echo
+            echo "RUNTIME: load state is UNKNOWN until you restart the gateway"
+            echo "  no hot reload: plugins are imported once at startup"
+            echo "  file written at $(date -d @$live_mtime '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "epoch $live_mtime")"
+            echo "  if the gateway was already running before that time,"
+            echo "  it is still executing the PREVIOUS build regardless of what disk shows"
+            echo "  verify after restart: ask the agent to recall anything and check the date format"
+        fi
         [ -f "$RECEIPT" ] && { echo "  last switch:"; sed 's/^/    /' "$RECEIPT"; }
         ;;
     promote)
