@@ -1,0 +1,374 @@
+{
+  "apiVersion": "dashboard.grafana.app/v2",
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "codex-usage",
+    "annotations": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.app/message": "Codex subscription headroom: session and weekly windows, credits, freshness"
+    }
+  },
+  "spec": {
+    "title": "Codex — остаток лимитов подписки",
+    "description": "Сколько осталось от пятичасового и недельного окна подписки ChatGPT/Codex. Источник — codex app-server (account/rateLimits/read), сборщик tools/codex_usage, раз в 5 минут в Loki.",
+    "tags": ["codex", "finops", "subscription"],
+    "editable": true,
+    "cursorSync": "Off",
+    "preload": false,
+    "liveNow": false,
+    "links": [],
+    "annotations": [],
+    "variables": [],
+    "timeSettings": {
+      "from": "now-24h",
+      "to": "now",
+      "autoRefresh": "5m",
+      "autoRefreshIntervals": ["1m", "5m", "15m", "1h"],
+      "hideTimepicker": false,
+      "fiscalYearStartMonth": 0
+    },
+    "elements": {
+      "panel-1": {
+        "kind": "Panel",
+        "spec": {
+          "id": 1,
+          "title": "Что это и чего здесь нет",
+          "data": { "kind": "QueryGroup", "spec": { "queries": [], "queryOptions": {}, "transformations": [] } },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "spec": {
+              "fieldConfig": { "defaults": {}, "overrides": [] },
+              "options": {
+                "mode": "markdown",
+                "content": "**Остаток лимита подписки, а не расход.** Расход виден по токенам; здесь — сколько ещё можно работать до сброса.\n\n**Лимит общий для аккаунта.** Codex-бот ревьюит PR в облаке, второй агент работает по GitOps в других репозиториях — их вызовы идут в ту же квоту и локально не видны. Панель отвечает «сколько осталось», но **не** «кто потратил»; алерт на рост локальной активности здесь был бы ложью.\n\n**Пусто = нет данных, а не ноль.** Сборщик при отказе возвращает код ошибки, а не `value=0`: ноль на графике означает «лимит свободен».\n\nИсточник: `codex app-server`, метод `account/rateLimits/read`, опрос раз в 5 минут (`CodexUsageExport`)."
+              }
+            }
+          }
+        }
+      },
+      "panel-2": {
+        "kind": "Panel",
+        "spec": {
+          "id": 2,
+          "title": "Пятичасовое окно",
+          "description": "Процент израсходованного пятичасового лимита. Сбрасывается каждые 5 часов.",
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "loki",
+                      "datasource": { "name": "grafanacloud-logs" },
+                      "spec": {
+                        "expr": "max(last_over_time({service_name=\"openai-codex\", job=\"codex-usage\"} |= `metric=codex_session_used_percent` | logfmt | unwrap value [10m]))",
+                        "instant": true,
+                        "range": false
+                      }
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "stat",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percent",
+                  "min": 0,
+                  "max": 100,
+                  "color": { "mode": "thresholds" },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      { "color": "green", "value": null },
+                      { "color": "yellow", "value": 70 },
+                      { "color": "red", "value": 90 }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "colorMode": "background",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "textMode": "value_and_name"
+              }
+            }
+          }
+        }
+      },
+      "panel-3": {
+        "kind": "Panel",
+        "spec": {
+          "id": 3,
+          "title": "Недельное окно",
+          "description": "Процент израсходованного недельного лимита. Обычно упирается первым.",
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "loki",
+                      "datasource": { "name": "grafanacloud-logs" },
+                      "spec": {
+                        "expr": "max(last_over_time({service_name=\"openai-codex\", job=\"codex-usage\"} |= `metric=codex_weekly_used_percent` | logfmt | unwrap value [10m]))",
+                        "instant": true,
+                        "range": false
+                      }
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "stat",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percent",
+                  "min": 0,
+                  "max": 100,
+                  "color": { "mode": "thresholds" },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      { "color": "green", "value": null },
+                      { "color": "yellow", "value": 80 },
+                      { "color": "red", "value": 95 }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "colorMode": "background",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "textMode": "value_and_name"
+              }
+            }
+          }
+        }
+      },
+      "panel-4": {
+        "kind": "Panel",
+        "spec": {
+          "id": 4,
+          "title": "Reset-кредиты",
+          "description": "Доступные полные сбросы. Погашение восстанавливает всё окно целиком.",
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "loki",
+                      "datasource": { "name": "grafanacloud-logs" },
+                      "spec": {
+                        "expr": "max(last_over_time({service_name=\"openai-codex\", job=\"codex-usage\"} |= `metric=codex_reset_credits_available` | logfmt | unwrap value [10m]))",
+                        "instant": true,
+                        "range": false
+                      }
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "stat",
+            "spec": {
+              "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+              "options": {
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "colorMode": "value",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "textMode": "value_and_name"
+              }
+            }
+          }
+        }
+      },
+      "panel-5": {
+        "kind": "Panel",
+        "spec": {
+          "id": 5,
+          "title": "Свежесть данных",
+          "description": "Строк за последние 10 минут. Если 0 — сборщик молчит, а панели выше показывают последнее известное, а не текущее.",
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "loki",
+                      "datasource": { "name": "grafanacloud-logs" },
+                      "spec": {
+                        "expr": "sum(count_over_time({service_name=\"openai-codex\", job=\"codex-usage\"} [10m]))",
+                        "instant": true,
+                        "range": false
+                      }
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "stat",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "min": 0,
+                  "color": { "mode": "thresholds" },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      { "color": "red", "value": null },
+                      { "color": "green", "value": 1 }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "textMode": "value_and_name"
+              }
+            }
+          }
+        }
+      },
+      "panel-6": {
+        "kind": "Panel",
+        "spec": {
+          "id": 6,
+          "title": "Использование окон за сутки",
+          "description": "Недельное растёт всю неделю; сессионное пилообразное, сбрасывается каждые 5 часов.",
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "loki",
+                      "datasource": { "name": "grafanacloud-logs" },
+                      "spec": {
+                        "expr": "max_over_time({service_name=\"openai-codex\", job=\"codex-usage\"} |= `metric=codex_session_used_percent` | logfmt | unwrap value [5m])",
+                        "legendFormat": "session"
+                      }
+                    }
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "B",
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "loki",
+                      "datasource": { "name": "grafanacloud-logs" },
+                      "spec": {
+                        "expr": "max_over_time({service_name=\"openai-codex\", job=\"codex-usage\"} |= `metric=codex_weekly_used_percent` | logfmt | unwrap value [5m])",
+                        "legendFormat": "weekly"
+                      }
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percent",
+                  "min": 0,
+                  "max": 100,
+                  "custom": { "drawStyle": "line", "fillOpacity": 8, "lineWidth": 2, "showPoints": "never" }
+                },
+                "overrides": [
+                  {
+                    "matcher": { "id": "byName", "options": "weekly" },
+                    "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }]
+                  }
+                ]
+              },
+              "options": {
+                "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+                "tooltip": { "mode": "multi" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "layout": {
+      "kind": "GridLayout",
+      "spec": {
+        "items": [
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 0, "width": 24, "height": 5, "element": { "kind": "ElementReference", "name": "panel-1" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 5, "width": 6, "height": 6, "element": { "kind": "ElementReference", "name": "panel-2" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 6, "y": 5, "width": 6, "height": 6, "element": { "kind": "ElementReference", "name": "panel-3" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 12, "y": 5, "width": 6, "height": 6, "element": { "kind": "ElementReference", "name": "panel-4" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 18, "y": 5, "width": 6, "height": 6, "element": { "kind": "ElementReference", "name": "panel-5" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 11, "width": 24, "height": 9, "element": { "kind": "ElementReference", "name": "panel-6" } } }
+        ]
+      }
+    }
+  }
+}
