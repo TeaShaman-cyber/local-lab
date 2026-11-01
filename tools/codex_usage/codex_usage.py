@@ -22,6 +22,30 @@ WINDOW_LABELS = {
     10080: "weekly",   # 7 дней
 }
 
+# `codex` на Windows — npm-шим `.cmd`, то есть запускается через cmd.exe.
+# Любой Popen без этого флага поднимает для него консольное окно: задача
+# Планировщика на pythonw закрывает только первое окно — своё, а не дочернее.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def _warn(message: str) -> None:
+    """Печать предупреждения, которая не падает без консоли.
+
+    Под `pythonw` и `sys.stderr`, и `sys.stdout` равны None, а `print(file=None)`
+    уходит в stdout и падает на `None.write`. Отказ источника превращался бы в
+    AttributeError вместо честного «недоступен», и задача молчала бы каждые
+    5 минут.
+    """
+    stream = sys.stderr or sys.stdout
+    if stream is None:
+        return
+    try:
+        print(message, file=stream)
+    except (OSError, ValueError):
+        # Поток может быть закрыт родителем; диагностика не должна убивать сбор.
+        return
+
+
 
 def _window_label(window: dict) -> str | None:
     minutes = window.get("windowDurationMins")
@@ -143,6 +167,9 @@ def _kill_tree(pid: int) -> None:
 
     Вывод taskkill не захватываем: в русской консоли он в cp866, и text-декодер
     падает на нём в фоновом потоке — падение не видно, но шумит в stderr.
+
+    ``creationflags`` нужен и здесь: ``taskkill`` — консольная программа, и без
+    флага она поднимает собственное окно даже когда вызвана из ``pythonw``.
     """
     try:
         subprocess.run(
@@ -150,6 +177,7 @@ def _kill_tree(pid: int) -> None:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             timeout=10,
+            creationflags=_NO_WINDOW,
         )
     except Exception:  # noqa: BLE001 - завершение не должно ронять сбор
         pass
@@ -169,6 +197,7 @@ def _run_app_server(messages: list[dict], timeout: float = 60.0) -> list[str]:
         # (cmd-шим печатает в OEM-кодировке), причём падает в фоновом reader,
         # а не там, где это видно. Декодируем сами, с заменой.
         stderr=subprocess.DEVNULL,
+        creationflags=_NO_WINDOW,
     )
     lines: list[str] = []
 
@@ -217,7 +246,7 @@ def collect_from_app_server(runner=None) -> dict | None:
     try:
         stream = run(handshake_messages())
     except Exception as exc:  # noqa: BLE001 - отказ должен быть виден снаружи
-        print(f"app-server недоступен: {type(exc).__name__}: {exc}", file=sys.stderr)
+        _warn(f"app-server недоступен: {type(exc).__name__}: {exc}")
         return None
 
     for line in stream:
@@ -288,7 +317,7 @@ def publish_lines(lines: list[str], sender=None, url=None, auth=None) -> int:
             resolved_url, resolved_auth = _loki_credentials()
             send(resolved_url, resolved_auth, payload)
     except Exception as exc:  # noqa: BLE001 - код возврата и есть сигнал
-        print(f"Loki: публикация не удалась: {type(exc).__name__}: {exc}", file=sys.stderr)
+        _warn(f"Loki: публикация не удалась: {type(exc).__name__}: {exc}")
         return 4
     return 0
 
