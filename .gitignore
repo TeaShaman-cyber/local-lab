@@ -28,3 +28,7 @@ node_modules/
 
 # Scratch
 .scratch/tmp/
+
+# Local eval material: real session fragments and their annotations.
+# The methodology and results belong in git; the texts themselves are personal.
+.hermes/
