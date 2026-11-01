@@ -146,6 +146,16 @@ if ! python tools/contracts/check_consistency.py; then
 fi
 
 echo
+echo "=== profile mirrors ==="
+# MEMORY.md and USER.md load into every turn but lived only on disk: no history,
+# no copy, and a link to a document that exists nowhere. The mirrors in
+# docs/agents/ make the drift visible; this fails when they stop matching.
+if ! python tools/contracts/check_profile.py; then
+    echo "QA FAIL: profile mirror drifted from the live memory files" >&2
+    exit 1
+fi
+
+echo
 echo "=== contract probe ==="
 # AGENTS.md declares `Probe: LAB_PROBE -> LAB_OK_V1`. Until now nothing produced
 # that value, so the contract asserted its own verification with no mechanism.
