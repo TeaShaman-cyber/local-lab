@@ -1,7 +1,7 @@
 ---
-name: playwright-mcp
+name: playwright-mcp-hermes
 description: "Use when a setting lives only in the web UI, not the API."
-version: 1.0.0
+version: 1.1.0
 author: Semyon Poklad + Svarog
 license: MIT
 metadata:
@@ -11,6 +11,13 @@ metadata:
 ---
 
 # Playwright MCP (Hermes)
+
+## Имя: почему `-hermes`
+
+В хабе есть community-скиллы с именем `playwright-mcp` (`clawhub`, identifier `playwright-mcp` и `playwright-mcp-skill`). Наш переименован, чтобы `hermes skills search playwright-mcp` не выдавал два разных скилла под одним именем и установка чужого не перетёрла наш.
+
+Сообщество как образец дизайна стоит смотреть, но не копировать: их содержимое — про другой харнесс.
+
 
 ## Официальный пак — проверен, не подходит
 
