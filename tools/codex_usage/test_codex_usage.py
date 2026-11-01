@@ -178,3 +178,63 @@ def test_main_reports_success_after_publishing():
     code = codex_usage.main(collect=lambda: PROBE, publish=lambda lines: published.append(lines) or 0)
     assert code == 0
     assert published and len(published[0]) > 0
+
+
+def test_app_server_is_started_without_a_console_window(monkeypatch):
+    """Каждые 5 минут всплывало окно cmd: `codex` — это npm-шим .cmd, и Popen
+    создавал для него консоль. Флаг обязан быть, иначе фикс задачи на pythonw
+    закрывает только половину причины."""
+    import io
+    import sys as _sys
+
+    calls = []
+
+    class FakeProc:
+        def __init__(self):
+            self.stdin = io.BytesIO()
+            self.stdout = io.BytesIO(b"")
+            self.pid = 4242
+
+        def wait(self, timeout=None):
+            return 0
+
+        def kill(self):
+            pass
+
+    def fake_popen(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return FakeProc()
+
+    monkeypatch.setattr(codex_usage.subprocess, "Popen", fake_popen)
+    codex_usage._run_app_server(codex_usage.handshake_messages())
+
+    # Функция запускает два процесса: сам app-server и taskkill для уборки.
+    # Окно поднимает любой из них, поэтому проверяются все, а не последний.
+    assert calls, "ни один процесс не запускался"
+    for cmd, kwargs in calls:
+        flags = kwargs.get("creationflags", 0)
+        name = Path(cmd[0]).name if cmd else "?"
+        if _sys.platform == "win32":
+            assert flags & codex_usage._NO_WINDOW,                 f"{name} запущен без CREATE_NO_WINDOW — поднимет окно"
+        else:
+            assert flags == 0, f"{name}: на других платформах флаг нейтральный"
+
+
+def test_error_message_does_not_crash_without_a_console(monkeypatch):
+    """Под pythonw sys.stderr и sys.stdout равны None: print(..., file=None)
+    уходит в sys.stdout и падает на None.write, то есть отказ источника
+    превращался бы в AttributeError вместо честного «недоступен»."""
+    monkeypatch.setattr(codex_usage.sys, "stderr", None)
+    monkeypatch.setattr(codex_usage.sys, "stdout", None)
+
+    def boom(messages):
+        raise OSError("codex.cmd not found")
+
+    assert codex_usage.collect_from_app_server(runner=boom) is None
+
+
+def test_publish_failure_does_not_crash_without_a_console(monkeypatch):
+    monkeypatch.setattr(codex_usage.sys, "stderr", None)
+    monkeypatch.setattr(codex_usage, "_post_loki",
+                        lambda *a, **k: (_ for _ in ()).throw(OSError("loki down")))
+    assert codex_usage.publish_lines(["line"]) != 0
