@@ -32,3 +32,6 @@ node_modules/
 # Local eval material: real session fragments and their annotations.
 # The methodology and results belong in git; the texts themselves are personal.
 .hermes/
+
+# Rendered dashboard snapshots: a build artifact, regenerated on demand.
+snapshots/
