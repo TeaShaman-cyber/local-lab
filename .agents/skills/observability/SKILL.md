@@ -73,6 +73,10 @@ four packs turned out to exist upstream for months before we rewrote them
   response when the answer matters.
 - Querying live data is a different job: use the Grafana MCP tools or Langfuse MCP,
   not these files.
+- Treat provider subscription counters as account-level unless the provider exposes a
+  verified per-client dimension. Cloud agents, bots, and other GitOps workers may share
+  the same quota, so dashboards should report remaining capacity and freshness—not
+  claim that a local action caused a particular spend.
 - Grafana alerting cannot use Tempo as a datasource — that limit is why span metrics
   exist. Stated here because it is the one fact people re-discover repeatedly.
 
