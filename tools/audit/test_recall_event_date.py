@@ -19,7 +19,6 @@ Run: python tools/audit/test_recall_event_date.py
 """
 from __future__ import annotations
 
-import sys
 import types
 from datetime import datetime, timedelta, timezone
 
