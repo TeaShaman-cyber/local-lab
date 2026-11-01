@@ -28,7 +28,25 @@ PAIRS = [
 
 
 def strip_header(text: str) -> str:
-    """Drop the draft header: everything up to and including the first ``---``."""
+    """Drop the draft header: everything up to and including the first ``---``.
+
+    Input::
+
+        # MEMORY.md — draft
+
+        > Draft, not the live file.
+
+        ---
+
+        Форумы: 1F916
+
+    Output::
+
+        \\nФорумы: 1F916\\n
+
+    No separator anywhere -> the text is returned unchanged, so a mirror that
+    lost its header is compared whole rather than compared to an empty string.
+    """
     lines = text.replace("\r\n", "\n").split("\n")
     for i, line in enumerate(lines):
         if re.fullmatch(r"-{3,}", line.strip()):
@@ -37,6 +55,27 @@ def strip_header(text: str) -> str:
 
 
 def normalise(text: str) -> str:
+    """Collapse the differences that are formatting, not content.
+
+    Chained regexes, each with its input and output:
+
+    +-----------------------------+-----------------------------+-----------------------------+
+    | step                        | input                       | output                      |
+    +=============================+=============================+=============================+
+    | ``\\r\\n`` -> ``\\n``          | ``"a\\r\\nb"``                | ``"a\\nb"``                   |
+    +-----------------------------+-----------------------------+-----------------------------+
+    | ``[ \\t]+$`` (multiline)     | ``"a  \\nb\\t\\n"``             | ``"a\\nb\\n"``                 |
+    +-----------------------------+-----------------------------+-----------------------------+
+    | ``[ \\t]+`` -> one space     | ``"a    b"``                | ``"a b"``                   |
+    +-----------------------------+-----------------------------+-----------------------------+
+    | ``\\n{3,}`` -> two newlines  | ``"a\\n\\n\\n\\nb"``           | ``"a\\n\\nb"``                |
+    +-----------------------------+-----------------------------+-----------------------------+
+    | ``.strip()``                | ``"\\n  a  \\n"``            | ``"a"``                     |
+    +-----------------------------+-----------------------------+-----------------------------+
+
+    Trailing spaces go before the collapse so that ``"a  "`` and ``"a"`` compare
+    equal; collapsing runs of spaces before stripping would keep the trailing one.
+    """
     text = text.replace("\r\n", "\n")
     text = re.sub(r"[ \t]+$", "", text, flags=re.M)
     text = re.sub(r"[ \t]+", " ", text)
