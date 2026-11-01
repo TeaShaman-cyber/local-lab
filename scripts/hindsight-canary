@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Switch the hindsight plugin between production and canary builds.
+#
+# Why this exists: on 2026-11-01 the recall fix was applied directly to the live
+# plugin file — that IS production. A crash there would have taken memory down
+# with no way back except a /tmp copy, which sits on tmpfs and has already eaten
+# memory once in this lab.
+#
+# So: two immutable builds, one live file, an explicit switch, and a receipt.
+#
+#   scripts/hindsight-canary status     what is live right now
+#   scripts/hindsight-canary promote    install the canary build into the live slot
+#   scripts/hindsight-canary rollback   restore the production build into the live slot
+#   scripts/hindsight-canary diff       show how the two builds differ
+#
+# Exit codes: 0 ok, 2 usage, 3 missing build, 4 verification failed.
+
+set -euo pipefail
+
+HERMES="${HERMES_HOME:-$LOCALAPPDATA/hermes}"
+LIVE="$HERMES/plugins/hindsight/__init__.py"
+STORE="$HERMES/plugins/hindsight-builds"
+PROD="$STORE/production.py"
+CANARY="$STORE/canary.py"
+RECEIPT="$STORE/last-switch.json"
+
+usage() {
+    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+    exit 2
+}
+
+sha() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
+
+need() {
+    [ -f "$1" ] || { echo "MISSING: $1" >&2; exit 3; }
+}
+
+record() {
+    local action="$1" from="$2" to="$3"
+    mkdir -p "$STORE"
+    cat > "$RECEIPT" <<EOF
+{
+  "action": "$action",
+  "at": "$(date -Iseconds)",
+  "live_sha256": "$(sha "$LIVE")",
+  "source": "$to",
+  "previous_sha256": "$from",
+  "host": "$(hostname 2>/dev/null || echo unknown)"
+}
+EOF
+    echo "receipt: $RECEIPT"
+}
+
+cmd="${1:-}"
+case "$cmd" in
+    status)
+        need "$LIVE"
+        live_sha=$(sha "$LIVE")
+        prod_sha=$(sha "$PROD" 2>/dev/null || echo none)
+        canary_sha=$(sha "$CANARY" 2>/dev/null || echo none)
+
+        if [ "$live_sha" = "$prod_sha" ]; then
+            echo "LIVE = production"
+        elif [ "$live_sha" = "$canary_sha" ]; then
+            echo "LIVE = canary  ← experiment is running"
+        else
+            echo "LIVE = UNKNOWN build — does not match either stored version"
+            echo "       this is the state that silently happened on 2026-11-01"
+            echo "       run 'diff' and decide, do not guess"
+        fi
+        echo "  live   $live_sha"
+        echo "  prod   $prod_sha"
+        echo "  canary $canary_sha"
+        [ -f "$RECEIPT" ] && { echo "  last switch:"; sed 's/^/    /' "$RECEIPT"; }
+        ;;
+    promote)
+        need "$CANARY"
+        from=$(sha "$LIVE")
+        cp "$CANARY" "$LIVE"
+        to=$(sha "$LIVE")
+        [ "$to" = "$(sha "$CANARY")" ] || { echo "VERIFY FAILED: live != canary after copy" >&2; exit 4; }
+        echo "promoted canary → live"
+        record promote "$from" "$CANARY"
+        echo "restart Hermes to load it: the plugin is read at startup"
+        ;;
+    rollback)
+        need "$PROD"
+        from=$(sha "$LIVE")
+        cp "$PROD" "$LIVE"
+        to=$(sha "$LIVE")
+        [ "$to" = "$(sha "$PROD")" ] || { echo "VERIFY FAILED: live != production after copy" >&2; exit 4; }
+        echo "rolled back → production"
+        record rollback "$from" "$PROD"
+        echo "restart Hermes to load it"
+        ;;
+    diff)
+        need "$PROD"; need "$CANARY"
+        diff -u --strip-trailing-cr "$PROD" "$CANARY" || true
+        ;;
+    *)
+        usage
+        ;;
+esac
