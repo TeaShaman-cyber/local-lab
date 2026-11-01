@@ -1,0 +1,17 @@
+--- a/plugins/hindsight/__init__.py
++++ b/plugins/hindsight/__init__.py
+@@ -1942,8 +1942,14 @@
+         consolidated ``world`` / ``observation`` facts currently lose it, so the session marker
+         is simply omitted for those. Dates and provenance are metadata: no model call involved.
+         """
++        # event_date first: it is populated on every row, while occurred_start is
++        # legitimately absent for about half (it means "when the claim became true",
++        # which is often unknown). Falling back to mentioned_at silently swaps the
++        # fact's date for the date it was written, erasing exactly the distinction
++        # the age feature depends on.
+         when = (
+             getattr(r, "occurred_start", None)
++            or getattr(r, "event_date", None)
+             or getattr(r, "occurred_end", None)
+             or getattr(r, "mentioned_at", None)
+         )
