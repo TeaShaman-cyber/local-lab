@@ -100,3 +100,81 @@ def test_missing_credentials_exit_2_and_publish_nothing():
     code = codex_usage.main(collect=lambda: None, publish=published.append)
     assert code == 2
     assert published == []
+
+
+def test_handshake_sends_initialize_then_initialized_then_read():
+    """Без второго шага app-server молчит — проверено probe."""
+    msgs = codex_usage.handshake_messages()
+    assert msgs[0]["method"] == "initialize"
+    assert msgs[1]["method"] == "initialized"
+    assert msgs[2]["method"] == "account/rateLimits/read"
+    # initialized — нотификация: id быть не должно, иначе сервер ждёт ответа на неё.
+    assert "id" not in msgs[1]
+
+
+def test_collect_returns_the_read_result_and_ignores_notifications():
+    stream = [
+        '{"id": 1, "result": {"userAgent": "probe"}}',
+        '{"method": "remoteControl/status/changed", "params": {"status": "disabled"}}',
+        '{"id": 2, "result": {"rateLimits": {"planType": "plus"}, '
+        '"rateLimitResetCredits": {"availableCount": 1}}}',
+    ]
+    snapshot = codex_usage.collect_from_app_server(runner=lambda messages: iter(stream))
+    assert snapshot["rateLimits"]["planType"] == "plus"
+    assert snapshot["rateLimitResetCredits"]["availableCount"] == 1
+
+
+def test_collect_returns_none_when_the_source_fails():
+    def boom(messages):
+        raise OSError("codex.cmd not found")
+
+    assert codex_usage.collect_from_app_server(runner=boom) is None
+
+
+def test_publish_builds_loki_payload_with_stream_labels():
+    sent = {}
+
+    def sender(url, auth, payload):
+        sent["url"] = url
+        sent["auth"] = auth
+        sent["payload"] = payload
+        return 204
+
+    code = codex_usage.publish_lines(
+        ["metric=codex_session_used_percent value=31.0000"],
+        sender=sender,
+        url="http://loki.example/push",
+        auth=("user", "pass"),
+    )
+    assert code == 0
+    assert sent["url"] == "http://loki.example/push"
+    assert sent["auth"] == ("user", "pass")
+
+    stream = sent["payload"]["streams"][0]
+    assert stream["stream"]["service_name"] == "openai-codex"
+    assert stream["stream"]["log_type"] == "subscription"
+    assert stream["stream"]["job"] == "codex-usage"
+    assert stream["values"][0][1] == "metric=codex_session_used_percent value=31.0000"
+
+
+def test_publish_failure_returns_4():
+    def broken(url, auth, payload):
+        raise OSError("connection refused")
+
+    code = codex_usage.publish_lines(
+        ["metric=a value=1"], sender=broken, url="http://x", auth=("u", "p")
+    )
+    assert code == 4
+
+
+def test_main_propagates_publish_failure():
+    """Если Loki не принял строки, CLI не должен рапортовать успех."""
+    code = codex_usage.main(collect=lambda: PROBE, publish=lambda lines: 4)
+    assert code == 4
+
+
+def test_main_reports_success_after_publishing():
+    published = []
+    code = codex_usage.main(collect=lambda: PROBE, publish=lambda lines: published.append(lines) or 0)
+    assert code == 0
+    assert published and len(published[0]) > 0
