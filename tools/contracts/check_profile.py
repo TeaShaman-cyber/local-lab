@@ -45,6 +45,14 @@ def normalise(text: str) -> str:
 
 
 def main() -> int:
+    # Only meaningful where a Hermes profile exists. On CI there is no profile and
+    # no live files, so a failure there would say nothing about the mirrors — but a
+    # missing file next to an existing memories/ directory is a real defect.
+    if not (HOME / "memories").is_dir():
+        print(f"SKIP profile mirrors: no Hermes profile at {HOME} "
+              f"(expected on CI, not on the machine that owns the memory)")
+        return 0
+
     failures = 0
     for mirror, live, label in PAIRS:
         if not mirror.exists():
