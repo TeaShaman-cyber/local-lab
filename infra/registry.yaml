@@ -215,13 +215,22 @@ services:
       (AADSTS530035 BlockedBySecurityDefaults), broker WAM не завершает flow, рабочий маршрут —
       az config set core.enable_broker_on_windows=false плюс az login --tenant <tenant_id>.
       Вывод az на этой машине приходит в cp1251, при парсинге декодировать явно.
-      Бесплатные варианты на 2026-11-02: VM B1s/B2pts_v2/B2ats_v2 по 1 GiB — 750 ч/мес только
-      12 месяцев; Container Apps — 180k vCPU-с + 360k GiB-с + 2M запросов в месяц бессрочно,
-      но хватает лишь на scale-to-zero; App Service F1 — бессрочно, 1 GiB RAM, 60 CPU-мин/день,
-      работает 24/7. Установка CLI: winget не работает (stdin is not a tty), рабочий путь —
-      MSI с https://aka.ms/installazurecliwindowsx64 через msiexec, код возврата 67 при этом
-      означает сбой регистрации пакета, а не неработоспособность. Контур разобран в
-      local-lab#163.
+      Бесплатные варианты (перепроверено по Microsoft Learn 2026-11-02, local-lab#163):
+      750 ч/мес на VM B1s/B2pts_v2/B2ats_v2 действуют ТОЛЬКО для подписки, созданной при
+      регистрации Free Account; на Pay-As-You-Go они не применяются (learn.microsoft.com/
+      azure/cost-management-billing/manage/create-free-services). Следствие: у этой подписки
+      бесплатных VM нет. App Service F1 — бессрочный SKU: 60 CPU-мин/день, 3 CPU-мин за
+      5 минут, 1024 MB RAM, 1 GB storage, 165 MB/день трафика, Always On не поддерживается;
+      при превышении квоты приложение останавливается и все запросы получают HTTP 403
+      (learn.microsoft.com/azure/app-service/web-sites-monitor). Container Apps — 180k vCPU-с
+      + 360k GiB-с + 2M запросов на подписку в месяц, scale-to-zero
+      (learn.microsoft.com/azure/container-apps/billing). Cloud Shell не годится: таймаут
+      20 минут и ToS прямо запрещает использование как general purpose платформы
+      (learn.microsoft.com/azure/cloud-shell/faq-troubleshooting). Установка CLI: winget не
+      работает (stdin is not a tty), рабочий путь — MSI с https://aka.ms/installazurecliwindowsx64
+      через msiexec, код возврата 67 при этом означает сбой регистрации пакета, а не
+      неработоспособность. Контур разобран в local-lab#163, опровержение блоговых данных —
+      theseus-research#106 comment 6587989418.
 
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
 # Признак продового/тестового — RULE-009 в infrastructure.md.
