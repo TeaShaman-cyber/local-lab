@@ -39,6 +39,50 @@ by hand (upstream `NousResearch/hermes-agent#84340`, observed 2026-08-11).
    turn, so their size is a cost paid on every request, forever. When either passes
    ~85%, run `memory-defrag` — not "add one more line and hope".
 
+## Admission test for MEMORY.md
+
+A candidate belongs in `MEMORY.md` only if **all five** hold. This is the test to run
+before editing the file, not after.
+
+1. **Applies every turn**, regardless of task. If it holds only "when working on X",
+   it is an instruction for X, not memory.
+2. **Changes an action, not a piece of knowledge.** "Hindsight listens on 8888" is
+   knowledge and lives in `infra/registry.yaml`. "An assertion without an address is
+   not FACT" changes what the next sentence looks like.
+3. **Without it the error is systematic.** A one-off mistake is fixed by a check; a
+   repeating one needs a rule.
+4. **Fits in the head without re-reading.** If the line has to be parsed, it is a
+   document, not a reminder.
+5. **Cannot be recovered from the repository at the moment of action.** A fact that
+   sits in `docs/` and is opened on demand does not belong here, or memory degrades
+   into a table of contents.
+
+Two rejection tests:
+
+- *Delete the line — does any action change?* If not, it is decoration.
+- *Does it need an explanation longer than itself?* If yes, the rule is described,
+  not formulated.
+
+### Current entries against the test
+
+| entry | passes | note |
+|---|---|---|
+| documentation before action | yes | changes the first step of any task |
+| the defect is confident assertion without checking | yes | changes the shape of every claim |
+| close an error class, not a case | yes | changes what is written first: a test or a patch |
+| 1F916 forums (citizen, limits) | no | forum-only; the home is `docs/` |
+| `theseus-local-lab` is JS/Node legacy | no | single-repo fact; the home is the registry |
+
+The last two are kept by the owner's decision. That is allowed, and it has a price:
+they occupy budget in a 2600-character file and they do not fire when memory is
+needed. Recorded here so the cost is visible rather than assumed away.
+
+### The pointer in MEMORY.md
+
+`MEMORY.md` carries one line pointing back to this document, because the moment to
+use this test is the moment memory is being edited — and at that moment nobody opens
+a document they were not told about.
+
 ## How to check
 
 ```bash
