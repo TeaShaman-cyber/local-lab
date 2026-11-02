@@ -189,6 +189,40 @@ services:
     check: gcx.exe config current-context
     notes: не в PATH, вызывать полным путём; токен GRAFANA_API_TOKEN с префиксом glc_ для дашбордов не годится (access policy логов и метрик, запись даёт 401), нужен OAuth или service-account token; в agent-режиме браузер не открывается, gcx печатает URL и код; официальный install.ps1 падает на Get-FileHash, рабочий путь — бинарь из релиза с проверкой checksums; контур описан в docs/reference/observability/grafana-as-code.md
 
+  - id: INFRA-015
+    name: azure-subscription
+    criticality: P3
+    role: облачный аккаунт для внешних ресурсов лаборатории — сейчас только Translator, хост не поднят
+    status: available
+    kind: cloud-account
+    location:
+      subscription_id: d760fa4b-978b-4b6d-a62e-93b55bc36746
+      subscription_name: "1 подписка"
+      quota_id: PayAsYouGo_2014-09-01
+      tenant_id: 673ee0ec-b9c2-48e3-86c9-0737bd2e99a9
+      account: pokladsemen@gmail.com
+      cli: "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/az.cmd"
+      resources:
+        - "theseus-translator (Microsoft.CognitiveServices/accounts, northeurope)"
+    monitoring: не мониторится — расходов нет; контроль через az consumption usage list
+    check: >-
+      az account show -o json → state=Enabled; az resource list -o json → theseus-translator;
+      az consumption usage list --start-date … --end-date … → [] при отсутствии использования
+    notes: >-
+      Подписка Pay-As-You-Go, не Free Trial (quotaId PayAsYouGo_2014-09-01), состояние Enabled;
+      spendingLimit = Off, то есть автоматической остановки при перерасходе нет — это условие
+      RULE-017. Вход на Windows: device code блокирован политикой
+      (AADSTS530035 BlockedBySecurityDefaults), broker WAM не завершает flow, рабочий маршрут —
+      az config set core.enable_broker_on_windows=false плюс az login --tenant <tenant_id>.
+      Вывод az на этой машине приходит в cp1251, при парсинге декодировать явно.
+      Бесплатные варианты на 2026-11-02: VM B1s/B2pts_v2/B2ats_v2 по 1 GiB — 750 ч/мес только
+      12 месяцев; Container Apps — 180k vCPU-с + 360k GiB-с + 2M запросов в месяц бессрочно,
+      но хватает лишь на scale-to-zero; App Service F1 — бессрочно, 1 GiB RAM, 60 CPU-мин/день,
+      работает 24/7. Установка CLI: winget не работает (stdin is not a tty), рабочий путь —
+      MSI с https://aka.ms/installazurecliwindowsx64 через msiexec, код возврата 67 при этом
+      означает сбой регистрации пакета, а не неработоспособность. Контур разобран в
+      local-lab#163.
+
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
 # Признак продового/тестового — RULE-009 в infrastructure.md.
 test_stands:
