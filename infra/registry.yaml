@@ -232,6 +232,36 @@ services:
       неработоспособность. Контур разобран в local-lab#163, опровержение блоговых данных —
       theseus-research#106 comment 6587989418.
 
+  - id: INFRA-016
+    name: fly-sprites
+    criticality: P2
+    role: облачный хост для агентов — shell, сборки, OAuth-клон gcloud для Drive; первый реальный потребитель Шут
+    status: active
+    kind: cloud-account
+    location:
+      account: pokladsemen@gmail.com
+      organization_id: 827-d141bdc9-b58c-44a4-be2f-0d27c9951407
+      cli: "C:/Users/s.poklad/AppData/Local/Programs/Sprite/sprite.exe"
+      cli_version: 2026-11-03 (4eb1509)
+      sprites:
+        - "theseus-cloud-shell-probe (sprite-f602e638-9fbb-49ae-ab2a-1b09801fc85e, https://theseus-cloud-shell-probe-b5txg.sprites.app, url-auth: sprite)"
+    monitoring: не мониторится — расход виден в консоли Fly; контроль через sprite list и sprite info
+    check: >-
+      sprite list → one sprite; sprite info -s theseus-cloud-shell-probe → Status cold|warm|running;
+      sprite exec -s theseus-cloud-shell-probe --no-stdin -- bash -c "CLOUDSDK_CONFIG=/home/sprite/.config/gcloud-theseus gcloud auth list" → pokladsemen@gmail.com *
+    notes: >-
+      Организация по SSH/токену, вход через sprite login (браузер, один раз). Официальный
+      install.ps1 на этой машине бесполезен: падает на Get-FileHash — ставить по манифесту
+      sprites.dev/dl/client/<ver>/manifest.json со сверкой sha256sum. sprite exec без
+      --stdin/--no-stdin печатает предупреждение и отключает переподключение. Спрайт спит и
+      просыпается по входящему запросу (100-500 мс из warm, 1-2 с из cold); URL требует
+      токен, пока не включён url-auth public. В спрайте живут сервисы gcloud-drive-auth
+      (gcloud auth login через FIFO auth.in) и gcloud-code-receiver (HTTP-форма в тот же
+      FIFO); профиль gcloud лежит в /home/sprite/.config/gcloud-theseus и переживает сон.
+      Drive API проверен чтением about: Семён Поклад, 18.25 GB. Код Google проходит только
+      через форму или файл-поток, не через чат. Процедура и грабли —
+      docs/reference/sprites.md, контур — local-lab#166.
+
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
 # Признак продового/тестового — RULE-009 в infrastructure.md.
 test_stands:
