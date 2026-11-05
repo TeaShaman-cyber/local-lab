@@ -1,0 +1,158 @@
+#!/usr/bin/env python3
+"""Report whether the working tree and the remote agree.
+
+Why this exists: three times in one evening, work was reported as done while it
+was not on the remote — an uncommitted compose change, then two commits that were
+committed but never pushed. Each time the local state looked correct and the
+report said "ready", and each time the reviewer saw something else.
+
+That is a class, not an accident: local state and remote state are different
+facts, and nothing was checking the second one.
+
+Exit codes:
+  0  clean: nothing uncommitted, nothing unpushed, no stash
+  1  divergence found (details on stdout)
+  2  not a git worktree, or no upstream configured
+"""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+
+
+def git(*args: str) -> tuple[int, str]:
+    proc = subprocess.run(["git", *args], capture_output=True, text=True, timeout=30)
+    return proc.returncode, (proc.stdout or "").strip()
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--quiet", action="store_true", help="only print problems")
+    ap.add_argument(
+        "--offline",
+        action="store_true",
+        help="skip the fetch and compare against the last known remote state",
+    )
+    args = ap.parse_args()
+
+    code, root = git("rev-parse", "--show-toplevel")
+    if code != 0 or not root:
+        print("not a git worktree", file=sys.stderr)
+        return 2
+
+    problems: list[str] = []
+
+    # 0. Refresh the remote-tracking refs before comparing. Without this, everything
+    # below runs against whatever origin/<branch> was at the last fetch — which is how
+    # two clones, one of them stale, both reported "clean" while the remote had moved
+    # (Shoot's review, 2026-10-31). A failed fetch is reported as unknown, not as clean:
+    # not being able to look is not evidence of agreement.
+    if not args.offline:
+        code, _ = git("fetch", "--quiet", "--prune")
+        if code != 0:
+            problems.append("cannot reach the remote: remote state is UNKNOWN, not clean")
+
+    # 1. Uncommitted work. Reported as a count, not a diff: the point is "is there
+    # anything not yet in a commit", and a diff would bury that.
+    code, status = git("status", "--porcelain")
+    if code == 0 and status:
+        lines = [ln for ln in status.splitlines() if ln.strip()]
+        problems.append(f"{len(lines)} uncommitted change(s):")
+        for line in lines[:8]:
+            problems.append(f"    {line}")
+        if len(lines) > 8:
+            problems.append(f"    ... and {len(lines) - 8} more")
+
+    # 2. Commits that exist locally but not on the remote. This is the one that
+    # actually bit us: the work was committed, so it looked finished.
+    code, upstream = git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+    if code != 0:
+        problems.append("no upstream branch: cannot tell whether commits are pushed")
+    else:
+        code, ahead = git("rev-list", "--count", "@{u}..HEAD")
+        if code == 0 and ahead not in ("", "0"):
+            problems.append(f"{ahead} commit(s) not pushed to {upstream}:")
+            code, log = git("log", "--oneline", "@{u}..HEAD")
+            for line in log.splitlines()[:8]:
+                problems.append(f"    {line}")
+        code, behind = git("rev-list", "--count", "HEAD..@{u}")
+        if code == 0 and behind not in ("", "0"):
+            problems.append(f"{behind} commit(s) on {upstream} not pulled")
+
+    # 3. Stash. Easy to forget, and it hides work that is neither in a commit nor
+    # in the tree, so every later "where did that change go" starts here.
+    code, stash = git("stash", "list")
+    if code == 0 and stash:
+        count = len(stash.splitlines())
+        problems.append(f"{count} stash entr{'y' if count == 1 else 'ies'}")
+
+    # 4. Other worktrees. Work can be committed in a completely different directory
+    # and stay invisible from here. On 31.10 the gcx contour lived in
+    # E:/local-lab-wt/issue-81 on a branch nobody merged, while the main tree read
+    # "clean" — and the next agent spent an hour reconstructing it from session logs.
+    # A gate that watches only the directory you are standing in is not a gate.
+    code, worktrees = git("worktree", "list", "--porcelain")
+    if code == 0:
+        for block in worktrees.split("\n\n"):
+            fields: dict[str, str] = {}
+            for line in block.splitlines():
+                key, _, value = line.partition(" ")
+                fields[key] = value
+            path = fields.get("worktree", "")
+            if not path or path == root:
+                continue
+            branch = fields.get("branch", "").replace("refs/heads/", "") or "(detached)"
+            notes = []
+            code, dirty = git("-C", path, "status", "--porcelain")
+            if code == 0 and dirty:
+                notes.append(f"{len([line for line in dirty.splitlines() if line.strip()])} uncommitted")
+            if branch != "(detached)":
+                code, ahead = git("-C", path, "rev-list", "--count", f"main..{branch}")
+                if code == 0 and ahead not in ("", "0"):
+                    notes.append(f"{ahead} commit(s) not in main")
+            if notes:
+                problems.append(f"worktree {path} [{branch}]: {', '.join(notes)}")
+
+    # 5. Local branches carrying work that main does not have. A branch is visible to
+    # exactly one person: the one who created it.
+    #
+    # Reported as information, not as divergence: after a squash merge the commits are
+    # genuinely absent from main while the changes are not, so a hard failure here
+    # would cry wolf on every merged branch. The count is still worth seeing — a branch
+    # that nobody merged is work that will be reconstructed from logs later.
+    code, current = git("rev-parse", "--abbrev-ref", "HEAD")
+    code, branches = git("for-each-ref", "--format=%(refname:short)", "refs/heads")
+    unmerged = []
+    if code == 0:
+        for br in branches.splitlines():
+            if not br or br == "main" or br == current:
+                continue
+            code, ahead = git("rev-list", "--count", f"main..{br}")
+            if code == 0 and ahead not in ("", "0"):
+                unmerged.append(f"{br} ({ahead})")
+
+    if problems:
+        if not args.quiet:
+            print("state: DIVERGED")
+        for problem in problems:
+            print(f"  {problem}")
+        if unmerged and not args.quiet:
+            print(
+                f"  note: {len(unmerged)} branch(es) with commits not in main: "
+                + ", ".join(sorted(unmerged)[:8])
+            )
+        return 1
+
+    if not args.quiet:
+        print("state: clean (nothing uncommitted, nothing unpushed, no stash)")
+        if unmerged:
+            print(
+                f"  note: {len(unmerged)} branch(es) with commits not in main: "
+                + ", ".join(sorted(unmerged)[:8])
+            )
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main())
