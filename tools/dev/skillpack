@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Thin compatibility wrapper. The real script is skillpack.py; this keeps
 # existing `tools/dev/skillpack` calls working. See issue #170.
-cd "$(dirname "$0")" || exit 1
-exec "$(pwd -W)/skillpack.py" "$@"
+here="$(cd "$(dirname "$0")" && pwd)"
+target="$here/skillpack.py"
+command -v cygpath >/dev/null 2>&1 && target="$(cygpath -m "$target")"
+exec "$target" "$@"
