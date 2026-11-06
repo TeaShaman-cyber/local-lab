@@ -306,6 +306,15 @@ prometheus.scrape "hindsight_api" {
   forward_to      = [prometheus.relabel.hindsight_api_trim.receiver]
 }
 
+// Honcho test metrics (laptop, profile local-test). Same pattern as Hindsight:
+// deriver queue depth and age are the direct signal that memory processing works.
+prometheus.scrape "honcho_api" {
+  targets         = [{"__address__" = "127.0.0.1:8000", "job" = "honcho-api", "instance" = "theseus-laptop"}]
+  metrics_path    = "/metrics"
+  scrape_interval = "30s"
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
 // ---------------------------------------------------------------------------
 // Container logs (issue #51 follow-up)
 //
