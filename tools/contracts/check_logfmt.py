@@ -63,10 +63,30 @@ def bare_separators(line: str) -> list[str]:
     narrow regex enforces our stricter downstream contract on known examples.
     """
     result = []
-    for match in re.finditer(r"(?:^|\s)([A-Za-z_][\w.-]*)=(\S+)", line):
-        value = match.group(2)
-        if not value.startswith('"') and any(char in value for char in SEPARATORS):
-            result.append(f"{match.group(1)}={value}")
+    tokens = []
+    current = []
+    quoted = False
+    escaped = False
+    for char in line:
+        if char == '"' and not escaped:
+            quoted = not quoted
+        if char.isspace() and not quoted:
+            if current:
+                tokens.append("".join(current))
+                current = []
+        else:
+            current.append(char)
+        escaped = char == "\\" and not escaped
+        if char != "\\":
+            escaped = False
+    if current:
+        tokens.append("".join(current))
+    for token in tokens:
+        match = re.fullmatch(r"([A-Za-z_][\w.-]*)=(.+)", token)
+        if not match or match.group(2).startswith('"'):
+            continue
+        if any(char in match.group(2) for char in SEPARATORS):
+            result.append(token)
     return result
 
 
@@ -101,7 +121,12 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.self_test:
-        cases = [("a=1", []), ('packs="a:b,c:d"', []), ("packs=a:b,c:d", ["packs=a:b,c:d"])]
+        cases = [
+            ("a=1", []),
+            ('packs="a:b,c:d"', []),
+            ('event=run_finished message="failed packs=a:b,c:d"', []),
+            ("packs=a:b,c:d", ["packs=a:b,c:d"]),
+        ]
         failed = sum(bare_separators(line) != expected for line, expected in cases)
         tool = tool_path()
         if tool:
@@ -109,6 +134,26 @@ def main() -> int:
             failed += result.returncode == 0
         else:
             print("SKIP logfmtkv not installed")
+
+        mapped = """
+        stage.match {
+          stage.logfmt { mapping = { event = "", stale = "" } }
+          stage.metrics {
+            metric.gauge { name = "stale_total" source = "stale" }
+          }
+        }
+        """
+        mapping_errors, declared = metric_sources(mapped)
+        expected_metric = "loki_process_custom_stale_total"
+        mapping_ok = mapping_errors == [] and expected_metric in declared
+        print("mapping input ->", "PASS" if mapping_ok else "FAIL", mapping_errors, sorted(declared))
+        failed += not mapping_ok
+
+        unmapped = mapped.replace('source = "stale"', 'source = "missing"')
+        mapping_errors, _ = metric_sources(unmapped)
+        caught = len(mapping_errors) == 1 and "missing" in mapping_errors[0]
+        print("undeclared source input ->", "PASS" if caught else "FAIL", mapping_errors)
+        failed += not caught
         print("self-test:", "PASS" if not failed else f"FAIL ({failed})")
         return int(bool(failed))
 
@@ -121,7 +166,7 @@ def main() -> int:
     tool = tool_path()
     if not tool:
         message = "logfmtkv not installed"
-        if os.environ.get("LOGFMT_STRICT") == "1":
+        if os.environ.get("STRICT") == "1" or os.environ.get("LOGFMT_STRICT") == "1":
             problems.append(message)
         else:
             print("SKIP", message)
