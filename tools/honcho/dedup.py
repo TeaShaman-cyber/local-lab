@@ -6,49 +6,66 @@ Why this exists
 Honcho 3.6.0 deduplicates *inside* an observation direction only: the candidate
 query is filtered by ``observer``/``observed`` (and by ``session_name`` for
 explicit documents) before any similarity comparison happens. Measured on a
-live bank: 0 duplicate groups inside a direction, 141 groups and 282 excess
-rows across directions, with byte-identical content and a cosine distance of
-0.000000. The guard therefore never sees the twin it should reject, and its
-0.05 cutoff never gets a chance to matter.
+live bank: 0 duplicate groups inside a direction against 226 groups and 452
+excess rows across directions, with byte-identical content and a cosine
+distance of 0.000000. The guard never sees the twin it should reject, so its
+0.05 cutoff never gets a chance to matter (upstream: plastic-labs/honcho#729).
 
-Until upstream fixes the scope (plastic-labs/honcho#729), this wrapper cleans
-what the writer leaves behind. It deliberately contains no new algorithm:
+Until that scope is fixed, this job cleans what the writer leaves behind. It
+contains no algorithm of its own:
 
 * ``exact`` — one SQL ``GROUP BY`` over normalised content (lowercase,
-  whitespace collapsed). No similarity maths, nothing to tune.
-* ``near``  — candidate pairs from ``pg_trgm`` (PostgreSQL contrib, already
-  installed in the Honcho image), joined into connected components.
+  whitespace collapsed). Nothing to tune, nothing to get wrong.
+* ``near``  — candidate pairs from ``pg_trgm`` (PostgreSQL contrib, already in
+  the Honcho image), joined into connected components.
 
 Similarity is lexical on purpose. Trigram distance keeps ``proc_1b92…`` and
-``proc_4909…`` apart, while embeddings do not: measured on 211 embedding-near
-pairs, mean trigram similarity was 0.971 and the three lowest (0.587) were
-process notifications differing only by an ID. Merging those would destroy
-history.
+``proc_4909…`` apart, while embeddings do not: on 211 embedding-near pairs the
+mean trigram similarity was 0.971, and the three lowest (0.587) were process
+notifications differing only by an id. Merging those would erase history.
+
+Where it runs
+-------------
+In the compose network, as a scheduled container (see ``maintenance/``). That
+is deliberate: a Linux container has no desktop windows, no ``pythonw``, no
+Task Scheduler and none of the interpreter-subsystem traps that come with
+scheduling Python on Windows. The job reaches ``database`` and ``api`` by
+service name and prints to stdout, which the container runtime collects.
 
 Safety
 ------
 * dry-run is the default; ``--apply`` is required to change anything;
-* ``--max-delete-pct`` aborts when a run would remove too much, which is what
+* ``--max-delete-pct`` aborts a run that would remove too much, which is what
   catches a mis-set threshold before it eats the bank;
 * deletions go through the public API and are soft (``deleted_at``), so a
-  mistake is recoverable until the reconciler prunes;
-* the JSON report records every removed id with its group, so a change can be
-  audited after the fact.
+  mistake stays recoverable until the reconciler prunes;
+* the JSON report records every removed id with its keeper, so any run can be
+  audited afterwards;
+* a second run right after the first must print ``nothing to do`` — that is the
+  idempotency check.
 
-Usage
------
-    python tools/honcho/dedup.py                      # report only
-    python tools/honcho/dedup.py --near               # include paraphrases
-    python tools/honcho/dedup.py --apply --json out.json
+Rollback
+--------
+Deletes are soft: the row keeps its content and only gets ``deleted_at`` set, so
+a wrong run is undone without a backup file:
 
-Exit codes: 0 = clean or applied, 1 = guard tripped, 2 = usage/DB error.
+    update documents set deleted_at = null
+    where deleted_at > now() - interval '1 day'
+      and workspace_name = 'hermes' and level = 'explicit';
+
+Run it inside ``psql`` against the ``database`` service. The reconciler only
+prunes soft-deleted rows after ``older_than_minutes`` (5 by default), so the
+window to undo is short — check the JSON report first, then decide.
+
+Exit codes: 0 = clean or applied, 1 = guard tripped, 2 = usage or DB error.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import subprocess
+import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -56,15 +73,16 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Iterable
 
-DEFAULT_PSQL = "docker exec -i local-test-database-1 psql -U postgres -d postgres"
-DEFAULT_API = "http://127.0.0.1:8000"
+import psycopg
+
+# Identifiers come from deployment config, not from untrusted input, but they
+# are still validated: an identifier cannot be parameterised by psycopg, and
+# "it is only config" is exactly how an injection reaches production.
+IDENTIFIER = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+
 DEFAULT_WORKSPACE = "hermes"
 DEFAULT_LEVEL = "explicit"
-
-# A shared pool for the whole run. Guards against one bad run emptying the bank.
 DEFAULT_MAX_DELETE_PCT = 60.0
-
-# Rows shorter than this are too generic to compare: "ok", "yes", "готово".
 DEFAULT_MIN_LENGTH = 40
 
 
@@ -76,43 +94,26 @@ class Doc:
     content: str
 
 
-SEP = "\x1f"  # unit separator: never occurs in observations, unlike '|'
-
-
-def psql(sql: str, psql_cmd: str, preamble: tuple[str, ...] = ()) -> list[list[str]]:
-    """Run SQL through the deployment's psql and return separated rows.
-
-    ``preamble`` statements are passed as separate ``-c`` arguments on purpose:
-    psql runs them in the same connection, so ``SET`` survives into the query.
-    The ``SET`` command tag itself is still printed, so rows without a separator
-    are dropped rather than parsed — that is also why the separator is a unit
-    separator instead of ``|``, which observations may legitimately contain.
-    """
-    cmd = psql_cmd.split()
-    for statement in preamble:
-        cmd += ["-c", statement]
-    cmd += [f"-tAF{SEP}", "-c", sql]
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if proc.returncode != 0:
-        raise RuntimeError(f"psql failed: {proc.stderr.strip()[:400]}")
-    rows = []
-    for line in proc.stdout.splitlines():
-        if SEP in line:
-            rows.append(line.split(SEP))
-    return rows
-
-
-def load_docs(args: argparse.Namespace) -> list[Doc]:
-    sql = (
-        "select id, observer, observed, content from documents "
-        f"where workspace_name = '{args.workspace}' "
-        f"and level = '{args.level}' "
-        "and deleted_at is null "
-        f"and length(content) >= {args.min_length} "
-        "order by created_at asc, id asc;"
+def connect() -> psycopg.Connection:
+    """Connect using the standard PG* variables the compose service provides."""
+    return psycopg.connect(
+        host=os.environ.get("PGHOST", "database"),
+        port=int(os.environ.get("PGPORT", "5432")),
+        dbname=os.environ.get("PGDATABASE", "postgres"),
+        user=os.environ.get("PGUSER", "postgres"),
+        password=os.environ.get("PGPASSWORD", ""),
+        connect_timeout=10,
     )
-    # content is last and may contain the separator, so rejoin the tail.
-    return [Doc(row[0], row[1], row[2], SEP.join(row[3:])) for row in psql(sql, args.psql_cmd)]
+
+
+def load_docs(conn: psycopg.Connection, workspace: str, level: str, min_length: int) -> list[Doc]:
+    rows = conn.execute(
+        "select id, observer, observed, content from documents "
+        "where workspace_name = %s and level = %s and deleted_at is null "
+        "and length(content) >= %s order by created_at asc, id asc",
+        (workspace, level, min_length),
+    ).fetchall()
+    return [Doc(*row) for row in rows]
 
 
 def normalise_key(content: str) -> str:
@@ -127,33 +128,36 @@ def exact_groups(docs: Iterable[Doc]) -> list[list[Doc]]:
     return [group for group in buckets.values() if len(group) > 1]
 
 
-def near_pairs(args: argparse.Namespace) -> list[tuple[str, str]]:
+def near_pairs(
+    conn: psycopg.Connection, workspace: str, level: str, min_length: int, threshold: float
+) -> list[tuple[str, str]]:
     """Candidate pairs from pg_trgm.
 
-    The threshold is set in the same session as the query on purpose: the ``%``
-    operator reads ``pg_trgm.similarity_threshold`` and silently falls back to
-    the server default of 0.3 when it is not set, which is far below what this
-    bank needs.
+    ``set_config(..., is_local=false)`` sets the value for the session, which is
+    what the ``%`` operator reads. Without it the operator silently falls back
+    to the server default of 0.3 — too permissive to mean anything, and easy to
+    misread as "dedup found nothing".
     """
-    sql = (
+    conn.execute("select set_config('pg_trgm.similarity_threshold', %s, false)", (str(threshold),))
+    rows = conn.execute(
         "select a.id, b.id from documents a join documents b on b.id > a.id "
-        "and a.content % b.content "
-        f"where a.workspace_name = '{args.workspace}' and b.workspace_name = '{args.workspace}' "
-        f"and a.level = '{args.level}' and b.level = '{args.level}' "
+        "and a.content %% b.content "
+        "where a.workspace_name = %s and b.workspace_name = %s "
+        "and a.level = %s and b.level = %s "
         "and a.deleted_at is null and b.deleted_at is null "
-        f"and length(a.content) >= {args.min_length} and length(b.content) >= {args.min_length};"
-    )
-    preamble = (f"set pg_trgm.similarity_threshold = {args.threshold}",)
-    return [(row[0], row[1]) for row in psql(sql, args.psql_cmd, preamble)]
+        "and length(a.content) >= %s and length(b.content) >= %s",
+        (workspace, workspace, level, level, min_length, min_length),
+    ).fetchall()
+    return [(row[0], row[1]) for row in rows]
 
 
 def components(pairs: list[tuple[str, str]], docs: dict[str, Doc]) -> list[list[Doc]]:
     """Connected components over candidate pairs (union-find).
 
-    Single linkage is knowingly used here: at this scale the clusters stay
-    tight (measured minimum pairwise similarity inside every group was 0.802).
-    If a run ever produces a chain, ``--near`` is the flag to turn off, not the
-    threshold to raise.
+    Single linkage is used knowingly: at this scale clusters stay tight
+    (measured minimum pairwise similarity inside every group was 0.802). If a
+    run ever produces a chain, the answer is to turn ``--near`` off, not to
+    raise the threshold.
     """
     parent: dict[str, str] = {}
 
@@ -182,10 +186,9 @@ def pick_keeper(group: list[Doc], keep: str, prefer_observer: str) -> Doc:
     """Choose the row that survives.
 
     ``longest`` is the default because these records are observations: the
-    longer one usually carries the context that made the fact useful. Ties, and
-    the ``earliest``/``latest`` strategies aside, fall back to the direction
-    holding the real peer name rather than a system SID — the SID rows are
-    migration leftovers.
+    longer one usually carries the context that made the fact useful. Ties fall
+    back to the direction holding the real peer name rather than a system SID —
+    SID rows are migration leftovers.
     """
     def preferred(doc: Doc) -> int:
         return 0 if doc.observer == prefer_observer else 1
@@ -194,6 +197,17 @@ def pick_keeper(group: list[Doc], keep: str, prefer_observer: str) -> Doc:
         return max(group, key=lambda d: (len(d.content), -preferred(d)))
     ordered = sorted(group, key=lambda d: (preferred(d), d.id))
     return ordered[0] if keep == "earliest" else ordered[-1]
+
+
+def build_plan(groups: list[list[Doc]], keep: str, prefer_observer: str) -> list[tuple[Doc, Doc]]:
+    """Return (keeper, duplicate) pairs for every group."""
+    plan = []
+    for group in groups:
+        keeper = pick_keeper(group, keep, prefer_observer)
+        for doc in group:
+            if doc.id != keeper.id:
+                plan.append((keeper, doc))
+    return plan
 
 
 def delete_conclusion(api: str, workspace: str, doc_id: str, timeout: float) -> int:
@@ -205,18 +219,7 @@ def delete_conclusion(api: str, workspace: str, doc_id: str, timeout: float) -> 
     except urllib.error.HTTPError as exc:
         return exc.code
     except urllib.error.URLError as exc:
-        raise RuntimeError(f"API unreachable: {exc.reason}") from exc
-
-
-def build_plan(groups: list[list[Doc]], args: argparse.Namespace) -> list[tuple[Doc, Doc]]:
-    """Return (keeper, duplicate) pairs for every group."""
-    plan = []
-    for group in groups:
-        keeper = pick_keeper(group, args.keep, args.prefer_observer)
-        for doc in group:
-            if doc.id != keeper.id:
-                plan.append((keeper, doc))
-    return plan
+        raise RuntimeError(f"API unreachable at {api}: {exc.reason}") from exc
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -235,52 +238,54 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--min-length", type=int, default=DEFAULT_MIN_LENGTH)
     parser.add_argument("--max-delete-pct", type=float, default=DEFAULT_MAX_DELETE_PCT,
                         help="abort when the plan would delete more than this share of live rows")
-    parser.add_argument("--apply", action="store_true", help="perform soft deletes; default is report only")
+    parser.add_argument("--apply", action="store_true", help="perform soft deletes; default is a report")
     parser.add_argument("--json", metavar="PATH", help="write the report to this file")
-    parser.add_argument("--psql-cmd", default=DEFAULT_PSQL)
-    parser.add_argument("--api", default=DEFAULT_API)
+    parser.add_argument("--api", default=os.environ.get("HONCHO_API", "http://api:8000"))
     parser.add_argument("--api-timeout", type=float, default=30.0)
     args = parser.parse_args(argv)
 
     if args.mode_near:
         args.mode = "near"
+    for name in ("workspace", "level"):
+        if not IDENTIFIER.match(getattr(args, name)):
+            print(f"error: --{name} must match {IDENTIFIER.pattern}", file=sys.stderr)
+            return 2
     if not 0.0 < args.threshold <= 1.0:
         print("error: --threshold must be in (0, 1]", file=sys.stderr)
         return 2
 
     try:
-        docs = load_docs(args)
-    except RuntimeError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        conn = connect()
+    except psycopg.Error as exc:
+        print(f"error: database connection failed: {exc}", file=sys.stderr)
         return 2
 
-    by_id = {doc.id: doc for doc in docs}
-    groups = exact_groups(docs)
-    exact_count = sum(len(group) - 1 for group in groups)
+    try:
+        docs = load_docs(conn, args.workspace, args.level, args.min_length)
+        groups = exact_groups(docs)
+        exact_excess = sum(len(group) - 1 for group in groups)
 
-    near_groups: list[list[Doc]] = []
-    if args.mode == "near":
-        try:
-            pairs = near_pairs(args)
-        except RuntimeError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-        near_groups = components(pairs, by_id)
+        near_groups: list[list[Doc]] = []
+        extra_groups: list[list[Doc]] = []
+        if args.mode == "near":
+            pairs = near_pairs(conn, args.workspace, args.level, args.min_length, args.threshold)
+            near_groups = components(pairs, {doc.id: doc for doc in docs})
+            # A doc already planned by exact text must not be planned twice.
+            exact_ids = {doc.id for group in groups for doc in group}
+            extra_groups = [
+                [doc for doc in group if doc.id not in exact_ids] for group in near_groups
+            ]
+            extra_groups = [group for group in extra_groups if len(group) > 1]
+    finally:
+        conn.close()
 
-    # A doc already grouped by exact text must not be planned twice.
-    exact_ids = {doc.id for group in groups for doc in group}
-    extra_groups = [
-        [doc for doc in group if doc.id not in exact_ids]
-        for group in near_groups
-    ]
-    extra_groups = [group for group in extra_groups if len(group) > 1]
-
-    plan = build_plan(groups, args) + build_plan(extra_groups, args)
+    plan = build_plan(groups, args.keep, args.prefer_observer)
+    plan += build_plan(extra_groups, args.keep, args.prefer_observer)
     share = (100.0 * len(plan) / len(docs)) if docs else 0.0
 
     print(f"mode            {args.mode}")
     print(f"live documents  {len(docs)}")
-    print(f"exact groups    {len(groups)}  (excess {exact_count})")
+    print(f"exact groups    {len(groups)}  (excess {exact_excess})")
     if args.mode == "near":
         print(f"near groups     {len(near_groups)}  (extra beyond exact {len(extra_groups)})")
     print(f"to delete       {len(plan)}  ({share:.1f}% of live)")
@@ -290,10 +295,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if share > args.max_delete_pct:
-        print(
-            f"guard: plan removes {share:.1f}% which exceeds --max-delete-pct {args.max_delete_pct}",
-            file=sys.stderr,
-        )
+        print(f"guard: plan removes {share:.1f}% which exceeds --max-delete-pct {args.max_delete_pct}",
+              file=sys.stderr)
         return 1
 
     for keeper, dup in plan[:5]:
@@ -317,9 +320,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.apply:
         codes: dict[int, int] = defaultdict(int)
-        for keeper, dup in plan:
-            code = delete_conclusion(args.api, args.workspace, dup.id, args.api_timeout)
-            codes[code] += 1
+        for _keeper, dup in plan:
+            codes[delete_conclusion(args.api, args.workspace, dup.id, args.api_timeout)] += 1
         report["applied"] = True
         report["response_codes"] = {str(k): v for k, v in sorted(codes.items())}
         print(f"deleted         {sum(v for k, v in codes.items() if k == 204)}")
