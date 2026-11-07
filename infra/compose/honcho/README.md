@@ -71,6 +71,79 @@ docker exec local-test-api-1 env | grep EMBEDDING      # подтвердить 
 
 **Миграция размерности.** `documents.embedding` и `message_embeddings.embedding` объявлены как `vector(1536)`. При переходе на 384 нужно пересоздать колонки и пересчитать векторы; пока банк маленький — дешевле очистить и дать deriver пересобрать, чем писать backfill.
 
+## Dream: модель, провайдер, окно записи
+
+Dream наследует общий OpenAI-совместимый endpoint, если не задан собственный. Собственный
+задаётся **только через `overrides`** — пример в `dream.env.example`:
+
+```bash
+DREAM__DEDUCTION_MODEL_CONFIG__MODEL=mistral-small-3.2-24b-instruct
+DREAM__DEDUCTION_MODEL_CONFIG__OVERRIDES__BASE_URL=https://openai.bothub.chat/v1
+DREAM__DEDUCTION_MODEL_CONFIG__OVERRIDES__API_KEY=<из окружения>
+```
+
+**Грабля: верхнеуровневые `__BASE_URL` и `__API_KEY` не работают.** В
+`ConfiguredModelSettings` эти поля живут внутри `ModelOverrideSettings`:
+
+```text
+ConfiguredModelSettings: model, transport, ..., overrides: { api_key, api_key_env, base_url }
+```
+
+Ключи вида `DREAM__DEDUCTION_MODEL_CONFIG__BASE_URL` принимаются молча и остаются
+неприменёнными. Симптом ровно такой: `model` подхватился, а `base_url=None`, ключ
+пустой — запрос уходит на общий endpoint. Если общий endpoint прокси с fair-share,
+это выглядит как `429 reached this model's current fair-share rate limit`, то есть как
+проблема модели, хотя проблема в имени переменной.
+
+Проверка effective-конфигурации:
+
+```bash
+docker exec local-test-deriver-1 python -c "
+from src.config import settings
+d = settings.DREAM
+for n in ('DEDUCTION_MODEL_CONFIG', 'INDUCTION_MODEL_CONFIG'):
+    m = getattr(d, n); o = m.overrides
+    print(n, m.model, o.base_url, bool(o.api_key))
+"
+```
+
+Секреты не печатать: достаточно `bool(o.api_key)`.
+
+`DREAM__WRITE_WINDOW_ITERATIONS` задаёт, сколько итераций dream может потратить на
+запись. Увеличение окна не помогает модели, которая вообще не вызывает write-инструменты:
+проверять надо по `dream_runs.created_count` и по наличию вызовов
+`create_observations_deductive` / `create_observations_inductive`, а не по тексту лога.
+
+## Peer card: формат задаёт код, а не модель
+
+Карточка принимает только четыре префикса, и это валидатор, а не рекомендация промпта:
+
+```text
+IDENTITY:      каноническое имя, вид, алиасы, ID
+ATTRIBUTE:     устойчивое свойство, включая явно заявленные предпочтения
+RELATIONSHIP:  устойчивая связь с другой сущностью
+INSTRUCTION:   явно заявленное правило взаимодействия
+```
+
+Запись длиннее 200 символов отклоняется. `TRAIT:` и поведенческие `PREFERENCE:`
+отклоняются структурно (`PEER_CARD_ALLOWED_PREFIXES` в `src/utils/agent_tools.py`).
+
+Отсюда неочевидное следствие: когда dream обновляет карточку, он **обязан** выбросить
+legacy-записи в формате `PREFERENCE:` / `TRAIT:` — он не «теряет» их по небрежности,
+а исполняет контракт. Предпочтения и правила надо сразу оформлять как `ATTRIBUTE:`
+(«ATTRIBUTE: Prefers tea» — допустимая форма) или `INSTRUCTION:`.
+
+Содержание можно направлять без правки кода — через `configuration` workspace или peer:
+
+```bash
+PUT /v3/workspaces/{workspace_id}
+{"configuration": {"peer_card": {"custom_instructions": "..."}}}
+```
+
+`peer_card.custom_instructions` добавляются поверх dream-инструкций и действуют внутри
+разрешённых типов; `peer_card.create=false` отключает автоперезапись карточки dream'ом.
+Бюджет задаётся `DERIVER.MAX_CUSTOM_INSTRUCTIONS_TOKENS` (по умолчанию 2000).
+
 ## Проверка
 
 Признак того, что всё локально: в ответе на embed нет заголовков `x-railway-request-id` / `X-Nous-Token-Sharing` (они появлялись, когда запрос уходил через Nous).
