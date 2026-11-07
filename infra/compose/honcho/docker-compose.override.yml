@@ -1,0 +1,35 @@
+# Локальный embedding-сервер для Honcho (TEI, CPU).
+#
+# Куда кладётся: этот файл копируется в каталог профиля Honcho как
+# `docker-compose.override.yml` и мержится автоматически:
+#
+#   cp infra/compose/honcho/docker-compose.override.yml \
+#      "$HOME/.honcho/profiles/<profile>/docker-compose.override.yml"
+#   cd "$HOME/.honcho/profiles/<profile>" && docker compose up -d
+#
+# Почему override, а не отдельный compose-файл:
+#   основной docker-compose.yml перезаписывается `honcho start`, поэтому
+#   сервис embeddings добавлен здесь. Docker Compose мержит
+#   docker-compose.yml + docker-compose.override.yml, поэтому один
+#   `docker compose up -d` поднимает весь стек и не оставляет orphans.
+#
+# Модель та же, что на Hindsight: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+# (384 измерения, мультиязычная).
+
+services:
+  embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8
+    command:
+      - "--model-id"
+      - "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+      - "--auto-truncate"
+      - "--port"
+      - "80"
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - tei-data:/data
+    restart: unless-stopped
+
+volumes:
+  tei-data:

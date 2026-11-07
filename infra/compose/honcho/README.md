@@ -10,7 +10,7 @@ Honcho по умолчанию берёт `text-embedding-3-small` у внешн
 
 | Файл | Что |
 |---|---|
-| `embeddings.compose.yml` | TEI (text-embeddings-inference), CPU, порт `127.0.0.1:8080` |
+| `docker-compose.override.yml` | TEI (text-embeddings-inference), CPU, порт `127.0.0.1:8080`; кладётся в каталог профиля и мержится с `docker-compose.yml` |
 | модель | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, **384** измерения |
 
 Модель та же, что у Hindsight, — чтобы банки были сопоставимы и не пришлось объяснять расхождение метрик.
@@ -18,13 +18,24 @@ Honcho по умолчанию берёт `text-embedding-3-small` у внешн
 ## Запуск
 
 ```bash
-docker compose -f embeddings.compose.yml up -d
+cp infra/compose/honcho/docker-compose.override.yml \
+   "$HOME/.honcho/profiles/<profile>/docker-compose.override.yml"
+cd "$HOME/.honcho/profiles/<profile>" && docker compose up -d
+```
+
+```bash
+docker compose config --services        # api, database, deriver, embeddings, redis
 curl -s localhost:8080/health
 curl -s localhost:8080/embed -H 'Content-Type: application/json' \
      -d '{"inputs":"тест мультиязычности"}' | python -c "import sys,json;print(len(json.load(sys.stdin)[0]))"
 ```
 
 Первый старт скачивает ~470 МБ весов в volume `tei-data`.
+
+Отдельный `docker compose -f embeddings.compose.yml up -d` больше не нужен: сервис входит
+в общий стек, и один `up -d` поднимает все пять сервисов. Прежний отдельный файл давал
+`Found orphan containers (local-test-embeddings-1) for this project` при каждом запуске
+основного стека.
 
 ## Подключение к Honcho
 
