@@ -90,6 +90,7 @@ import urllib.error
 import urllib.request
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Iterable
 
 import psycopg
@@ -111,6 +112,7 @@ class Doc:
     observer: str
     observed: str
     content: str
+    created_at: datetime
 
 
 def connect() -> psycopg.Connection:
@@ -127,7 +129,7 @@ def connect() -> psycopg.Connection:
 
 def load_docs(conn: psycopg.Connection, workspace: str, level: str, min_length: int) -> list[Doc]:
     rows = conn.execute(
-        "select id, observer, observed, content from documents "
+        "select id, observer, observed, content, created_at from documents "
         "where workspace_name = %s and level = %s and deleted_at is null "
         "and length(content) >= %s order by created_at asc, id asc",
         (workspace, level, min_length),
@@ -205,17 +207,18 @@ def pick_keeper(group: list[Doc], keep: str, prefer_observer: str) -> Doc:
     """Choose the row that survives.
 
     ``longest`` is the default because these records are observations: the
-    longer one usually carries the context that made the fact useful. Ties fall
-    back to the direction holding the real peer name rather than a system SID —
-    SID rows are migration leftovers.
+    longer one usually carries the context that made the fact useful.
+    ``earliest`` and ``latest`` follow ``created_at`` — not observer preference,
+    which is only a tie-break — because the caller asked for a time-based choice.
     """
     def preferred(doc: Doc) -> int:
         return 0 if doc.observer == prefer_observer else 1
 
     if keep == "longest":
-        return max(group, key=lambda d: (len(d.content), -preferred(d)))
-    ordered = sorted(group, key=lambda d: (preferred(d), d.id))
-    return ordered[0] if keep == "earliest" else ordered[-1]
+        return max(group, key=lambda d: (len(d.content), -preferred(d), d.created_at))
+    if keep == "earliest":
+        return min(group, key=lambda d: (d.created_at, preferred(d), d.id))
+    return max(group, key=lambda d: (d.created_at, -preferred(d), d.id))
 
 
 def build_plan(groups: list[list[Doc]], keep: str, prefer_observer: str) -> list[tuple[Doc, Doc]]:
@@ -341,14 +344,39 @@ def main(argv: list[str] | None = None) -> int:
         "results": [{"keeper": k.id, "removed": d.id} for k, d in plan],
     }
 
+    def write_report() -> None:
+        if not args.json:
+            return
+        with open(args.json, "w", encoding="utf-8") as handle:
+            json.dump(report, handle, ensure_ascii=False, indent=2)
+        print(f"report          {args.json}")
+
     failures: list[dict[str, object]] = []
     if args.apply:
+        # Persist the plan before mutating anything. If the process dies mid-run,
+        # the audit still names what was about to be removed and what was.
+        write_report()
         codes: dict[int, int] = defaultdict(int)
-        for _keeper, dup in plan:
-            code = delete_conclusion(args.api, args.workspace, dup.id, args.api_timeout)
-            codes[code] += 1
-            if code != 204:
-                failures.append({"id": dup.id, "status": code})
+        current_id = ""
+        try:
+            for _keeper, dup in plan:
+                current_id = dup.id
+                code = delete_conclusion(args.api, args.workspace, dup.id, args.api_timeout)
+                codes[code] += 1
+                if code != 204:
+                    failures.append({"id": dup.id, "status": code})
+                report["applied_count"] = sum(v for k, v in codes.items() if k == 204)
+                report["response_codes"] = {str(k): v for k, v in sorted(codes.items())}
+                report["failures"] = failures
+        except Exception as exc:  # noqa: BLE001 - the report must survive any abort
+            failures.append({"id": current_id, "status": "exception", "error": str(exc)})
+            report["applied"] = True
+            report["applied_count"] = sum(v for k, v in codes.items() if k == 204)
+            report["response_codes"] = {str(k): v for k, v in sorted(codes.items())}
+            report["failures"] = failures
+            write_report()
+            print(f"error: run aborted at {current_id}: {exc}", file=sys.stderr)
+            return 2
         report["applied"] = True
         report["applied_count"] = sum(v for k, v in codes.items() if k == 204)
         report["response_codes"] = {str(k): v for k, v in sorted(codes.items())}
@@ -356,10 +384,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"deleted         {report['applied_count']}")
         print(f"response codes  {dict(sorted(codes.items()))}")
 
-    if args.json:
-        with open(args.json, "w", encoding="utf-8") as handle:
-            json.dump(report, handle, ensure_ascii=False, indent=2)
-        print(f"report          {args.json}")
+    write_report()
 
     if failures:
         # An unattended job that exits 0 after a rejected delete reports success

@@ -10,6 +10,11 @@ PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
 # script (--max-delete-pct aborts a run that would remove too much) plus soft
 # deletes through the API, which the reconciler later prunes.
 #
-# A clean run prints "nothing to do"; that line in the log is the signal that
-# the bank still holds and no duplication regrew overnight.
-15 4 * * * python /app/dedup.py --apply --json /var/log/honcho/last.json >> /var/log/honcho/dedup.log 2>&1
+# A clean run prints "nothing to do"; that line in `docker logs` is the signal
+# that the bank still holds and no duplication regrew overnight.
+#
+# No redirection to a file: supercronic runs with -passthrough-logs, so output
+# belongs in the container log. A file inside the image would not be rotated,
+# would grow unbounded and would vanish with the container, taking the failure
+# details with it.
+15 4 * * * python /app/dedup.py --apply --json /var/log/honcho/last.json
