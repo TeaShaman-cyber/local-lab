@@ -2,13 +2,14 @@
 """Are our copies of external skill packs still current?
 
 `tools/dev/skillpack` tracked one source (matt-pocock) because that was the only
-one we knew about. Three more turned out to exist upstream:
+one we knew about. Four more turned out to exist upstream:
 
     grafana/skills        -> our docs/reference/observability/grafana-*.md
     langfuse/skills       -> our docs/reference/observability/langfuse/
     timeweb-cloud/skills  -> our docs/reference/timeweb/
+    plastic-labs/honcho   -> our .agents/skills/honcho-{memory,cli} (verbatim)
 
-Every one of them can drift silently. This checks all four the same way: compare
+Every one of them can drift silently. This checks all five the same way: compare
 the upstream commit date with the date our copy was last written.
 
 Why date and not hash for the extracted packs: once a skill is rewritten into a doc,
@@ -64,6 +65,17 @@ SOURCES = [
         "repo": "timeweb-cloud/skills",
         "copy": REPO / "docs" / "reference" / "timeweb",
         "note": "extracted into timeweb docs",
+    },
+    {
+        # Vendor skills kept VERBATIM, not rewritten: they are the author's own
+        # description of how Honcho works, and a paraphrase would age worse than a
+        # stale copy we can detect. Installed through scripts/sync-skills.sh like
+        # any project skill.
+        "name": "honcho",
+        "clone": pathlib.Path("E:/honcho-upstream"),
+        "repo": "plastic-labs/honcho",
+        "copy": REPO / ".agents" / "skills",
+        "note": "vendor skills honcho-memory, honcho-cli installed verbatim",
     },
 ]
 
