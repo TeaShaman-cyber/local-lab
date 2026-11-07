@@ -277,12 +277,36 @@ services:
     monitoring: Grafana Cloud — prometheus.scrape "honcho_api" (job=honcho-api, instance=theseus-laptop, 30s) через prometheus.relabel "honcho_keep" в Alloy
     check: curl -fsS http://127.0.0.1:8000/health
     notes: >-
-      Профиль local-test, ноутбук, не PVE. Deriver и embeddings идут через hermes-proxy
+      Профиль local-test, ноутбук, не PVE. Deriver идёт через hermes-proxy
       (host.docker.internal:8645/v1 → api.deepinfra.com). Фактические модели заданы в .env,
-      который перебивает config.toml: deriver = upstage/solar-mini4:free, embeddings =
-      text-embedding-3-small; в config.toml остаётся неактивный дефолт gpt-5.4-mini.
+      который перебивает config.toml (RULE-018): deriver = upstage/solar-mini4:free;
+      в config.toml остаётся неактивный дефолт gpt-5.4-mini.
+      Эмбеддинги — локальные, отдельным сервисом INFRA-018 (TEI, 384 измерения);
+      прежняя внешняя text-embedding-3-small больше не используется.
       Метрики /metrics отдают ~337 серий, в Grafana уходит только очередь/эмбеддинги/
       dialectic/API. Контур — local-lab#177, cache-прайс провайдеров — #179.
+
+  - id: INFRA-018
+    name: honcho-embeddings
+    criticality: P2
+    role: локальный embedding-сервер для Honcho (TEI, CPU) — векторы считаются на машине
+    status: active
+    kind: docker-compose
+    location:
+      compose: E:/local-lab/infra/compose/honcho/embeddings.compose.yml
+      runtime_compose: C:/Users/s.poklad/.honcho/profiles/local-test/embeddings.compose.yml
+      port: 8080
+      container: local-test-embeddings-1
+    monitoring: Grafana Cloud — health проверяется вручную (curl /health); метрики TEI не скрейпятся
+    check: curl -fsS http://127.0.0.1:8080/health
+    notes: >-
+      Модель sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2, 384 измерения,
+      та же, что на Hindsight. Honcho подключается через
+      EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL=http://host.docker.internal:8080/v1 в .env
+      (перебивает config.toml — RULE-018). Отдельный compose, потому что основной
+      docker-compose.yml Honcho перезаписывается `honcho start`. Первый старт качает ~470 МБ
+      в volume tei-data. Миграция размерности: documents.embedding и
+      message_embeddings.embedding пересозданы как vector(384), векторы пересчитаны.
 
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
 # Признак продового/тестового — RULE-009 в infrastructure.md.
