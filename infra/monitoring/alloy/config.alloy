@@ -312,7 +312,20 @@ prometheus.scrape "honcho_api" {
   targets         = [{"__address__" = "127.0.0.1:8000", "job" = "honcho-api", "instance" = "theseus-laptop"}]
   metrics_path    = "/metrics"
   scrape_interval = "30s"
-  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+  forward_to      = [prometheus.relabel.honcho_keep.receiver]
+}
+
+// Honcho exposes ~337 series, most of them process/python runtime noise. Keep
+// only queue, embedding, dialectic and API series the dashboard charts; the
+// same reason as process_keep above — free tier caps active series at 10k.
+prometheus.relabel "honcho_keep" {
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+  rule {
+    source_labels = ["__name__"]
+    regex         = "api_request.*|api_requests_total|backfill_pending|db_connections_open|db_queries_in_flight|deriver_.*|dialectic_.*|dream.*|embed_now_tasks.*|message_embeddings_pending.*|messages_created_total"
+    action        = "keep"
+  }
 }
 
 // ---------------------------------------------------------------------------
