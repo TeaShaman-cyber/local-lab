@@ -57,7 +57,26 @@ Run it inside ``psql`` against the ``database`` service. The reconciler only
 prunes soft-deleted rows after ``older_than_minutes`` (5 by default), so the
 window to undo is short — check the JSON report first, then decide.
 
-Exit codes: 0 = clean or applied, 1 = guard tripped, 2 = usage or DB error.
+Identifier validation
+---------------------
+``--workspace`` and ``--level`` are interpolated into SQL, so they are checked
+against ``^[A-Za-z0-9_.-]{1,64}$`` before use. Examples, as required for any
+parser in this repository:
+
+    input                 result    why
+    --------------------  --------  --------------------------------------------
+    hermes                accepted  plain name
+    local-test            accepted  hyphen
+    s1                    accepted  short name
+    a.b_c-1               accepted  dot, underscore, hyphen
+    ""                    rejected  empty
+    "a b"                 rejected  space can break the identifier position
+    "x';drop table"       rejected  quote and statement separator
+    "hermes\n"            rejected  trailing newline ($ does not match it)
+    "a" * 65              rejected  longer than 64 characters
+
+Exit codes: 0 = clean or applied, 1 = guard tripped or deletes rejected, 2 =
+usage or DB error.
 """
 
 from __future__ import annotations
@@ -266,28 +285,32 @@ def main(argv: list[str] | None = None) -> int:
         exact_excess = sum(len(group) - 1 for group in groups)
 
         near_groups: list[list[Doc]] = []
-        extra_groups: list[list[Doc]] = []
+        merged_groups: list[list[Doc]] = []
         if args.mode == "near":
             pairs = near_pairs(conn, args.workspace, args.level, args.min_length, args.threshold)
-            near_groups = components(pairs, {doc.id: doc for doc in docs})
-            # A doc already planned by exact text must not be planned twice.
-            exact_ids = {doc.id for group in groups for doc in group}
-            extra_groups = [
-                [doc for doc in group if doc.id not in exact_ids] for group in near_groups
-            ]
-            extra_groups = [group for group in extra_groups if len(group) > 1]
+            # Exact duplicates must join the same graph as near ones. Otherwise a
+            # row that is an exact twin of A and a near twin of C is dropped from
+            # the component (both its exact partners are excluded), survives as a
+            # duplicate, and the next run has to delete it again.
+            for group in groups:
+                for other in group[1:]:
+                    pairs.append((group[0].id, other.id))
+            merged_groups = components(pairs, {doc.id: doc for doc in docs})
+            near_groups = merged_groups
     finally:
         conn.close()
 
-    plan = build_plan(groups, args.keep, args.prefer_observer)
-    plan += build_plan(extra_groups, args.keep, args.prefer_observer)
+    # In near mode the graph already contains exact twins, so every group is
+    # planned once and the keeper is chosen across the whole component.
+    plan = build_plan(merged_groups if args.mode == "near" else groups,
+                      args.keep, args.prefer_observer)
     share = (100.0 * len(plan) / len(docs)) if docs else 0.0
 
     print(f"mode            {args.mode}")
     print(f"live documents  {len(docs)}")
     print(f"exact groups    {len(groups)}  (excess {exact_excess})")
     if args.mode == "near":
-        print(f"near groups     {len(near_groups)}  (extra beyond exact {len(extra_groups)})")
+        print(f"near groups     {len(near_groups)}  (exact twins merged into the graph)")
     print(f"to delete       {len(plan)}  ({share:.1f}% of live)")
 
     if not plan:
@@ -318,13 +341,19 @@ def main(argv: list[str] | None = None) -> int:
         "results": [{"keeper": k.id, "removed": d.id} for k, d in plan],
     }
 
+    failures: list[dict[str, object]] = []
     if args.apply:
         codes: dict[int, int] = defaultdict(int)
         for _keeper, dup in plan:
-            codes[delete_conclusion(args.api, args.workspace, dup.id, args.api_timeout)] += 1
+            code = delete_conclusion(args.api, args.workspace, dup.id, args.api_timeout)
+            codes[code] += 1
+            if code != 204:
+                failures.append({"id": dup.id, "status": code})
         report["applied"] = True
+        report["applied_count"] = sum(v for k, v in codes.items() if k == 204)
         report["response_codes"] = {str(k): v for k, v in sorted(codes.items())}
-        print(f"deleted         {sum(v for k, v in codes.items() if k == 204)}")
+        report["failures"] = failures
+        print(f"deleted         {report['applied_count']}")
         print(f"response codes  {dict(sorted(codes.items()))}")
 
     if args.json:
@@ -332,6 +361,12 @@ def main(argv: list[str] | None = None) -> int:
             json.dump(report, handle, ensure_ascii=False, indent=2)
         print(f"report          {args.json}")
 
+    if failures:
+        # An unattended job that exits 0 after a rejected delete reports success
+        # while the bank is unchanged. Signal it instead.
+        print(f"error: {len(failures)} deletions were not accepted; run is incomplete",
+              file=sys.stderr)
+        return 1
     return 0
 
 

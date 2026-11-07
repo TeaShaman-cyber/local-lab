@@ -38,7 +38,7 @@ services:
   # desktop to flash on.
   dedup:
     build:
-      context: ../../..
+      context: ${LOCAL_LAB_ROOT:?set LOCAL_LAB_ROOT to the local-lab clone path}
       dockerfile: infra/compose/honcho/maintenance/Dockerfile
     environment:
       PGHOST: database

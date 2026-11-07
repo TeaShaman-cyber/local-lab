@@ -11,24 +11,29 @@
 
 FROM python:3.13-slim
 
+ARG SUPERCRONIC_VERSION=v0.2.51
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends cron tzdata \
+    && apt-get install -y --no-install-recommends curl ca-certificates tzdata \
+    && curl -fsSL -o /usr/local/bin/supercronic \
+       "https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/supercronic-linux-amd64" \
+    && chmod +x /usr/local/bin/supercronic \
+    && apt-get purge -y curl \
+    && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
-# The client library is the only dependency: no ORM, no scheduler library.
+# The client library is the only runtime dependency: no ORM, no scheduler lib.
 RUN pip install --no-cache-dir "psycopg[binary]>=3.1,<4"
 
 WORKDIR /app
 COPY tools/honcho/dedup.py /app/dedup.py
 COPY infra/compose/honcho/maintenance/crontab /etc/cron.d/honcho-dedup
 
-RUN chmod 0644 /etc/cron.d/honcho-dedup \
-    && mkdir -p /var/log/honcho \
-    && touch /var/log/honcho/dedup.log
+RUN mkdir -p /var/log/honcho && touch /var/log/honcho/dedup.log
 
-# -f keeps cron in the foreground so the container stays alive; -l 2 sends job
-# output to stdout, where the container runtime collects it.
-CMD ["cron", "-f", "-l", "2"]
+# -passthrough-logs sends job output to stdout, where the container runtime
+# collects it; there is no log file to rotate inside the image.
+CMD ["/usr/local/bin/supercronic", "-passthrough-logs", "/etc/cron.d/honcho-dedup"]
