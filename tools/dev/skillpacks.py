@@ -125,9 +125,18 @@ def load_state() -> dict:
 
 
 def save_state(state: dict) -> None:
-    STATE.write_text(
+    """Write the sync record atomically.
+
+    A plain write_text truncates first, so a crash mid-write leaves a half file
+    that load_state() reads as {} — every pack then reports "no sync record" and
+    the alert fires on a healthy setup. tmp + os.replace is atomic on the same
+    filesystem, which is the case here.
+    """
+    tmp = STATE.with_name(STATE.name + ".tmp")
+    tmp.write_text(
         json.dumps(state, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8"
     )
+    tmp.replace(STATE)
 
 
 def main() -> int:
@@ -239,7 +248,7 @@ def main() -> int:
         packs = ",".join(f"{r['name']}:{r['status']}" for r in rows) or "none"
         print(
             f"event=skillpacks_check stale={stale_count} unknown={unknown_count} "
-            f"packs={packs} ts={int(time.time())}"
+            f'packs="{packs}" ts={int(time.time())}'
         )
 
     if args.json:

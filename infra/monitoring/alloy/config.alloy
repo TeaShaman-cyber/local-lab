@@ -521,7 +521,7 @@ loki.process "container_logs" {
   // line per run from the scheduled container.
   //
   // Input (one line):
-  //   event=skillpacks_check stale=1 unknown=0 packs=langfuse:stale,honcho:current ts=1794092541
+  //   event=skillpacks_check stale=1 unknown=0 packs="langfuse:stale,honcho:current" ts=1794092541
   //
   // Output (series on Alloy /metrics, shipped by prometheus.scrape "alloy_self"):
   //   honcho_skillpacks_stale_total{...}                 1   (set: stale)

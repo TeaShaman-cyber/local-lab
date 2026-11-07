@@ -19,7 +19,7 @@ services:
       # Paths inside the container, not on the host. Both roots are env-driven
       # in the script for exactly this reason.
       SKILLPACKS_CLONE_ROOT: /clones
-      SKILLPACKS_STATE: /state/skillpacks-state.json
+      SKILLPACKS_STATE: /state/state.json
       SKILLPACKS_REPO: /repo
       TZ: Europe/Kaliningrad
     volumes:
@@ -35,5 +35,10 @@ services:
       - E:/honcho-upstream:/clones/honcho-upstream
       # The sync record must survive container recreation, otherwise every run
       # starts with "no sync record" and reports every pack as unknown.
-      - E:/skillpacks-state.json:/state/skillpacks-state.json
+      #
+      # A DIRECTORY, not a file: Docker creates a missing bind-mount source as a
+      # directory, so mounting E:/skillpacks-state.json would leave a directory
+      # where the script expects a file, and the failure would look like a broken
+      # job rather than a missing state.
+      - ${SKILLPACKS_STATE_DIR:-E:/skillpacks-state}:/state
     restart: unless-stopped
