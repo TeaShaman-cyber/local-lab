@@ -403,8 +403,23 @@ loki.process "container_logs" {
   }
 
   // Dedup maintenance job (tools/honcho/dedup.py, issue #193). It prints exactly
-  // one logfmt line per run, for example:
-  //   event=run_finished status=ok mode=exact level=explicit live=1165 planned=0 deleted=140 failures=0 duration_ms=2987
+  // one logfmt line per run. The fields are a contract: renaming one silently
+  // empties a panel or an alert.
+  //
+  // Input (one line, from the dedup container's stdout):
+  //   event=run_finished status=ok mode=exact level=explicit live=1339 planned=64 deleted=64 failures=0 duration_ms=1274 ts=1794088751
+  //
+  // Output (series exposed on Alloy /metrics, shipped by prometheus.scrape "alloy_self"):
+  //   honcho_dedup_runs_total{status="ok"}                       1        (incremented once)
+  //   honcho_dedup_deleted_total{status="ok"}                    64       (added: deleted)
+  //   honcho_dedup_live_documents{status="ok"}                   1339     (set: live)
+  //   honcho_dedup_last_success_timestamp_seconds{status="ok"}   1794088751  (set: ts, because status=ok|clean)
+  //   honcho_dedup_last_failure_timestamp_seconds               absent    (only status=failed|partial|guard_tripped)
+  //
+  // A run with status=clean (nothing to remove) still moves the success timestamp
+  // and still increments the runs counter, but leaves deleted_total untouched.
+  // A run with status=dry_run touches only runs_total and live_documents.
+  //
   // Scoped to the dedup container so the general pipeline does not try to parse
   // every other container's output.
   stage.match {
