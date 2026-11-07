@@ -1,0 +1,85 @@
+{
+  "apiVersion": "rules.alerting.grafana.app/v1beta1",
+  "kind": "AlertRule",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/provenance": "",
+      "grafana.com/updateTimestamp": "2026-10-27T10:24:23Z",
+      "grafana.com/updatedBy": "cg2aw002vdqtca"
+    },
+    "labels": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/group": "secret-guard",
+      "grafana.com/group-index": "0"
+    },
+    "name": "ag2b9oop4jsowe",
+    "namespace": "stacks-1891821"
+  },
+  "spec": {
+    "annotations": {
+      "description": "A secret-shaped string appeared in Hermes logs. It was redacted on the host and never stored, but the source credential must be identified and rotated.",
+      "summary": "Secret attempted to leave the host (redacted before storage)"
+    },
+    "execErrState": "Ok",
+    "expressions": {
+      "A": {
+        "datasourceUID": "grafanacloud-logs",
+        "model": {
+          "expr": "sum(count_over_time({job=\"hermes\"} |= \"[REDACTED]\" [5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        },
+        "relativeTimeRange": {
+          "from": "10m0s",
+          "to": "0s"
+        }
+      },
+      "B": {
+        "model": {
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      "C": {
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        },
+        "source": true
+      }
+    },
+    "labels": {
+      "area": "secrets",
+      "severity": "critical"
+    },
+    "noDataState": "Ok",
+    "notificationSettings": {
+      "receiver": "theseus-email",
+      "type": "SimplifiedRouting"
+    },
+    "title": "Hermes log secret leak attempt",
+    "trigger": {
+      "interval": "1m"
+    }
+  }
+}

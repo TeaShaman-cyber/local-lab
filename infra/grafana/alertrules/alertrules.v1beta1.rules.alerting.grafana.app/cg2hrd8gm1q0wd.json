@@ -1,0 +1,86 @@
+{
+  "apiVersion": "rules.alerting.grafana.app/v1beta1",
+  "kind": "AlertRule",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/provenance": "",
+      "grafana.com/updateTimestamp": "2026-10-30T09:17:02Z",
+      "grafana.com/updatedBy": "cg2aw002vdqtca"
+    },
+    "labels": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/group": "backup-guard",
+      "grafana.com/group-index": "0"
+    },
+    "name": "cg2hrd8gm1q0wd",
+    "namespace": "stacks-1891821"
+  },
+  "spec": {
+    "annotations": {
+      "description": "За 30 часов в backup-lattice.log нет ни одной строки status=ok. Порог снижен с 72 до 30 часов 2026-10-30: трёхдневная тишина была замечена только по факту, а не алертом. Риск: если ноутбук выключен на выходных, возможны ложные срабатывания — тогда поднять до 48 и записать причину здесь.",
+      "summary": "Нет успешного бэкапа более 30 часов"
+    },
+    "execErrState": "Alerting",
+    "expressions": {
+      "A": {
+        "datasourceUID": "grafanacloud-logs",
+        "model": {
+          "expr": "sum(count_over_time({job=\"backup\"} |= \"status=ok\" [30h]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        },
+        "relativeTimeRange": {
+          "from": "30h0m0s",
+          "to": "0s"
+        }
+      },
+      "B": {
+        "model": {
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      "C": {
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  1
+                ],
+                "type": "lt"
+              }
+            }
+          ],
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        },
+        "source": true
+      }
+    },
+    "for": "10m0s",
+    "labels": {
+      "area": "backup",
+      "severity": "critical"
+    },
+    "noDataState": "Alerting",
+    "notificationSettings": {
+      "receiver": "theseus-email",
+      "type": "SimplifiedRouting"
+    },
+    "title": "Backup: нет успешного прогона 30 ч",
+    "trigger": {
+      "interval": "1m"
+    }
+  }
+}

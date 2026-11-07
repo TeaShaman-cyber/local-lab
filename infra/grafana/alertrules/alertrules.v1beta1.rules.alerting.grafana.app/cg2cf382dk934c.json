@@ -1,0 +1,87 @@
+{
+  "apiVersion": "rules.alerting.grafana.app/v1beta1",
+  "kind": "AlertRule",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/provenance": "",
+      "grafana.com/updateTimestamp": "2026-10-27T20:22:01Z",
+      "grafana.com/updatedBy": "cg2aw002vdqtca"
+    },
+    "labels": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/group": "deepinfra-billing",
+      "grafana.com/group-index": "0"
+    },
+    "name": "cg2cf382dk934c",
+    "namespace": "stacks-1891821"
+  },
+  "spec": {
+    "annotations": {
+      "description": "За 15 минут Hermes получил хотя бы один отказ по балансу именно от provider=deepinfra ({{ $value }} шт.). Фильтры литеральные и привязаны к провайдеру, поэтому 402 от Nous, RunInfra или чужого маршрута сюда не попадёт. Групповые regex `(?i)402.*(positive balance|...)` давали ноль на тех же логах, поэтому от них отказались.",
+      "summary": "DeepInfra: отказы по балансу (402)"
+    },
+    "execErrState": "Alerting",
+    "expressions": {
+      "A": {
+        "datasourceUID": "grafanacloud-logs",
+        "model": {
+          "expr": "sum(count_over_time({service_name=\"hermes\"} |= \"provider=deepinfra\" |= \"You need positive balance\" [15m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        },
+        "relativeTimeRange": {
+          "from": "15m0s",
+          "to": "0s"
+        }
+      },
+      "B": {
+        "model": {
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      "C": {
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        },
+        "source": true
+      }
+    },
+    "for": "1m0s",
+    "labels": {
+      "area": "billing",
+      "component": "deepinfra",
+      "severity": "critical"
+    },
+    "noDataState": "Ok",
+    "notificationSettings": {
+      "receiver": "theseus-email",
+      "type": "SimplifiedRouting"
+    },
+    "title": "DeepInfra: отказы по балансу (HTTP 402)",
+    "trigger": {
+      "interval": "1m"
+    }
+  }
+}

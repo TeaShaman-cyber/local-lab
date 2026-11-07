@@ -90,10 +90,52 @@ service-account token с ролью Editor. Записано и в `tools/finops
 ```
 infra/grafana/dashboards/
   dashboards.v0alpha1.dashboard.grafana.app/hermes-providers.json
+infra/grafana/alertrules/
+  alertrules.v1beta1.rules.alerting.grafana.app/<rule-uid>.json
 ```
 
 Имя каталога — версия API, её не переименовывать: `gcx resources push` ищет
 структуру по этому пути.
+
+## Алерты как код
+
+Правила алертов — такие же ресурсы: `rules.alerting.grafana.app`, kind
+`AlertRule`, версия `v1beta1`. В манифесте лежит всё, что раньше жило только в
+UI: `expressions` (запросы и порог), `noDataState`, `execErrState`, `for`,
+`labels`, `annotations`, `notificationSettings.receiver`.
+
+```bash
+# 1. выгрузить текущее состояние
+"$GCX" resources pull alertrules -p ./infra/grafana/alertrules
+
+# 2. править файл, а не правило в UI
+# 3. проверить, что манифест парсится и вид поддерживается API
+"$GCX" resources validate -p ./infra/grafana/alertrules
+
+# 4. применить
+"$GCX" resources push -p ./infra/grafana/alertrules
+
+# 5. доказать, что git и Grafana совпадают
+"$GCX" resources pull alertrules -p /tmp/verify
+diff -r infra/grafana/alertrules /tmp/verify    # пусто = совпадают
+```
+
+**Чего алерты не умеют — server-side dry-run.** `push --dry-run` отвечает
+`skipped: 11`, `skipped_reasons: {"not server-verified": 11}` и ничего не
+проверяет по существу: это не «изменений нет», а «изменения не примерялись».
+Для дашбордов такой прогон осмысленный, для алертов — нет. Поэтому проверка
+здесь обратная: `push`, затем `pull` и `diff` — расхождение видно по файлам, а
+не по обещанию CLI.
+
+**Первый `push` ставит `grafana.com/provenance: api`.** После этого правило
+помечено как управляемое через API; ручная правка в UI будет перезаписана
+следующим `push`. Значение `provenance` в файле не править руками — оно
+приходит из Grafana и меняется только push-ем.
+
+**Имя файла — UID правила, и его менять нельзя.** Новый UID означает новое
+правило, а старое останется жить рядом: получится два алерта на одно событие.
+Перенос правила — `create` нового и `delete` старого, а не переименование
+файла.
 
 ## Правила
 
@@ -104,3 +146,6 @@ infra/grafana/dashboards/
 4. Инструмент, установленный вне PATH, обязан быть в реестре — иначе следующий
    агент решит, что его нет (ровно это и произошло 31.10: `command -v gcx` дал
    пусто, и полчаса ушло на «CLI не установлен», хотя он стоял с 19:25).
+5. Алерт, изменённый в UI, — незакоммиченная работа, как и дашборд: следующий
+   `push` его перезапишет. Порог, `noDataState` и получатель меняются в файле,
+   а не в интерфейсе — иначе через месяц никто не ответит, почему правило молчит.

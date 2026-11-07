@@ -1,0 +1,88 @@
+{
+  "apiVersion": "rules.alerting.grafana.app/v1beta1",
+  "kind": "AlertRule",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/provenance": "",
+      "grafana.com/updateTimestamp": "2026-10-27T20:39:11Z",
+      "grafana.com/updatedBy": "cg2aw002vdqtca"
+    },
+    "labels": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/group": "deepinfra-billing",
+      "grafana.com/group-index": "0"
+    },
+    "name": "fg2cf3agvjo5cc",
+    "namespace": "stacks-1891821"
+  },
+  "spec": {
+    "annotations": {
+      "description": "ПРАВИЛО НА ПАУЗЕ. DeepInfra suspended — известное постоянноe состояние аккаунта (баланс не пополнялся), а не событие. Повторные письма раз в 4 часа про известное состояние — шум. Реальный отказ во время работы ловит правило 402, оно срабатывает только когда запрос действительно ушёл и был отклонён. Включить обратно после пополнения баланса.",
+      "summary": "DeepInfra: аккаунт заблокирован"
+    },
+    "execErrState": "Ok",
+    "expressions": {
+      "A": {
+        "datasourceUID": "grafanacloud-logs",
+        "model": {
+          "expr": "last_over_time({service_name=\"deepinfra\", log_type=\"billing\"} | logfmt | metric=\"suspended\" | unwrap value [15m])",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        },
+        "relativeTimeRange": {
+          "from": "15m0s",
+          "to": "0s"
+        }
+      },
+      "B": {
+        "model": {
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      "C": {
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        },
+        "source": true
+      }
+    },
+    "for": "5m0s",
+    "labels": {
+      "area": "billing",
+      "component": "deepinfra",
+      "severity": "critical"
+    },
+    "noDataState": "Ok",
+    "notificationSettings": {
+      "receiver": "theseus-email",
+      "type": "SimplifiedRouting"
+    },
+    "paused": true,
+    "title": "DeepInfra: аккаунт заблокирован (suspended)",
+    "trigger": {
+      "interval": "1m"
+    }
+  }
+}

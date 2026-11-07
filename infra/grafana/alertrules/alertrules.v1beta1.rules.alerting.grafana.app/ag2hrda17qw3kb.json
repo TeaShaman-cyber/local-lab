@@ -1,0 +1,85 @@
+{
+  "apiVersion": "rules.alerting.grafana.app/v1beta1",
+  "kind": "AlertRule",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/provenance": "",
+      "grafana.com/updateTimestamp": "2026-10-31T19:15:11Z",
+      "grafana.com/updatedBy": "cg2aw002vdqtca"
+    },
+    "labels": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/group": "backup-guard",
+      "grafana.com/group-index": "0"
+    },
+    "name": "ag2hrda17qw3kb",
+    "namespace": "stacks-1891821"
+  },
+  "spec": {
+    "annotations": {
+      "description": "Последняя метрика backup_last_run_ok = 0, то есть последний прогон закончился неудачей. Источник — строка metric=backup_last_run_ok в stream {job=\"theseus-backup\", log_type=\"run\"}, которую пишет run_backup.py через push_metrics. Раньше правило считало count_over_time(status=fail за 24ч): оно кричало сутки после исправленного сбоя и молчало, если прогон вообще не стартовал. Последнее — забота правила «нет успешного прогона 30 ч». keep_firing_for=0 выбран намеренно: успешный прогон должен гасить алерт сразу, а не через 6 часов.",
+      "summary": "Последний прогон бэкапа закончился ошибкой"
+    },
+    "execErrState": "Ok",
+    "expressions": {
+      "A": {
+        "datasourceUID": "grafanacloud-logs",
+        "model": {
+          "expr": "last_over_time({job=\"theseus-backup\", log_type=\"run\"} | pattern `metric=backup_last_run_ok value=\u003cv\u003e` | unwrap v [30h])",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        },
+        "relativeTimeRange": {
+          "from": "30h0m0s",
+          "to": "0s"
+        }
+      },
+      "B": {
+        "model": {
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      "C": {
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  1
+                ],
+                "type": "lt"
+              }
+            }
+          ],
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        },
+        "source": true
+      }
+    },
+    "labels": {
+      "area": "backup",
+      "severity": "critical"
+    },
+    "noDataState": "Ok",
+    "notificationSettings": {
+      "receiver": "theseus-email",
+      "type": "SimplifiedRouting"
+    },
+    "title": "Backup: последний прогон неуспешен",
+    "trigger": {
+      "interval": "1m"
+    }
+  }
+}
