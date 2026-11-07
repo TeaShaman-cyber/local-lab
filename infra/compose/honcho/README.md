@@ -125,6 +125,37 @@ for n in ('DEDUCTION_MODEL_CONFIG', 'INDUCTION_MODEL_CONFIG'):
 проверять надо по `dream_runs.created_count` и по наличию вызовов
 `create_observations_deductive` / `create_observations_inductive`, а не по тексту лога.
 
+### Fallback: выбирать по контракту, а не по названию
+
+`ConfiguredModelSettings.fallback` — независимая модель со своими `overrides`, поэтому
+fallback можно направить на другой endpoint и другой ключ. Диспетчер делает три попытки
+primary, затем переключается:
+
+```text
+Final retry attempt 3/3: switching from openai/<primary> to backup openai/<fallback>
+```
+
+Правила выбора:
+
+1. **Другое семейство, чем primary.** Иначе лимит или сбой провайдера свалит обе модели.
+2. **Проверять двухшаговый контракт** `search_memory → create_observations_*`, а не один
+   вызов: dream именно так и работает.
+3. **Не free-модель без проверки.** Fallback нужен, когда primary недоступен; модель,
+   которая не пишет наблюдения, превращает отказ в тихий `created_count=0`.
+
+Текущий fallback — `gemini-2.5-flash` через тот же BotHub. Замеры на контракте:
+`gemini-2.5-flash` 12.9s, чисто; `gpt-5-mini` 29.7s, чисто; `claude-haiku-4.5` 9.0s,
+но дублировал `search_memory`; `qwen3-30b-a3b` не вызвал write-инструмент вовсе.
+
+Failover проверяется ломанием primary: подставить несуществующую модель, запустить dream
+и убедиться, что run `completed`, а в логе есть `switching ... to backup`:
+
+```text
+primary: openai/failover-probe-does-not-exist → 404 MODEL_NOT_FOUND
+retry 1/3, 2/3 → switching to backup openai/gemini-2.5-flash
+run completed, created_count=4
+```
+
 ## Peer card: формат задаёт код, а не модель
 
 Карточка принимает только четыре префикса, и это валидатор, а не рекомендация промпта:
