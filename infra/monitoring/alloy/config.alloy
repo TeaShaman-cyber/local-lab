@@ -315,15 +315,28 @@ prometheus.scrape "honcho_api" {
   forward_to      = [prometheus.relabel.honcho_keep.receiver]
 }
 
-// Honcho exposes ~337 series, most of them process/python runtime noise. Keep
-// only queue, embedding, dialectic and API series the dashboard charts; the
-// same reason as process_keep above — free tier caps active series at 10k.
+// Honcho exposes 337 series (measured 2026-11-07); most are process/python noise
+// or histogram buckets. Keep 72: queue, embedding, dialectic, API totals and
+// latency count/sum. Same reason as process_keep above — free tier caps at 10k.
+//
+// Examples (input -> output):
+//   deriver_queue_items_pending                 -> keep
+//   message_embeddings_pending                  -> keep
+//   embed_now_tasks_in_flight                   -> keep
+//   dialectic_tokens_processed_total            -> keep
+//   api_request_duration_seconds_sum            -> keep
+//   api_request_duration_seconds_bucket         -> drop (72 series of buckets)
+//   process_cpu_seconds_total                   -> drop
+//   python_gc_collections_total                 -> drop
+//   pagination_offset_shim_total                -> drop
+// Внимание: список имён проверялся на живом /metrics 2026-11-07; при обновлении
+// Honcho пересчитать (curl -s 127.0.0.1:8000/metrics | grep -vc '^#').
 prometheus.relabel "honcho_keep" {
   forward_to = [prometheus.remote_write.grafana_cloud.receiver]
 
   rule {
     source_labels = ["__name__"]
-    regex         = "api_request.*|api_requests_total|backfill_pending|db_connections_open|db_queries_in_flight|deriver_.*|dialectic_.*|dream.*|embed_now_tasks.*|message_embeddings_pending.*|messages_created_total"
+    regex         = "api_requests_total|api_request_duration_seconds_(count|sum)|backfill_pending|db_connections_open|db_queries_in_flight|deriver_.*|dialectic_.*|dream.*|embed_now_tasks.*|message_embeddings_pending.*|messages_created_total"
     action        = "keep"
   }
 }
