@@ -516,4 +516,54 @@ loki.process "container_logs" {
       values = ["status"]
     }
   }
+
+  // Skill-pack freshness check (tools/dev/skillpacks.py, issue #199). One logfmt
+  // line per run from the scheduled container.
+  //
+  // Input (one line):
+  //   event=skillpacks_check stale=1 unknown=0 packs="langfuse:stale,honcho:current" ts=1794092541
+  //
+  // Output (series on Alloy /metrics, shipped by prometheus.scrape "alloy_self"):
+  //   honcho_skillpacks_stale_total{...}                 1   (set: stale)
+  //   honcho_skillpacks_unknown_total{...}               0   (set: unknown)
+  //   honcho_skillpacks_last_check_timestamp_seconds     ts  (set)
+  //
+  // The packs list is deliberately NOT a label: it is high-cardinality free text
+  // and the per-pack detail belongs in the log line, which the alert links to.
+  stage.match {
+    selector = "{service=\"skillpacks\"} |= \"event=skillpacks_check\""
+
+    stage.logfmt {
+      mapping = { event = "", stale = "", unknown = "", ts = "" }
+    }
+
+    stage.metrics {
+      metric.gauge {
+        name              = "skillpacks_stale_total"
+        prefix            = "honcho_"
+        description       = "Skill packs whose upstream moved after our last sync"
+        source            = "stale"
+        action            = "set"
+        max_idle_duration = "720h"
+      }
+
+      metric.gauge {
+        name              = "skillpacks_unknown_total"
+        prefix            = "honcho_"
+        description       = "Skill packs that could not be compared (clone or fetch failed)"
+        source            = "unknown"
+        action            = "set"
+        max_idle_duration = "720h"
+      }
+
+      metric.gauge {
+        name              = "skillpacks_last_check_timestamp_seconds"
+        prefix            = "honcho_"
+        description       = "Unix time of the last skill-pack freshness check"
+        source            = "ts"
+        action            = "set"
+        max_idle_duration = "720h"
+      }
+    }
+  }
 }

@@ -1,0 +1,13 @@
+SHELL=/bin/sh
+PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
+# Once a day, in the morning: the signal is "come and look at the diff", and a
+# 04:00 run only guarantees it is stale by the time anyone reads it.
+#
+# There is deliberately no auto-update. Vendored skills are someone else's
+# opinions about their own product; a newer version can be a regression for us,
+# so the job's whole purpose is to make a human look, not to chase upstream.
+#
+# --emit-event prints exactly one logfmt line per run. Alloy parses it into
+# skillpacks_stale_total / skillpacks_unknown_total / last_check timestamp; the
+# alert and the Hermes indicator read those numbers, never this file.
+0 9 * * * python /repo/tools/dev/skillpacks.py --emit-event

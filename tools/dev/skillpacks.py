@@ -27,41 +27,52 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import subprocess
 import time
 
-REPO = pathlib.Path(__file__).resolve().parents[2]
+# The repository root. Overridable because the scheduled container mounts the
+# clone read-only at /repo instead of baking docs/ and .agents/ into the image
+# (they change constantly, and an image would go stale between builds).
+REPO = pathlib.Path(os.environ.get("SKILLPACKS_REPO") or pathlib.Path(__file__).resolve().parents[2])
 # Sync record: when we last read upstream. mtime cannot serve this — after a fresh
 # `git checkout` it is the checkout time, not the read time (Codex P2 on #74).
-STATE = pathlib.Path("E:/skillpacks-state.json")
+#
+# Both roots are overridable because the same file runs on the host (E:/...) and
+# inside the scheduled container (/clones, /state). Hardcoding the Windows path
+# would make the container check every pack "clone missing" and still exit 0.
+CLONE_ROOT = pathlib.Path(os.environ.get("SKILLPACKS_CLONE_ROOT", "E:/"))
+STATE = pathlib.Path(
+    os.environ.get("SKILLPACKS_STATE", "E:/skillpacks-state/state.json")
+)
 
 # clone dir, upstream repo, where our copy lives, how to compare
 SOURCES = [
     {
         "name": "matt-pocock",
-        "clone": pathlib.Path("E:/matt-upstream"),
+        "clone": CLONE_ROOT / "matt-upstream",
         "repo": "mattpocock/skills",
         "copy": None,  # compared by hash in tools/dev/skillpack, not here
         "note": "hash-checked separately by tools/dev/skillpack",
     },
     {
         "name": "grafana",
-        "clone": pathlib.Path("E:/grafana-skills"),
+        "clone": CLONE_ROOT / "grafana-skills",
         "repo": "grafana/skills",
         "copy": REPO / "docs" / "reference" / "observability",
         "note": "extracted into observability docs",
     },
     {
         "name": "langfuse",
-        "clone": pathlib.Path("E:/langfuse-skills"),
+        "clone": CLONE_ROOT / "langfuse-skills",
         "repo": "langfuse/skills",
         "copy": REPO / "docs" / "reference" / "observability" / "langfuse",
         "note": "extracted into observability docs",
     },
     {
         "name": "timeweb",
-        "clone": pathlib.Path("E:/timeweb-skills"),
+        "clone": CLONE_ROOT / "timeweb-skills",
         "repo": "timeweb-cloud/skills",
         "copy": REPO / "docs" / "reference" / "timeweb",
         "note": "extracted into timeweb docs",
@@ -72,7 +83,7 @@ SOURCES = [
         # stale copy we can detect. Installed through scripts/sync-skills.sh like
         # any project skill.
         "name": "honcho",
-        "clone": pathlib.Path("E:/honcho-upstream"),
+        "clone": CLONE_ROOT / "honcho-upstream",
         "repo": "plastic-labs/honcho",
         "copy": REPO / ".agents" / "skills",
         "note": "vendor skills honcho-memory, honcho-cli installed verbatim",
@@ -116,14 +127,28 @@ def load_state() -> dict:
 
 
 def save_state(state: dict) -> None:
-    STATE.write_text(
+    """Write the sync record atomically.
+
+    A plain write_text truncates first, so a crash mid-write leaves a half file
+    that load_state() reads as {} — every pack then reports "no sync record" and
+    the alert fires on a healthy setup. tmp + os.replace is atomic on the same
+    filesystem, which is the case here.
+    """
+    tmp = STATE.with_name(STATE.name + ".tmp")
+    tmp.write_text(
         json.dumps(state, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8"
     )
+    tmp.replace(STATE)
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument(
+        "--emit-event",
+        action="store_true",
+        help="also print one logfmt line per run (event=skillpacks_check …) for metrics",
+    )
     ap.add_argument(
         "--record",
         nargs="*",
@@ -217,6 +242,17 @@ def main() -> int:
             row["detail"] = src["note"]
         rows.append(row)
 
+    # Machine-readable line for the scheduler. Alloy turns it into metrics, so the
+    # field names are a contract: renaming one empties the panel and the alert
+    # without any error anywhere. One line per run, always, including a run that
+    # found nothing and a run that could not compare anything.
+    if args.emit_event:
+        packs = ",".join(f"{r['name']}:{r['status']}" for r in rows) or "none"
+        print(
+            f"event=skillpacks_check stale={stale_count} unknown={unknown_count} "
+            f'packs="{packs}" ts={int(time.time())}'
+        )
+
     if args.json:
         print(json.dumps({"rows": rows, "stale": stale_count, "unknown": unknown_count}, indent=2, ensure_ascii=False))
     else:
@@ -237,6 +273,13 @@ def main() -> int:
         if not stale_count and not unknown_count:
             print("all extracted packs match their upstream date")
 
+    # With --emit-event the caller is a scheduler, and the counters already carry
+    # the verdict. A non-zero exit means "the job broke" in supervisor terms, and
+    # mixing "found a difference" with "failed" is the same class of error as
+    # treating no-data as an incident. So machine-readable mode always exits 0:
+    # the alert reads stale/unknown, the human reads the table.
+    if args.emit_event:
+        return 0
     return 1 if (stale_count or unknown_count) else 0
 
 
