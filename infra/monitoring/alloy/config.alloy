@@ -82,14 +82,6 @@ prometheus.relabel "drop_low_value" {
     regex         = "ohm_nic_.*"
     action        = "drop"
   }
-
-  // Log-derived metrics (honcho_dedup_*, hermes_llm_*) inherit Alloy's own
-  // component identity. It is constant per pipeline, so it only wastes series
-  // budget and makes every panel legend unreadable.
-  rule {
-    regex  = "component_id|component_path"
-    action = "labeldrop"
-  }
 }
 
 prometheus.scrape "host" {
