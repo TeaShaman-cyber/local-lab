@@ -1,0 +1,35 @@
+name: honcho-embeddings
+
+# Local embedding server for Honcho (TEI, CPU) — same model as Hindsight, so both
+# memory providers produce comparable vectors.
+#
+# Why a separate compose: Honcho's own docker-compose.yml is re-rendered by
+# `honcho start` on every launch, so a service added there would disappear.
+#
+#   docker compose -f embeddings.compose.yml up -d
+#   curl -s localhost:8080/health
+#   curl -s localhost:8080/embed -H 'Content-Type: application/json' \
+#        -d '{"inputs":"тест"}' | python -c "import sys,json;print(len(json.load(sys.stdin)[0]))"
+#
+# Model: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 — 384 dims.
+# Honcho must have VECTOR_DIMENSIONS = 384 and
+# [embedding.model_config.overrides] base_url = "http://host.docker.internal:8080/v1".
+
+services:
+  embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8
+    container_name: honcho-embeddings
+    command:
+      - "--model-id"
+      - "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+      - "--auto-truncate"
+      - "--port"
+      - "80"
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - tei-data:/data
+    restart: unless-stopped
+
+volumes:
+  tei-data:

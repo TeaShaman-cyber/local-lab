@@ -284,6 +284,28 @@ services:
       Метрики /metrics отдают ~337 серий, в Grafana уходит только очередь/эмбеддинги/
       dialectic/API. Контур — local-lab#177, cache-прайс провайдеров — #179.
 
+  - id: INFRA-018
+    name: honcho-embeddings
+    criticality: P2
+    role: локальный embedding-сервер для Honcho (TEI, CPU) — векторы считаются на машине
+    status: active
+    kind: docker-compose
+    location:
+      compose: E:/local-lab/infra/compose/honcho/embeddings.compose.yml
+      runtime_compose: C:/Users/s.poklad/.honcho/profiles/local-test/embeddings.compose.yml
+      port: 8080
+      container: local-test-embeddings-1
+    monitoring: Grafana Cloud — health проверяется вручную (curl /health); метрики TEI не скрейпятся
+    check: curl -fsS http://127.0.0.1:8080/health
+    notes: >-
+      Модель sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2, 384 измерения,
+      та же, что на Hindsight. Honcho подключается через
+      EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL=http://host.docker.internal:8080/v1 в .env
+      (перебивает config.toml — RULE-018). Отдельный compose, потому что основной
+      docker-compose.yml Honcho перезаписывается `honcho start`. Первый старт качает ~470 МБ
+      в volume tei-data. Миграция размерности: documents.embedding и
+      message_embeddings.embedding пересозданы как vector(384), векторы пересчитаны.
+
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
 # Признак продового/тестового — RULE-009 в infrastructure.md.
 test_stands:
