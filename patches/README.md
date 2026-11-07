@@ -1,5 +1,11 @@
 # Патч: детерминированная нормализация GitHub-якорей перед retain
 
+> **FROZEN (2026-11-07).** Работа по Hindsight заморожена по решению пользователя;
+> memory provider переключён на Honcho (#177). Не возобновлять разработку без явного
+> решения. Подробности и правила возврата — `tools/hermes-patches/FROZEN.md`.
+> Известный дефект: этот патч (через `git remote get-url`) давал мигающее окно cmd —
+> фикс `_CREATE_NO_WINDOW` внесён (#67).
+
 Патч к плагину Hindsight для Hermes. Задача — [local-lab#7](https://github.com/TeaShaman-cyber/local-lab/issues/7).
 
 ## Зачем
