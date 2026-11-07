@@ -362,7 +362,7 @@ services:
       container: skillpacks-skillpacks-1
       code: E:/local-lab/tools/dev/skillpacks.py
       schedule: "0 9 * * * Europe/Kaliningrad (supercronic)"
-      state: E:/skillpacks-state.json
+      state: E:/skillpacks-state/state.json
       clones: E:/matt-upstream, E:/grafana-skills, E:/langfuse-skills, E:/timeweb-skills, E:/honcho-upstream
     monitoring: >-
       Grafana Cloud — строка event=skillpacks_check превращается в honcho_skillpacks_stale_total,

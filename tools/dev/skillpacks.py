@@ -43,7 +43,9 @@ REPO = pathlib.Path(os.environ.get("SKILLPACKS_REPO") or pathlib.Path(__file__).
 # inside the scheduled container (/clones, /state). Hardcoding the Windows path
 # would make the container check every pack "clone missing" and still exit 0.
 CLONE_ROOT = pathlib.Path(os.environ.get("SKILLPACKS_CLONE_ROOT", "E:/"))
-STATE = pathlib.Path(os.environ.get("SKILLPACKS_STATE", "E:/skillpacks-state.json"))
+STATE = pathlib.Path(
+    os.environ.get("SKILLPACKS_STATE", "E:/skillpacks-state/state.json")
+)
 
 # clone dir, upstream repo, where our copy lives, how to compare
 SOURCES = [
