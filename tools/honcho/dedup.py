@@ -86,6 +86,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 from collections import defaultdict
@@ -244,6 +245,24 @@ def delete_conclusion(api: str, workspace: str, doc_id: str, timeout: float) -> 
         raise RuntimeError(f"API unreachable at {api}: {exc.reason}") from exc
 
 
+def emit_run(status: str, **fields: object) -> None:
+    """Emit one logfmt line per run — the contract for observability.
+
+    Alloy reads container logs and turns these lines into Prometheus series
+    (``stage.metrics`` in ``loki.process``), so the field names are the metric
+    contract: renaming one silently empties a panel or an alert, and an alert
+    with ``no_data_state: OK`` then reads healthy while protecting nothing.
+    Keep keys stable and values free of spaces.
+
+    ``status`` is deliberately the only place a run's outcome lives: an alert
+    fires on ``status=failed`` or ``status=guard_tripped`` — an event — never on
+    missing data, which would only measure the laptop being switched off.
+    """
+    parts = ["event=run_finished", f"status={status}"]
+    parts += [f"{key}={value}" for key, value in fields.items() if value is not None]
+    print(" ".join(parts))
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Deduplicate Honcho documents by text similarity.")
     parser.add_argument("--workspace", default=DEFAULT_WORKSPACE)
@@ -265,21 +284,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--api", default=os.environ.get("HONCHO_API", "http://api:8000"))
     parser.add_argument("--api-timeout", type=float, default=30.0)
     args = parser.parse_args(argv)
+    started = time.monotonic()
 
     if args.mode_near:
         args.mode = "near"
     for name in ("workspace", "level"):
         if not IDENTIFIER.match(getattr(args, name)):
             print(f"error: --{name} must match {IDENTIFIER.pattern}", file=sys.stderr)
+            emit_run("failed", error="bad_args", mode=args.mode)
             return 2
     if not 0.0 < args.threshold <= 1.0:
         print("error: --threshold must be in (0, 1]", file=sys.stderr)
+        emit_run("failed", error="bad_threshold", mode=args.mode)
         return 2
 
     try:
         conn = connect()
     except psycopg.Error as exc:
         print(f"error: database connection failed: {exc}", file=sys.stderr)
+        emit_run("failed", error="db_connect", mode=args.mode)
         return 2
 
     try:
@@ -318,11 +341,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if not plan:
         print("nothing to do")
+        emit_run("clean", mode=args.mode, level=args.level, live=len(docs), planned=0,
+                 duration_ms=round((time.monotonic() - started) * 1000))
         return 0
 
     if share > args.max_delete_pct:
         print(f"guard: plan removes {share:.1f}% which exceeds --max-delete-pct {args.max_delete_pct}",
               file=sys.stderr)
+        emit_run("guard_tripped", mode=args.mode, level=args.level, live=len(docs),
+                 planned=len(plan), share_pct=round(share, 1),
+                 max_delete_pct=args.max_delete_pct,
+                 duration_ms=round((time.monotonic() - started) * 1000))
         return 1
 
     for keeper, dup in plan[:5]:
@@ -376,6 +405,10 @@ def main(argv: list[str] | None = None) -> int:
             report["failures"] = failures
             write_report()
             print(f"error: run aborted at {current_id}: {exc}", file=sys.stderr)
+            emit_run("failed", error="aborted", mode=args.mode, level=args.level,
+                     live=len(docs), planned=len(plan),
+                     deleted=report["applied_count"], failures=len(failures),
+                     duration_ms=round((time.monotonic() - started) * 1000))
             return 2
         report["applied"] = True
         report["applied_count"] = sum(v for k, v in codes.items() if k == 204)
@@ -391,7 +424,16 @@ def main(argv: list[str] | None = None) -> int:
         # while the bank is unchanged. Signal it instead.
         print(f"error: {len(failures)} deletions were not accepted; run is incomplete",
               file=sys.stderr)
+        emit_run("partial", mode=args.mode, level=args.level, live=len(docs),
+                 planned=len(plan), deleted=report.get("applied_count", 0),
+                 failures=len(failures), duration_ms=round((time.monotonic() - started) * 1000))
         return 1
+
+    emit_run("ok" if args.apply else "dry_run", mode=args.mode, level=args.level,
+             live=len(docs), planned=len(plan),
+             deleted=report.get("applied_count", 0) if args.apply else None,
+             failures=0 if args.apply else None,
+             duration_ms=round((time.monotonic() - started) * 1000))
     return 0
 
 
