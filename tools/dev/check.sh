@@ -141,6 +141,14 @@ echo "=== documented commands ==="
 # `python tools/dev/foo` where `foo` is a bash compatibility wrapper dies with a
 # SyntaxError before doing anything (Codex P2 on #182). The wrappers stay for
 # `bash` callers, so the check is on the documented interpreter, not the file.
+#
+# Examples (documented string -> verdict):
+#   `python tools/dev/state`     -> FAIL: wrapper + state.py (exit 1, file:line printed)
+#   `python tools/dev/state.py`  -> pass: lookahead (?!\.py) excludes it
+#   `bash tools/dev/state`       -> pass: not a `python` invocation
+#   `python tools/dev/check`     -> pass: no check.py, the wrapper is the only entry
+# Negative control: `printf 'run \`python tools/dev/state\`\n' > docs/tmp-bad-ref.md`
+# makes this section exit 1; deleting the file restores exit 0.
 bad_refs=$( (grep -rnoP 'python tools/dev/[A-Za-z0-9_]+(?!\.py)\b' docs .agents/skills AGENTS.md 2>/dev/null || true) \
     | while IFS=: read -r file line tok; do
         name=${tok#python tools/dev/}
