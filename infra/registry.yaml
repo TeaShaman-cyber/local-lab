@@ -262,6 +262,28 @@ services:
       через форму или файл-поток, не через чат. Процедура и грабли —
       docs/reference/sprites.md, контур — local-lab#166.
 
+  - id: INFRA-017
+    name: honcho-local-test
+    criticality: P2
+    role: провайдер памяти Hermes (тест) — deriver, embeddings и dialectic на локальном стеке
+    status: active
+    kind: docker-compose
+    location:
+      compose: C:/Users/s.poklad/.honcho/profiles/local-test/docker-compose.yml
+      runtime_root: C:/Users/s.poklad/.honcho/profiles/local-test
+      env_file: C:/Users/s.poklad/.honcho/profiles/local-test/.env
+      ports: [8000, 5432, 6379]
+      containers: [local-test-api-1, local-test-deriver-1, local-test-database-1, local-test-redis-1]
+    monitoring: Grafana Cloud — prometheus.scrape "honcho_api" (job=honcho-api, instance=theseus-laptop, 30s) через prometheus.relabel "honcho_keep" в Alloy
+    check: curl -fsS http://127.0.0.1:8000/health
+    notes: >-
+      Профиль local-test, ноутбук, не PVE. Deriver и embeddings идут через hermes-proxy
+      (host.docker.internal:8645/v1 → api.deepinfra.com). Фактические модели заданы в .env,
+      который перебивает config.toml: deriver = upstage/solar-mini4:free, embeddings =
+      text-embedding-3-small; в config.toml остаётся неактивный дефолт gpt-5.4-mini.
+      Метрики /metrics отдают ~337 серий, в Grafana уходит только очередь/эмбеддинги/
+      dialectic/API. Контур — local-lab#177, cache-прайс провайдеров — #179.
+
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
 # Признак продового/тестового — RULE-009 в infrastructure.md.
 test_stands:
