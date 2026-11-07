@@ -288,6 +288,9 @@ services:
       принимаются молча и не применяются, из-за чего запрос уходит на общий прокси и
       упирается в 429 fair-share. Solar Mini на том же dream-контракте не вызывала
       create_observations и давала created_count=0.
+      Fallback dream-моделей — gemini-2.5-flash через тот же BotHub (другое семейство,
+      чтобы сбой mistral не сваливал обе модели). Failover проверен ломанием primary:
+      404 MODEL_NOT_FOUND → switching to backup → run completed, created_count=4.
       Эмбеддинги — локальные, сервисом INFRA-018 (TEI, 384 измерения);
       прежняя внешняя text-embedding-3-small больше не используется.
       Метрики /metrics отдают ~337 серий, в Grafana уходит только очередь/эмбеддинги/
