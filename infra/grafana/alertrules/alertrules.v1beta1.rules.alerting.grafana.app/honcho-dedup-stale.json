@@ -1,0 +1,76 @@
+{
+  "apiVersion": "rules.alerting.grafana.app/v1beta1",
+  "kind": "AlertRule",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/provenance": "api",
+      "grafana.com/updateTimestamp": "2026-11-07T21:38:16Z",
+      "grafana.com/updatedBy": "cg2aw002vdqtca"
+    },
+    "labels": {
+      "grafana.app/folder": "ag2b9ny7raxogc"
+    },
+    "name": "honcho-dedup-stale",
+    "namespace": "stacks-1891821"
+  },
+  "spec": {
+    "annotations": {
+      "description": "Метка honcho_dedup_last_success_timestamp_seconds старше 30 часов (сейчас {{ $value | humanizeDuration }}), и при этом сам сборщик метрик жив (up{job=\"alloy-self\"} == 1).\n\nЗачем вторая половина условия: «нет данных» одинаково выглядит для выключенного ноутбука и для умершего планировщика. Если Alloy не работает, up пуст, правило уходит в no-data и молчит — это честное «не знаю». Если Alloy жив, а уборки не было 30 часов, значит задача не запускается, и это настоящий отказ.\n\nУспех — это ok (что-то удалил) или clean (удалять было нечего); failed, partial и guard_tripped метку не двигают намеренно.\n\nПорог 30 часов, а не 24: ночная задача идёт в 04:15, один пропущенный запуск не должен будить. Если ноутбук выключен на выходных, срабатывания не будет вовсе — Alloy тоже не работает.\n\nГраница: если метрика last_success исчезнет совсем (30 дней простоя), правило промолчит. Отдельный класс «метрик нет вообще» требует своего правила и сюда не входит.",
+      "runbook_url": "https://github.com/TeaShaman-cyber/local-lab/issues/193",
+      "summary": "Уборка повторов не отмечалась успешной более 30 часов"
+    },
+    "execErrState": "Ok",
+    "expressions": {
+      "A": {
+        "datasourceUID": "grafanacloud-prom",
+        "model": {
+          "expr": "(time() - max(honcho_dedup_last_success_timestamp_seconds) > 108000) and on() (max(up{job=\"alloy-self\"}) == 1)",
+          "instant": true,
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        },
+        "relativeTimeRange": {
+          "from": "5m0s",
+          "to": "0s"
+        }
+      },
+      "B": {
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  108000
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        },
+        "source": true
+      }
+    },
+    "for": "10m0s",
+    "labels": {
+      "area": "dedup",
+      "component": "honcho",
+      "severity": "critical"
+    },
+    "noDataState": "Ok",
+    "notificationSettings": {
+      "receiver": "theseus-email",
+      "type": "SimplifiedRouting"
+    },
+    "title": "Honcho dedup: нет успешного прогона 30 ч",
+    "trigger": {
+      "interval": "1m"
+    }
+  }
+}

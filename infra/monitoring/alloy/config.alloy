@@ -401,4 +401,119 @@ loki.process "container_logs" {
     expression = "^\\s*$"
     drop_counter_reason = "blank_line"
   }
+
+  // Dedup maintenance job (tools/honcho/dedup.py, issue #193). It prints exactly
+  // one logfmt line per run. The fields are a contract: renaming one silently
+  // empties a panel or an alert.
+  //
+  // Input (one line, from the dedup container's stdout):
+  //   event=run_finished status=ok mode=exact level=explicit live=1339 planned=64 deleted=64 failures=0 duration_ms=1274 ts=1794088751
+  //
+  // Output (series exposed on Alloy /metrics, shipped by prometheus.scrape "alloy_self"):
+  //   honcho_dedup_runs_total{status="ok"}                       1        (incremented once)
+  //   honcho_dedup_deleted_total{status="ok"}                    64       (added: deleted)
+  //   honcho_dedup_live_documents{status="ok"}                   1339     (set: live)
+  //   honcho_dedup_last_success_timestamp_seconds{status="ok"}   1794088751  (set: ts, because status=ok|clean)
+  //   honcho_dedup_last_failure_timestamp_seconds               absent    (only status=failed|partial|guard_tripped)
+  //
+  // A run with status=clean (nothing to remove) still moves the success timestamp
+  // and still increments the runs counter, but leaves deleted_total untouched.
+  // A run with status=dry_run touches only runs_total and live_documents.
+  //
+  // Scoped to the dedup container so the general pipeline does not try to parse
+  // every other container's output.
+  stage.match {
+    selector = "{service=\"dedup\"} |= \"event=run_finished\""
+
+    stage.logfmt {
+      mapping = { event = "", status = "", live = "", planned = "", deleted = "", failures = "", ts = "" }
+    }
+
+    // stage.metrics takes its labels from the entry's label set, NOT from the
+    // extracted map, so without this line the runs counter has no status
+    // dimension and every outcome collapses into one series.
+    stage.labels {
+      values = { status = "" }
+    }
+
+    stage.metrics {
+      metric.counter {
+        name              = "dedup_runs_total"
+        prefix            = "honcho_"
+        description       = "Honcho dedup maintenance runs, by outcome"
+        source            = "event"
+        value             = "run_finished"
+        action            = "inc"
+        // Default is 5m. Nightly runs are 24h apart, so the series would be
+        // marked stale and vanish from the panel between runs.
+        max_idle_duration = "72h"
+      }
+
+      metric.counter {
+        name              = "dedup_deleted_total"
+        prefix            = "honcho_"
+        description       = "Documents removed by Honcho dedup maintenance"
+        source            = "deleted"
+        action            = "add"
+        max_idle_duration = "72h"
+      }
+
+      metric.gauge {
+        name              = "dedup_live_documents"
+        prefix            = "honcho_"
+        description       = "Live explicit documents seen by the last dedup run"
+        source            = "live"
+        action            = "set"
+        max_idle_duration = "72h"
+      }
+    }
+
+    // A successful run has TWO shapes: "ok" removed something, "clean" found
+    // nothing to remove. Both are success. Matching only "ok" would leave the
+    // timestamp frozen on every quiet night and raise "no successful run" on a
+    // perfectly healthy job.
+    //
+    // 30d, not 72h: the "no successful run" rule needs the series to outlive a
+    // long laptop-off gap. If the gauge expired while Alloy kept running, that
+    // rule would move to no-data and read healthy — silence about a scheduler
+    // that actually died.
+    stage.match {
+      selector = "{service=\"dedup\"} |~ \"status=(ok|clean)\""
+
+      stage.metrics {
+        metric.gauge {
+          name              = "dedup_last_success_timestamp_seconds"
+          prefix            = "honcho_"
+          description       = "Unix time of the last successful Honcho dedup run"
+          source            = "ts"
+          action            = "set"
+          max_idle_duration = "720h"
+        }
+      }
+    }
+
+    // Failure needs its own timestamp. Reading it from the counter
+    // (max_over_time over the status series) cannot answer "when", so the rule
+    // would stay firing until the counter expired — days after triage.
+    stage.match {
+      selector = "{service=\"dedup\"} |~ \"status=(failed|partial|guard_tripped)\""
+
+      stage.metrics {
+        metric.gauge {
+          name              = "dedup_last_failure_timestamp_seconds"
+          prefix            = "honcho_"
+          description       = "Unix time of the last failed or guarded Honcho dedup run"
+          source            = "ts"
+          action            = "set"
+          max_idle_duration = "720h"
+        }
+      }
+    }
+
+    // status was promoted to a label only so the metric could carry it. Drop it
+    // afterwards so Loki does not grow a new stream per outcome.
+    stage.label_drop {
+      values = ["status"]
+    }
+  }
 }

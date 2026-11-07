@@ -260,6 +260,12 @@ def emit_run(status: str, **fields: object) -> None:
     """
     parts = ["event=run_finished", f"status={status}"]
     parts += [f"{key}={value}" for key, value in fields.items() if value is not None]
+    # The run's own finish time, in seconds. Alloy must use THIS rather than its
+    # own clock: if the collector was stopped while Docker kept running, the
+    # queued lines are read at restart and a collector-side "now" would stamp an
+    # old failure as fresh — and an old success as fresh too, hiding a dead
+    # scheduler.
+    parts.append(f"ts={int(time.time())}")
     print(" ".join(parts))
 
 
