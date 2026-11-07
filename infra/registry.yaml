@@ -202,14 +202,29 @@ services:
       tenant_id: 673ee0ec-b9c2-48e3-86c9-0737bd2e99a9
       account: pokladsemen@gmail.com
       cli: "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/az.cmd"
+      exe_dev_operator:
+        vm: theseus-exe-shell-probe
+        wrapper: /home/exedev/.local/bin/az-owner
+        service_principal: theseus-exe-operator
+        app_id: 9d03ca4c-53e1-4b57-9acf-728d4985457d
+        role: Owner
+        scope: /subscriptions/d760fa4b-978b-4b6d-a62e-93b55bc36746
+        credential_store: GNOME Secret Service
       resources:
         - "theseus-translator (Microsoft.CognitiveServices/accounts, northeurope)"
     monitoring: не мониторится — расходов нет; контроль через az consumption usage list
     check: >-
-      az account show -o json → state=Enabled; az resource list -o json → theseus-translator;
+      Windows az account show -o json → state=Enabled; exe.dev az-owner account show →
+      тот же tenant/subscription, user.type=servicePrincipal; az-owner role assignment list →
+      Owner на subscription scope; az resource list -o json → theseus-translator;
       az consumption usage list --start-date … --end-date … → [] при отсутствии использования
     notes: >-
       Подписка Pay-As-You-Go, не Free Trial (quotaId PayAsYouGo_2014-09-01), состояние Enabled;
+      основной агентский operator route теперь exe.dev az-owner: certificate service principal
+      theseus-exe-operator с Owner на subscription scope; private key хранится в GNOME Secret
+      Service на VM, PEM и AZURE_CONFIG_DIR материализуются только в /run/user/1000 tmpfs,
+      ~/.azure после принятого вызова отсутствует; reboot acceptance PASS. Windows browser-login
+      остаётся интерактивным/аварийным маршрутом. Полный Owner-доступ не отменяет RULE-017.
       spendingLimit = Off, то есть автоматической остановки при перерасходе нет — это условие
       RULE-017. Вход на Windows: device code блокирован политикой
       (AADSTS530035 BlockedBySecurityDefaults), broker WAM не завершает flow, рабочий маршрут —
