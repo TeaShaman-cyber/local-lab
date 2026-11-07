@@ -20,9 +20,9 @@ Exit codes: 0 = copy matches its base and no upstream drift, 1 = drift found,
 
 Usage::
 
-    python tools/dev/skillpack                 # human-readable report
-    python tools/dev/skillpack --json
-    python tools/dev/skillpack --self-test
+    python tools/dev/skillpack.py                 # human-readable report
+    python tools/dev/skillpack.py --json
+    python tools/dev/skillpack.py --self-test
 """
 
 from __future__ import annotations

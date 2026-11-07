@@ -61,6 +61,23 @@ local working tree -> local branch -> tracking ref -> live remote ref -> GitHub 
 - Важные записи требуют readback.
 - Если нужное свидетельство не установлено — `BLOCKED`, `DEGRADED`, `UNKNOWN` или `REPROBE_REQUIRED` вместо выдуманного успеха.
 
+## PR gate
+
+- `gate-review` в `.github/workflows/gate.yml` не пропускает merge, пока не появится внешнее ревью **точного head** PR. Принимаются четыре формы: review-объект Codex, receipt «Reviewed commit: <sha>», 👍-реакция после даты head, либо `APPROVED` review человека.
+- **Ручной апрув — штатный fallback, а не обход.** Codex-бот может быть недоступен; тогда владелец репозитория ставит `APPROVED` на тот же head, и гейт пропускает. Причину указать в PR (бот недоступен, ревью человеком).
+- После каждого push head меняется: проверить `codex-review-state` (`has_unresolved_findings`) и при необходимости попросить `@codex review`.
+- Гейт ждёт 10 минут, затем падает с `P1 change without outside review`; проверки при этом пройдены. Если ревью пришло позже — `gh run rerun <run-id>`, не новый коммит.
+- Мерж — по точному head: `gh pr merge --match-head-commit <sha>`; ветку не удалять, если проектом не решено иначе.
+- Комментарий бота с findings — не шум: P1/P2 закрывать правкой или явным ответом, «gate pass» этого не заменяет.
+
+## Skills
+
+- Источник истины — `.agents/skills/<name>/SKILL.md` в репозитории. `$HERMES_HOME/skills/local-lab/` — только проекция.
+- Порядок правки: ветка → PR → merge → `scripts/sync-skills.sh` (readback; отказывает при пустом источнике или пустом `HERMES_HOME`).
+- Не создавать параллельный `.hermes/skills/`. `skill_manage` пишет в профиль (installed) — для проектных скиллов этот путь не использовать.
+- Внешние скилпаки (matt-pocock, grafana, langfuse, timeweb) не патчить в installed: свежесть — `python tools/dev/skillpacks.py` (state в `E:/skillpacks-state.json`, mtime после checkout врёт), отличия — в `docs/agents/deviations.md`.
+- Скилл вендора не копировать: сверить, что он уже есть у вендора, и держать указатель, а не устаревающую копию.
+
 ## Scope
 
 Скилл содержит только повторяющиеся инварианты маршрутизации. Подробные процедуры, редкие сбои и восстановление остаются в `docs/` и в cookbook; при нехватке деталей загружать наименьший нужный раздел и останавливаться.

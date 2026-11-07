@@ -18,8 +18,8 @@ every file forever. The honest signal for those is "upstream moved after we copi
 Exit codes: 0 = all current, 1 = at least one stale, 2 = cannot compare.
 
 Usage:
-    python tools/dev/skillpacks
-    python tools/dev/skillpacks --json
+    python tools/dev/skillpacks.py
+    python tools/dev/skillpacks.py --json
 """
 
 from __future__ import annotations
