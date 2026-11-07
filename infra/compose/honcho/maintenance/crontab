@@ -1,0 +1,13 @@
+SHELL=/bin/sh
+PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Nightly dedup of memory documents.
+#
+# --apply is used on a schedule on purpose: a dry-run cron job would produce
+# reports nobody reads. What makes it safe unattended is the guard inside the
+# script (--max-delete-pct aborts a run that would remove too much) plus soft
+# deletes through the API, which the reconciler later prunes.
+#
+# A clean run prints "nothing to do"; that line in the log is the signal that
+# the bank still holds and no duplication regrew overnight.
+15 4 * * * root python /app/dedup.py --apply --json /var/log/honcho/last.json >> /var/log/honcho/dedup.log 2>&1
