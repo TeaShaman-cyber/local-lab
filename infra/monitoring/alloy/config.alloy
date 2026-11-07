@@ -463,6 +463,11 @@ loki.process "container_logs" {
     // nothing to remove. Both are success. Matching only "ok" would leave the
     // timestamp frozen on every quiet night and raise "no successful run" on a
     // perfectly healthy job.
+    //
+    // 30d, not 72h: the "no successful run" rule needs the series to outlive a
+    // long laptop-off gap. If the gauge expired while Alloy kept running, that
+    // rule would move to no-data and read healthy — silence about a scheduler
+    // that actually died.
     stage.match {
       selector = "{service=\"dedup\"} |~ \"status=(ok|clean)\""
 
@@ -473,7 +478,25 @@ loki.process "container_logs" {
           description       = "Unix time of the last successful Honcho dedup run"
           source            = "finished_ts"
           action            = "set"
-          max_idle_duration = "72h"
+          max_idle_duration = "720h"
+        }
+      }
+    }
+
+    // Failure needs its own timestamp. Reading it from the counter
+    // (max_over_time over the status series) cannot answer "when", so the rule
+    // would stay firing until the counter expired — days after triage.
+    stage.match {
+      selector = "{service=\"dedup\"} |~ \"status=(failed|partial|guard_tripped)\""
+
+      stage.metrics {
+        metric.gauge {
+          name              = "dedup_last_failure_timestamp_seconds"
+          prefix            = "honcho_"
+          description       = "Unix time of the last failed or guarded Honcho dedup run"
+          source            = "finished_ts"
+          action            = "set"
+          max_idle_duration = "720h"
         }
       }
     }
