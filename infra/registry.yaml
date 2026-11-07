@@ -277,10 +277,12 @@ services:
     monitoring: Grafana Cloud — prometheus.scrape "honcho_api" (job=honcho-api, instance=theseus-laptop, 30s) через prometheus.relabel "honcho_keep" в Alloy
     check: curl -fsS http://127.0.0.1:8000/health
     notes: >-
-      Профиль local-test, ноутбук, не PVE. Deriver и embeddings идут через hermes-proxy
+      Профиль local-test, ноутбук, не PVE. Deriver идёт через hermes-proxy
       (host.docker.internal:8645/v1 → api.deepinfra.com). Фактические модели заданы в .env,
-      который перебивает config.toml: deriver = upstage/solar-mini4:free, embeddings =
-      text-embedding-3-small; в config.toml остаётся неактивный дефолт gpt-5.4-mini.
+      который перебивает config.toml (RULE-018): deriver = upstage/solar-mini4:free;
+      в config.toml остаётся неактивный дефолт gpt-5.4-mini.
+      Эмбеддинги — локальные, отдельным сервисом INFRA-018 (TEI, 384 измерения);
+      прежняя внешняя text-embedding-3-small больше не используется.
       Метрики /metrics отдают ~337 серий, в Grafana уходит только очередь/эмбеддинги/
       dialectic/API. Контур — local-lab#177, cache-прайс провайдеров — #179.
 

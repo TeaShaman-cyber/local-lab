@@ -18,7 +18,6 @@ name: honcho-embeddings
 services:
   embeddings:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8
-    container_name: honcho-embeddings
     command:
       - "--model-id"
       - "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
