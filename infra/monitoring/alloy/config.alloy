@@ -411,7 +411,7 @@ loki.process "container_logs" {
     selector = "{service=\"dedup\"} |= \"event=run_finished\""
 
     stage.logfmt {
-      mapping = { event = "", status = "", live = "", planned = "", deleted = "", failures = "" }
+      mapping = { event = "", status = "", live = "", planned = "", deleted = "", failures = "", ts = "" }
     }
 
     // stage.metrics takes its labels from the entry's label set, NOT from the
@@ -419,12 +419,6 @@ loki.process "container_logs" {
     // dimension and every outcome collapses into one series.
     stage.labels {
       values = { status = "" }
-    }
-
-    // A gauge can only set an extracted value, and "now" is not extracted.
-    stage.template {
-      source   = "finished_ts"
-      template = "{{ now | unixEpoch }}"
     }
 
     stage.metrics {
@@ -476,7 +470,7 @@ loki.process "container_logs" {
           name              = "dedup_last_success_timestamp_seconds"
           prefix            = "honcho_"
           description       = "Unix time of the last successful Honcho dedup run"
-          source            = "finished_ts"
+          source            = "ts"
           action            = "set"
           max_idle_duration = "720h"
         }
@@ -494,7 +488,7 @@ loki.process "container_logs" {
           name              = "dedup_last_failure_timestamp_seconds"
           prefix            = "honcho_"
           description       = "Unix time of the last failed or guarded Honcho dedup run"
-          source            = "finished_ts"
+          source            = "ts"
           action            = "set"
           max_idle_duration = "720h"
         }
