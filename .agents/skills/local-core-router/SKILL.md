@@ -63,8 +63,10 @@ local working tree -> local branch -> tracking ref -> live remote ref -> GitHub 
 
 ## PR gate
 
-- `gate-review` в `.github/workflows/gate.yml` не пропускает merge, пока `chatgpt-codex-connector` не отревьюил **точный head** PR (review, receipt «Reviewed commit», или 👍 после даты head). Ревью на старом коммите не считается.
+- `gate-review` в `.github/workflows/gate.yml` не пропускает merge, пока не появится внешнее ревью **точного head** PR. Принимаются четыре формы: review-объект Codex, receipt «Reviewed commit: <sha>», 👍-реакция после даты head, либо `APPROVED` review человека.
+- **Ручной апрув — штатный fallback, а не обход.** Codex-бот может быть недоступен; тогда владелец репозитория ставит `APPROVED` на тот же head, и гейт пропускает. Причину указать в PR (бот недоступен, ревью человеком).
 - После каждого push head меняется: проверить `codex-review-state` (`has_unresolved_findings`) и при необходимости попросить `@codex review`.
+- Гейт ждёт 10 минут, затем падает с `P1 change without outside review`; проверки при этом пройдены. Если ревью пришло позже — `gh run rerun <run-id>`, не новый коммит.
 - Мерж — по точному head: `gh pr merge --match-head-commit <sha>`; ветку не удалять, если проектом не решено иначе.
 - Комментарий бота с findings — не шум: P1/P2 закрывать правкой или явным ответом, «gate pass» этого не заменяет.
 
