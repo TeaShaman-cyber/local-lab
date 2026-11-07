@@ -351,6 +351,34 @@ services:
       чем Alloy (refresh 30s) заберёт его логи. near-режим (pg_trgm, threshold 0.8) в расписании
       не включён. Перед destructive-прогоном — pg_dump таблицы documents. Контур — local-lab#193.
 
+  - id: INFRA-020
+    name: skillpacks
+    criticality: P3
+    role: ежедневная проверка свежести внешних скилл-паков — сигнал, а не автообновление
+    status: active
+    kind: docker-compose
+    location:
+      compose: E:/local-lab/infra/compose/skillpacks/docker-compose.yml
+      container: skillpacks-skillpacks-1
+      code: E:/local-lab/tools/dev/skillpacks.py
+      schedule: "0 9 * * * Europe/Kaliningrad (supercronic)"
+      state: E:/skillpacks-state.json
+      clones: E:/matt-upstream, E:/grafana-skills, E:/langfuse-skills, E:/timeweb-skills, E:/honcho-upstream
+    monitoring: >-
+      Grafana Cloud — строка event=skillpacks_check превращается в honcho_skillpacks_stale_total,
+      honcho_skillpacks_unknown_total и honcho_skillpacks_last_check_timestamp_seconds
+      через stage.metrics в Alloy; скрейпится с alloy-self. Правило: skillpacks-stale
+      (stale > 0, warning) → почта.
+    check: python tools/dev/skillpacks.py --emit-event
+    notes: >-
+      Автообновления нет намеренно: чужой скилл — чужое мнение о своём продукте, новая версия
+      может быть регрессом. Задача — заставить посмотреть diff и решить. При --emit-event скрипт
+      всегда возвращает 0: ненулевой код у планировщика означает «задача сломалась», а не «нашёл
+      расхождение» — это разные события. Скрипт НЕ копируется в образ, а монтируется из /repo:
+      иначе после правки контейнер выполнял бы старую версию. Клоны монтируются rw, потому что
+      нужен git fetch; в образе включён safe.directory. Path-корни переопределяются
+      SKILLPACKS_CLONE_ROOT / SKILLPACKS_STATE / SKILLPACKS_REPO. Контур — local-lab#199.
+
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
 # Признак продового/тестового — RULE-009 в infrastructure.md.
 test_stands:

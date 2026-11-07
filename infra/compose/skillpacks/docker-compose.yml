@@ -1,0 +1,39 @@
+# Skill-pack freshness check, isolated from every other stack.
+#
+# Deliberately its own compose file: this job knows nothing about Honcho,
+# Postgres or the API, and putting it next to them would mean a `docker compose
+# up` on Honcho also restarts a Git check whose failures have nothing to do with
+# memory.
+#
+# No ports are published. The container does not listen; it writes one logfmt
+# line per run, and Alloy picks it up from the container log exactly as it does
+# for the dedup job.
+
+services:
+  skillpacks:
+    build:
+      context: ${LOCAL_LAB_ROOT:?set LOCAL_LAB_ROOT to the local-lab clone path}
+      dockerfile: infra/compose/skillpacks/Dockerfile
+    image: local-lab-skillpacks
+    environment:
+      # Paths inside the container, not on the host. Both roots are env-driven
+      # in the script for exactly this reason.
+      SKILLPACKS_CLONE_ROOT: /clones
+      SKILLPACKS_STATE: /state/skillpacks-state.json
+      SKILLPACKS_REPO: /repo
+      TZ: Europe/Kaliningrad
+    volumes:
+      # Our copies (docs/reference/..., .agents/skills/...) live in the clone and
+      # change constantly, so they are mounted rather than baked into the image.
+      # Read-only: this job compares dates, it never edits the repository.
+      - E:/local-lab:/repo:ro
+      # rw: the job runs `git fetch` in each clone, and that writes into .git.
+      - E:/matt-upstream:/clones/matt-upstream
+      - E:/grafana-skills:/clones/grafana-skills
+      - E:/langfuse-skills:/clones/langfuse-skills
+      - E:/timeweb-skills:/clones/timeweb-skills
+      - E:/honcho-upstream:/clones/honcho-upstream
+      # The sync record must survive container recreation, otherwise every run
+      # starts with "no sync record" and reports every pack as unknown.
+      - E:/skillpacks-state.json:/state/skillpacks-state.json
+    restart: unless-stopped
