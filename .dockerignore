@@ -1,0 +1,14 @@
+# Build context for infra/compose/honcho/maintenance.
+#
+# The maintenance image only needs tools/honcho/dedup.py and its crontab, but
+# the context is the repository root, so everything else is excluded to keep
+# `docker compose build` cheap.
+
+.git
+.github
+**/__pycache__
+**/*.pyc
+.venv
+venv
+node_modules
+*.log

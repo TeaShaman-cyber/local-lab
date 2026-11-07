@@ -31,5 +31,28 @@ services:
       - tei-data:/data
     restart: unless-stopped
 
+  # Scheduled dedup of memory documents. Runs as a Linux container on purpose:
+  # scheduling Python on Windows drags in console-subsystem interpreters,
+  # pythonw, Task Scheduler and flashing windows (see
+  # docs/reference/windows-scheduled-tasks.md). Inside a container there is no
+  # desktop to flash on.
+  dedup:
+    build:
+      context: ${LOCAL_LAB_ROOT:?set LOCAL_LAB_ROOT to the local-lab clone path}
+      dockerfile: infra/compose/honcho/maintenance/Dockerfile
+    environment:
+      PGHOST: database
+      PGPORT: "5432"
+      PGDATABASE: postgres
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      HONCHO_API: http://api:8000
+    depends_on:
+      database:
+        condition: service_healthy
+      api:
+        condition: service_started
+    restart: unless-stopped
+
 volumes:
   tei-data:
