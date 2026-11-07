@@ -1,0 +1,87 @@
+{
+  "apiVersion": "rules.alerting.grafana.app/v1beta1",
+  "kind": "AlertRule",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/provenance": "",
+      "grafana.com/updateTimestamp": "2026-10-28T00:40:23Z",
+      "grafana.com/updatedBy": "cg2aw002vdqtca"
+    },
+    "labels": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/group": "nous-billing",
+      "grafana.com/group-index": "0"
+    },
+    "name": "cg2jisl4clslcb",
+    "namespace": "stacks-1891821"
+  },
+  "spec": {
+    "annotations": {
+      "description": "За 15 минут Hermes получил отказ Nous с формулировкой \"out of funds\" ({{ $value }} шт.). Это событие, а не тишина: оно возможно только когда запрос реально ушёл, значит ноутбук работал. Затрагивает и основной чат, и фоновый review, и титлы — все они ходят в Nous. Пополнить баланс в portal.nousresearch.com или временно перевести модели на другого провайдера.",
+      "summary": "Nous: кончились деньги или ключ заблокирован"
+    },
+    "execErrState": "Alerting",
+    "expressions": {
+      "A": {
+        "datasourceUID": "grafanacloud-logs",
+        "model": {
+          "expr": "sum(count_over_time({service_name=\"hermes\"} |= \"out of funds\" [15m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        },
+        "relativeTimeRange": {
+          "from": "15m0s",
+          "to": "0s"
+        }
+      },
+      "B": {
+        "model": {
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      "C": {
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        },
+        "source": true
+      }
+    },
+    "for": "1m0s",
+    "labels": {
+      "area": "billing",
+      "component": "nous",
+      "severity": "critical"
+    },
+    "noDataState": "Ok",
+    "notificationSettings": {
+      "receiver": "theseus-email",
+      "type": "SimplifiedRouting"
+    },
+    "title": "Nous: отказ по балансу или ключу",
+    "trigger": {
+      "interval": "1m"
+    }
+  }
+}

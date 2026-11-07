@@ -1,0 +1,70 @@
+{
+  "apiVersion": "rules.alerting.grafana.app/v1beta1",
+  "kind": "AlertRule",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/provenance": "",
+      "grafana.com/updateTimestamp": "2026-10-28T12:14:59Z",
+      "grafana.com/updatedBy": "cg2aw002vdqtca"
+    },
+    "labels": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/group": "hindsight-llm-route",
+      "grafana.com/group-index": "0"
+    },
+    "name": "ag2l8r77y9r7kc",
+    "namespace": "stacks-1891821"
+  },
+  "spec": {
+    "execErrState": "Ok",
+    "expressions": {
+      "A": {
+        "datasourceUID": "grafanacloud-logs",
+        "model": {
+          "expr": "sum(count_over_time({job=\"docker\", container=\"hindsight-api\"} |= \"scope=consolidation\" |= \"chatgpt/gpt-6-luna\" [1h]))",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "maxLines": 1,
+          "queryType": "instant",
+          "refId": "A"
+        },
+        "queryType": "instant",
+        "relativeTimeRange": {
+          "from": "1h0m0s",
+          "to": "0s"
+        }
+      },
+      "B": {
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        },
+        "source": true
+      }
+    },
+    "for": "5m0s",
+    "labels": {
+      "service": "hindsight",
+      "severity": "info"
+    },
+    "noDataState": "Ok",
+    "title": "Hindsight: консолидация ушла на резервную модель (подписка)",
+    "trigger": {
+      "interval": "1m"
+    }
+  }
+}

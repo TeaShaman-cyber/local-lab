@@ -1,0 +1,83 @@
+{
+  "apiVersion": "rules.alerting.grafana.app/v1beta1",
+  "kind": "AlertRule",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "fg2ank14un9xcd",
+      "grafana.com/provenance": "",
+      "grafana.com/updateTimestamp": "2026-10-28T11:53:59Z",
+      "grafana.com/updatedBy": "cg2aw002vdqtca"
+    },
+    "labels": {
+      "grafana.app/folder": "fg2ank14un9xcd",
+      "grafana.com/group": "usage-limits",
+      "grafana.com/group-index": "1"
+    },
+    "name": "a7cd90e2-1150-47df-84ba-9e4baee6ab56",
+    "namespace": "stacks-1891821"
+  },
+  "spec": {
+    "annotations": {
+      "description": "Reduce cardinality: drop unused metrics or high-cardinality labels. See /a/grafana-cmab-app/cardinality",
+      "summary": "Active series are {{ $values.B }}, above 8000 (free tier limit is 10,000)."
+    },
+    "execErrState": "Error",
+    "expressions": {
+      "A": {
+        "datasourceUID": "grafanacloud-usage",
+        "model": {
+          "expr": "sum(grafanacloud_instance_active_series)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "range": false,
+          "refId": "A"
+        },
+        "relativeTimeRange": {
+          "from": "10m0s",
+          "to": "0s"
+        }
+      },
+      "B": {
+        "model": {
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      "C": {
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  8000
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        },
+        "source": true
+      }
+    },
+    "for": "15m0s",
+    "labels": {
+      "severity": "warning"
+    },
+    "missingSeriesEvalsToResolve": 2,
+    "noDataState": "Ok",
+    "title": "Active series approaching free tier limit (\u003e8000)",
+    "trigger": {
+      "interval": "1m"
+    }
+  }
+}

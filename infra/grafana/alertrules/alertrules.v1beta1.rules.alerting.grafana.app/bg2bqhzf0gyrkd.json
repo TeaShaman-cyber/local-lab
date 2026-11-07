@@ -1,0 +1,77 @@
+{
+  "apiVersion": "rules.alerting.grafana.app/v1beta1",
+  "kind": "AlertRule",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/provenance": "api",
+      "grafana.com/updateTimestamp": "2026-11-07T20:52:16Z",
+      "grafana.com/updatedBy": "cg2aw002vdqtca"
+    },
+    "labels": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/group": "hindsight-prod",
+      "grafana.com/group-index": "0"
+    },
+    "name": "bg2bqhzf0gyrkd",
+    "namespace": "stacks-1891821"
+  },
+  "spec": {
+    "annotations": {
+      "description": "p95 recall на продакшен-Hindsight достиг {{ $value }} с при пороге 90 с. При лимите 80 кандидатов норма ~30 с; рост к 90+ означает возврат к деградации (лимит кандидатов, троттлинг CPU, конкуренция).\n\nNoData понижен до OK 2026-11-07: Hindsight намеренно заморожен (tools/hermes-patches/FROZEN.md), и отсутствие метрик — ожидаемое состояние, а не инцидент. 2026-11-06 23:48 правило ушло в NoData и висело сутки, шумя письмами про выключенный сервис. Правило не на паузе: когда Hindsight вернут и метрики пойдут, оно начнёт считать само. Если сервис вернётся и его нужно ловить на «метрик нет вообще» — это отдельное правило на up{job=\"hindsight-api\"} == 0, а не это.\n\nIssue: #192 (правка и readback записаны там).",
+      "summary": "Hindsight production: recall p95 выше 90 с"
+    },
+    "execErrState": "Ok",
+    "expressions": {
+      "A": {
+        "datasourceUID": "grafanacloud-prom",
+        "model": {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(hindsight_operation_duration_seconds_bucket{job=\"hindsight-api\", operation=\"recall\", source=\"api\"}[10m])))",
+          "instant": true,
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        },
+        "relativeTimeRange": {
+          "from": "10m0s",
+          "to": "0s"
+        }
+      },
+      "B": {
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  90
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        },
+        "source": true
+      }
+    },
+    "for": "10m0s",
+    "labels": {
+      "component": "hindsight",
+      "env": "production",
+      "severity": "warning"
+    },
+    "noDataState": "Ok",
+    "notificationSettings": {
+      "receiver": "theseus-email",
+      "type": "SimplifiedRouting"
+    },
+    "title": "Hindsight production: recall p95 > 90 с",
+    "trigger": {
+      "interval": "1m"
+    }
+  }
+}
