@@ -11,6 +11,12 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 echo "=== infra contract ==="
 python tools/contracts/check_infra.py
 
+# Monitoring scripts emit logfmt and Alloy parses it. This is a cross-file
+# contract, not a Python/HCL syntax check; run it before linting or review.
+echo "=== logfmt monitoring contract ==="
+python tools/contracts/check_logfmt.py
+python tools/contracts/check_logfmt.py --self-test
+
 echo "=== infra self-test ==="
 python tools/contracts/check_infra.py --self-test
 
