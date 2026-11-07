@@ -98,6 +98,88 @@ Check locally before trusting the cloud: Alloy's `/metrics` shows
 `loki_process_custom_<name>` — that prefix is the default and worth confirming
 rather than assuming.
 
+## Metrics from a one-shot job (scheduler in a container)
+
+A maintenance job that runs once a night has no `/metrics` endpoint. The clean
+route is one logfmt line per run, parsed into series — but six things bite, and
+each one silently produces a green panel that protects nothing.
+
+```alloy
+stage.match {
+  selector = "{service=\"dedup\"} |= \"event=run_finished\""
+
+  stage.logfmt {
+    mapping = { event = "", status = "", deleted = "", live = "", ts = "" }
+  }
+
+  stage.labels {                     // 2
+    values = { status = "" }
+  }
+
+  stage.metrics {
+    metric.counter {
+      name = "dedup_runs_total"; prefix = "honcho_"
+      source = "event"; value = "run_finished"; action = "inc"
+      max_idle_duration = "720h"     // 1
+    }
+    metric.counter {
+      name = "dedup_deleted_total"; prefix = "honcho_"
+      source = "deleted"; action = "add"
+      max_idle_duration = "720h"
+    }
+  }
+
+  stage.match {                      // 7
+    selector = "{service=\"dedup\"} |~ \"status=(ok|clean)\""
+    stage.metrics {
+      metric.gauge {
+        name = "dedup_last_success_timestamp_seconds"; prefix = "honcho_"
+        source = "ts"; action = "set"   // 3
+        max_idle_duration = "720h"
+      }
+    }
+  }
+}
+```
+
+1. **`max_idle_duration` must exceed the run interval.** Default is `5m`; a
+   nightly job is 24h apart, so the series is marked stale and every panel reads
+   "no data" for the rest of the day.
+2. **`stage.metrics` inherits labels from the entry, not from parsed fields.**
+   Without `stage.labels` the runs counter has no `status` dimension and all
+   outcomes collapse into one series.
+3. **The timestamp must come from the event, not from the collector.** A gauge
+   can only `set` an extracted value, and the obvious workaround —
+   `stage.template { template = "{{ now | unixEpoch }}" }` — stamps the time of
+   *parsing*. If Alloy was stopped while Docker kept writing, queued lines are
+   read on restart and an old failure looks fresh (and an old success looks
+   fresh, hiding a dead scheduler). Have the producer print `ts=<unix seconds>`.
+4. **`increase()` on the first sample is 0.** A status-specific counter is
+   created by the very first run with that outcome, holding 1 from then on, so
+   `increase(...[25h]) > 0` never fires on an isolated failure — precisely the
+   case the rule exists for. Alert on a timestamp gauge instead:
+   `time() - max(<last_failure_timestamp>) < 86400`.
+5. **Presence outlives the event.** A counter stays scraped until
+   `max_idle_duration` expires, so "the series exists" would keep a rule firing
+   for days after triage. Only a timestamp answers *when*.
+6. **`noDataState=Ok` hides a dead collector.** "No data" means both "laptop
+   off" and "the pipeline broke". Split them: require the host to be visible —
+   `(time() - max(last_success) > 108000) and on() (max(up{job="alloy-self"}) == 1)`.
+   When Alloy is down, `up` is empty, the rule falls to no-data and stays quiet;
+   that is honest, not healthy.
+7. **Success has several shapes.** A job that removed nothing and a job that
+   failed are different outcomes (`ok` vs `clean`), and matching only one freezes
+   the success gauge on every quiet night.
+
+**Running the job by hand so it lands in Loki.** `docker compose exec` does not
+write to the container log — those belong to PID 1 — and `docker compose run
+--rm` disappears before Alloy's 30s discovery cycle reads it. The only manual
+run that is visible in Grafana:
+
+```bash
+docker compose exec dedup sh -c 'python /app/dedup.py >> /proc/1/fd/1 2>&1'
+```
+
 ## Alerting on the redaction marker
 
 The signal is the marker itself, so no extra Alloy counter is needed:
