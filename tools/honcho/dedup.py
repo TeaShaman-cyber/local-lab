@@ -323,6 +323,15 @@ def main(argv: list[str] | None = None) -> int:
                     pairs.append((group[0].id, other.id))
             merged_groups = components(pairs, {doc.id: doc for doc in docs})
             near_groups = merged_groups
+    except Exception as exc:  # noqa: BLE001 - every abort must be observable
+        # A query failure used to escape through the finally below with no event,
+        # so an event-based alert stayed green on a run that never reached the
+        # bank. The alert reads events, not silence: silence is the laptop being
+        # off, which is not a defect.
+        print(f"error: query failed: {exc}", file=sys.stderr)
+        emit_run("failed", error="query", mode=args.mode, level=args.level,
+                 duration_ms=round((time.monotonic() - started) * 1000))
+        return 2
     finally:
         conn.close()
 
@@ -373,18 +382,30 @@ def main(argv: list[str] | None = None) -> int:
         "results": [{"keeper": k.id, "removed": d.id} for k, d in plan],
     }
 
-    def write_report() -> None:
+    def write_report() -> bool:
         if not args.json:
-            return
-        with open(args.json, "w", encoding="utf-8") as handle:
-            json.dump(report, handle, ensure_ascii=False, indent=2)
+            return True
+        try:
+            with open(args.json, "w", encoding="utf-8") as handle:
+                json.dump(report, handle, ensure_ascii=False, indent=2)
+        except OSError as exc:
+            # The report is the only audit trail of a destructive run. Losing it
+            # silently is worse than aborting: the next reader cannot tell what
+            # was planned from what was removed.
+            print(f"error: cannot write report to {args.json}: {exc}", file=sys.stderr)
+            emit_run("failed", error="report_write", mode=args.mode, level=args.level,
+                     live=report.get("live_documents"), planned=report.get("planned_deletions"),
+                     duration_ms=round((time.monotonic() - started) * 1000))
+            return False
         print(f"report          {args.json}")
+        return True
 
     failures: list[dict[str, object]] = []
     if args.apply:
         # Persist the plan before mutating anything. If the process dies mid-run,
         # the audit still names what was about to be removed and what was.
-        write_report()
+        if not write_report():
+            return 2
         codes: dict[int, int] = defaultdict(int)
         current_id = ""
         try:
@@ -417,7 +438,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"deleted         {report['applied_count']}")
         print(f"response codes  {dict(sorted(codes.items()))}")
 
-    write_report()
+    if not write_report():
+        return 2
 
     if failures:
         # An unattended job that exits 0 after a rejected delete reports success
