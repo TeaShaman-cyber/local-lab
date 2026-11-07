@@ -5,7 +5,7 @@
 ## Why frozen
 
 - 2026-11-07 user decision: freeze Hindsight work, memory provider switched to **Honcho** (local, Docker on laptop, issue #177).
-- Hindsight backend is heavy and the anchor-normalize patch (this dir) was implicated in the console-window issue #67 — `subprocess.run(["git", ...])` without `CREATE_NO_WINDOW` flashed a window each retain. Frozen with the CREATE_NO_WINDOW fix already applied in the live plugin and in `hindsight-anchor-normalize.patch` (see #67 comment 6704123592).
+- Hindsight backend is heavy and the anchor-normalize patch (this dir) was implicated in the console-window issue #67 — `subprocess.run(["git", ...])` without `CREATE_NO_WINDOW` flashed a window each retain. The fix lives **only in the installed live plugin** (`%LOCALAPPDATA%/hermes/plugins/hindsight/__init__.py`); the canonical patch in this directory does **not** carry it and is not applyable as-is (corrupt hunk counts). See #67 and PR #181.
 
 ## What this directory is
 
