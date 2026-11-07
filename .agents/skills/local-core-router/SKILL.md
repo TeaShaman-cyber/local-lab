@@ -61,6 +61,21 @@ local working tree -> local branch -> tracking ref -> live remote ref -> GitHub 
 - Важные записи требуют readback.
 - Если нужное свидетельство не установлено — `BLOCKED`, `DEGRADED`, `UNKNOWN` или `REPROBE_REQUIRED` вместо выдуманного успеха.
 
+## PR gate
+
+- `gate-review` в `.github/workflows/gate.yml` не пропускает merge, пока `chatgpt-codex-connector` не отревьюил **точный head** PR (review, receipt «Reviewed commit», или 👍 после даты head). Ревью на старом коммите не считается.
+- После каждого push head меняется: проверить `codex-review-state` (`has_unresolved_findings`) и при необходимости попросить `@codex review`.
+- Мерж — по точному head: `gh pr merge --match-head-commit <sha>`; ветку не удалять, если проектом не решено иначе.
+- Комментарий бота с findings — не шум: P1/P2 закрывать правкой или явным ответом, «gate pass» этого не заменяет.
+
+## Skills
+
+- Источник истины — `.agents/skills/<name>/SKILL.md` в репозитории. `$HERMES_HOME/skills/local-lab/` — только проекция.
+- Порядок правки: ветка → PR → merge → `scripts/sync-skills.sh` (readback; отказывает при пустом источнике или пустом `HERMES_HOME`).
+- Не создавать параллельный `.hermes/skills/`. `skill_manage` пишет в профиль (installed) — для проектных скиллов этот путь не использовать.
+- Внешние скилпаки (matt-pocock, grafana, langfuse, timeweb) не патчить в installed: свежесть — `python tools/dev/skillpacks` (state в `E:/skillpacks-state.json`, mtime после checkout врёт), отличия — в `docs/agents/deviations.md`.
+- Скилл вендора не копировать: сверить, что он уже есть у вендора, и держать указатель, а не устаревающую копию.
+
 ## Scope
 
 Скилл содержит только повторяющиеся инварианты маршрутизации. Подробные процедуры, редкие сбои и восстановление остаются в `docs/` и в cookbook; при нехватке деталей загружать наименьший нужный раздел и останавливаться.
