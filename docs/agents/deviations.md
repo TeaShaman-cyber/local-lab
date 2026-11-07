@@ -117,9 +117,9 @@ git diff --name-only 5beb35b origin/main -- skills   # что менял upstrea
 Одна команда, без археологии:
 
 ```bash
-python tools/dev/skillpack          # отчёт, rc=1 при дрейфе
-python tools/dev/skillpack --json   # для скриптов
-python tools/dev/skillpack --self-test
+python tools/dev/skillpack.py          # отчёт, rc=1 при дрейфе
+python tools/dev/skillpack.py --json   # для скриптов
+python tools/dev/skillpack.py --self-test
 ```
 
 Что она различает:

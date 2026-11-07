@@ -137,6 +137,26 @@ if [ -z "${CI:-}${GITHUB_ACTIONS:-}" ] && [ -d "E:/grafana-skills" ]; then
 fi
 
 echo
+echo "=== documented commands ==="
+# `python tools/dev/foo` where `foo` is a bash compatibility wrapper dies with a
+# SyntaxError before doing anything (Codex P2 on #182). The wrappers stay for
+# `bash` callers, so the check is on the documented interpreter, not the file.
+bad_refs=$( (grep -rnoP 'python tools/dev/[A-Za-z0-9_]+(?!\.py)\b' docs .agents/skills AGENTS.md 2>/dev/null || true) \
+    | while IFS=: read -r file line tok; do
+        name=${tok#python tools/dev/}
+        if [ -f "tools/dev/$name" ] && [ -f "tools/dev/$name.py" ] \
+           && head -1 "tools/dev/$name" | grep -q '^#!.*bash'; then
+            echo "$file:$line: '$tok' — '$name' is a bash wrapper; use '$tok.py'"
+        fi
+      done)
+if [ -n "$bad_refs" ]; then
+    echo "FAIL: documented command cannot run:" >&2
+    echo "$bad_refs" >&2
+    exit 1
+fi
+echo "ok"
+
+echo
 echo "=== contract consistency ==="
 # AGENTS.md said "write only via gh" while issue-tracker.md allowed MCP or gh.
 # Both files were well-formed; linters saw nothing. This checks claims, not syntax.
