@@ -1,0 +1,76 @@
+{
+  "apiVersion": "rules.alerting.grafana.app/v1beta1",
+  "kind": "AlertRule",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/provenance": "api",
+      "grafana.com/updateTimestamp": "2026-11-07T21:38:14Z",
+      "grafana.com/updatedBy": "cg2aw002vdqtca"
+    },
+    "labels": {
+      "grafana.app/folder": "ag2b9ny7raxogc"
+    },
+    "name": "honcho-dedup-failed",
+    "namespace": "stacks-1891821"
+  },
+  "spec": {
+    "annotations": {
+      "description": "За последние 25 часов был хотя бы один прогон со статусом failed, partial или guard_tripped ({{ $value }} шт.).\n\nЭто событие, а не тишина: оно возможно только когда задача реально запускалась. Отсутствие данных здесь означает «прогонов не было», поэтому noDataState=Ok — иначе выключенный ноутбук выглядел бы как авария.\n\nЧто значит каждый статус:\n- failed — прогон упал (сбой запроса к БД, недоступный API удаления, не удалось записать отчёт);\n- partial — часть удалений не принята API, банк остался в промежуточном состоянии;\n- guard_tripped — предохранитель остановил удаление, потому что план превысил допустимую долю. Это не сбой, но требует глаза человека: либо выросло число дублей, либо нормализация стала склеивать лишнее.\n\nРазбор: docker compose exec dedup sh -c 'python /app/dedup.py' (dry-run, ничего не удаляет), затем строка event=run_finished в логах контейнера.",
+      "runbook_url": "https://github.com/TeaShaman-cyber/local-lab/issues/193",
+      "summary": "Уборка повторов в Honcho завершилась неудачей"
+    },
+    "execErrState": "Ok",
+    "expressions": {
+      "A": {
+        "datasourceUID": "grafanacloud-prom",
+        "model": {
+          "expr": "sum(increase(honcho_dedup_runs_total{status=~\"failed|partial|guard_tripped\"}[25h]))",
+          "instant": true,
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        },
+        "relativeTimeRange": {
+          "from": "25h0m0s",
+          "to": "0s"
+        }
+      },
+      "B": {
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        },
+        "source": true
+      }
+    },
+    "for": "5m0s",
+    "labels": {
+      "area": "dedup",
+      "component": "honcho",
+      "severity": "warning"
+    },
+    "noDataState": "Ok",
+    "notificationSettings": {
+      "receiver": "theseus-email",
+      "type": "SimplifiedRouting"
+    },
+    "title": "Honcho dedup: прогон завершился ошибкой",
+    "trigger": {
+      "interval": "1m"
+    }
+  }
+}

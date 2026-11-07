@@ -322,6 +322,35 @@ services:
       documents.embedding и message_embeddings.embedding пересозданы как vector(384),
       векторы пересчитаны.
 
+  - id: INFRA-019
+    name: honcho-dedup
+    criticality: P2
+    role: ночная уборка точных дублей в банке Honcho — контейнер с supercronic, удаление через API
+    status: active
+    kind: docker-compose
+    location:
+      compose: E:/local-lab/infra/compose/honcho/docker-compose.override.yml
+      runtime_compose: C:/Users/s.poklad/.honcho/profiles/local-test/docker-compose.override.yml
+      container: local-test-dedup-1
+      code: E:/local-lab/tools/honcho/dedup.py
+      schedule: "15 4 * * * Europe/Kaliningrad (supercronic, exact-режим)"
+    monitoring: >-
+      Grafana Cloud — метрики honcho_dedup_runs_total{status}, honcho_dedup_deleted_total,
+      honcho_dedup_live_documents и honcho_dedup_last_success_timestamp_seconds
+      рождаются из лог-строки event=run_finished через stage.metrics в Alloy и скрейпятся
+      с alloy-self. Правила: honcho-dedup-failed (failed|partial|guard_tripped за 25 ч),
+      honcho-dedup-stale (нет успеха 30 ч).
+    check: docker compose exec dedup sh -c 'python /app/dedup.py' (dry-run, ничего не удаляет)
+    notes: >-
+      Скрипт печатает одну logfmt-строку на прогон; её поля — контракт метрик, переименование
+      ключа молча обнуляет панель или правило. Успех имеет две формы: ok (что-то удалил) и
+      clean (удалять было нечего), обе двигают last_success_timestamp_seconds; failed,
+      partial и guard_tripped — нет. Ручной прогон, который должен быть виден в Loki, идёт только
+      так: docker compose exec dedup sh -c 'python /app/dedup.py >> /proc/1/fd/1 2>&1', потому
+      что exec не пишет в лог контейнера (логи принадлежат PID 1), а `run --rm` исчезает раньше,
+      чем Alloy (refresh 30s) заберёт его логи. near-режим (pg_trgm, threshold 0.8) в расписании
+      не включён. Перед destructive-прогоном — pg_dump таблицы documents. Контур — local-lab#193.
+
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
 # Признак продового/тестового — RULE-009 в infrastructure.md.
 test_stands:
