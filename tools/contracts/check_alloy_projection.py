@@ -52,8 +52,20 @@ def redact(line: str) -> str:
 
 
 def unresolved_placeholders(lines: list[str]) -> list[str]:
-    """Lines of the installed file that still hold template placeholders."""
-    return [line for line in lines if PLACEHOLDER.search(line)]
+    """Lines of the installed file that still hold template placeholders.
+    Comments are exempt: the template explains where a token comes from with
+    ``// ... <PASTE_TOKEN_HERE>``, and that instruction travels into the rendered
+    file unchanged. A placeholder in an assignment is a real defect; the same
+    text in a comment is documentation.
+    """
+    found: list[str] = []
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith(("//", "#")):
+            continue
+        if PLACEHOLDER.search(line):
+            found.append(line)
+    return found
 
 
 def lines_of(path: pathlib.Path) -> list[str]:
@@ -172,6 +184,14 @@ def run_self_test() -> int:
     diag = "\n".join(compare(template, shifted))
     check("diagnostic redacts live credential", "synthetic-sensitive-token" not in diag, diag)
     check("diagnostic still names the problem", "line 3" in diag, diag)
+
+    # A hint inside a comment is documentation, not an unrendered value.
+    documented = list(rendered)
+    documented.insert(0, "// token: <PASTE_TOKEN_HERE>")
+    check(
+        "placeholder in a comment is not a defect",
+        not any("unresolved placeholder" in p for p in compare(["// token: <PASTE_TOKEN_HERE>"] + template, documented)),
+    )
 
     print(f"self-test: {'PASS' if failures == 0 else f'FAIL ({failures})'}")
     return 0 if failures == 0 else 1
