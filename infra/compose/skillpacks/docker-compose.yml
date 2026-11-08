@@ -36,9 +36,14 @@ services:
       # The sync record must survive container recreation, otherwise every run
       # starts with "no sync record" and reports every pack as unknown.
       #
-      # A DIRECTORY, not a file: Docker creates a missing bind-mount source as a
-      # directory, so mounting E:/skillpacks-state.json would leave a directory
-      # where the script expects a file, and the failure would look like a broken
-      # job rather than a missing state.
+      # A DIRECTORY, not a file. Docker creates a missing bind-mount source as a
+      # directory, so a file path here would leave a directory where the script
+      # expects /state/state.json, and the failure would look like a broken job
+      # rather than a missing state.
+      #
+      # The host script writes to the same relative path (E:/skillpacks-state/
+      # state.json), so a manual --record and the scheduled check share one
+      # record. Two paths meant the container reported every pack as unknown
+      # while the host showed the truth.
       - ${SKILLPACKS_STATE_DIR:-E:/skillpacks-state}:/state
     restart: unless-stopped
