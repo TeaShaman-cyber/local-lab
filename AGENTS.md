@@ -212,7 +212,7 @@ stateful или внешне значимое действие.
 | `tools/contracts/check_infra.py` | структурная проверка реестра и правил |
 | `.agents/skills/` | проектные скиллы: `local-core-router`, `sonar` |
 | `scripts/sync-skills.sh` | установка скиллов в Hermes (`$HERMES_HOME/skills/local-lab/`) с readback |
-| `docs/agents/` | конфигурация инженерных скиллов: issue tracker, triage-лейблы, доменные доки |
+| `docs/agents/` | конфигурация инженерных скиллов (issue tracker, triage-лейблы, доменные доки) + `memory.md` — зеркало MEMORY.md: правка → перенос в live → `tools/contracts/check_profile.py` |
 
 ## Code Review Rules
 
