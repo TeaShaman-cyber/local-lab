@@ -34,6 +34,14 @@ echo "=== project skill projection ==="
 python tools/contracts/check_skills_projection.py
 python tools/contracts/check_skills_projection.py --self-test
 
+# The repository holds the Alloy config as a template with <PLACEHOLDER> tokens;
+# the collector runs the rendered version. A component that exists only in git
+# does not run — exactly how the availability rule came to depend on a metric the
+# versioned config dropped. Structural comparison, secrets stay placeholders.
+echo "=== alloy config projection ==="
+python tools/contracts/check_alloy_projection.py
+python tools/contracts/check_alloy_projection.py --self-test
+
 echo "=== infra self-test ==="
 python tools/contracts/check_infra.py --self-test
 
