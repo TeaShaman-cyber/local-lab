@@ -1,0 +1,8 @@
+{
+  "name": "local-alerts",
+  "label": "Alerts",
+  "description": "Grafana alert state for the lab stack, in the status bar and a pane. Reads through the backend so the token never reaches the renderer.",
+  "icon": "BellRing",
+  "version": "0.1.0",
+  "api": "plugin_api.py"
+}
