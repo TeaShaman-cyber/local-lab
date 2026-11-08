@@ -76,7 +76,7 @@ function AlertChip() {
   return jsxs('span', {
     className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-secondary)',
     title: 'Grafana: состояние правил',
-    children: [jsx(StatusDot, { tone: dot }), jsx('span', { children: head.text })]
+    children: [jsx(StatusDot, { tone: dot }), jsx('span', { children: `Alerts ${head.text}` })]
   })
 }
 

@@ -390,7 +390,7 @@ services:
     location:
       package: E:/local-lab/infra/hermes/plugins/local-alerts
       installed: C:/Users/s.poklad/AppData/Local/hermes/plugins/local-alerts
-      desktop_half: C:/Users/s.poklad/AppData/Local/hermes/desktop-plugins/local-alerts
+      desktop_half: C:/Users/s.poklad/AppData/Local/hermes/plugins/local-alerts/desktop/plugin.js
       backend_route: /api/plugins/local-alerts/alerts
       upstream: /api/prometheus/grafana/api/v1/rules
     monitoring: >-
@@ -401,11 +401,15 @@ services:
     check: python tools/contracts/check_hermes_plugin.py
     notes: >-
       Две половины одного пакета: dashboard/plugin_api.py монтируется в гейтвей и импортируется
-      только при наличии плагина в plugins.enabled (config.yaml); desktop/plugin.js копируется
-      приложением в desktop-plugins и включается тумблером в Settings → Plugins. Renderer не
+      только при наличии плагина в plugins.enabled (config.yaml); desktop/plugin.js приложение
+      читает само из plugins/<id>/desktop/ и включает тумблером в Capabilities → Plugins.
+      Копию руками в desktop-plugins/ с самодельным .hermes-package.json не класть: маркер
+      пишут установщик и reconcile-проход, чужой отбрасывается (файл исчезает, маркер остаётся).
+      Пакет обязан иметь __init__.py с def register(ctx), иначе не регистрируется ни одна
+      половина — проверять через `hermes plugins doctor local-alerts`. Renderer не
       может ходить в Grafana напрямую: CORS-заголовков нет, preflight отдаёт 401. Токен —
       service account с ролью Viewer; существующий GRAFANA_API_TOKEN на alerting API даёт 401.
-      Контур — local-lab#194.
+      Контур — local-lab#194; ловушки и проверки — docs/reference/hermes/desktop-plugins.md.
 
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
 # Признак продового/тестового — RULE-009 в infrastructure.md.

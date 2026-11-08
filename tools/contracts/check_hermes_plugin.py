@@ -67,6 +67,30 @@ def check_package(package: pathlib.Path) -> list[str]:
     problems: list[str] = []
     name = package.name
 
+    entry = package / "__init__.py"
+    if not entry.is_file():
+        problems.append(
+            f"{name}: no __init__.py — the loader registers nothing, the plugin never appears "
+            f"as an agent row, and a desktop half paired to it never reaches Capabilities"
+        )
+    else:
+        text = entry.read_text(encoding="utf-8")
+        if not re.search(r"(?m)^def\s+register\s*\(", text):
+            problems.append(f"{name}/__init__.py: no `def register(ctx)` entry point")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                py_compile.compile(str(entry), cfile=str(pathlib.Path(tmp) / "b.pyc"), doraise=True)
+        except py_compile.PyCompileError as exc:
+            problems.append(f"{name}/__init__.py: does not compile: {exc.msg}")
+
+    # The marker is written by the installer and the reconcile pass; a hand-made
+    # one makes the app delete the very file it claims to own.
+    for marker in package.rglob(".hermes-package.json"):
+        problems.append(
+            f"{marker.relative_to(package)}: the package marker belongs to the installer, "
+            f"not to the repository — a foreign one is discarded and takes plugin.js with it"
+        )
+
     yaml_path = package / "plugin.yaml"
     if not yaml_path.is_file():
         problems.append(f"{name}: plugin.yaml missing")
@@ -138,9 +162,9 @@ def check_package(package: pathlib.Path) -> list[str]:
 def self_test() -> int:
     failures = 0
 
-    def check(label, condition):
+    def check(label, condition, detail=""):
         nonlocal failures
-        print(f"  {'ok  ' if condition else 'FAIL'} {label}")
+        print(f"  {'ok  ' if condition else 'FAIL'} {label}{'' if condition else f' — {detail}'}")
         failures += 0 if condition else 1
 
     check("bare import specifier caught", imports_of("import x from 'lodash'") == ["lodash"])
@@ -151,6 +175,24 @@ def self_test() -> int:
     check("comparison is not JSX", jsx_violation("const ok = a < b && c > d") is None)
     check("credential literal detected", any(p.search("tok = 'glsa_ABCDEFGHIJKLMNOP'") for p in SECRET_PATTERNS))
     check("plain token name is not a credential", not any(p.search("GRAFANA_ALERTS_TOKEN") for p in SECRET_PATTERNS))
+
+    # Package-level control: the failure that actually happened — a package
+    # with a valid manifest and desktop half but no entry point.
+    with tempfile.TemporaryDirectory() as tmp:
+        pkg = pathlib.Path(tmp) / "bare"
+        (pkg / "dashboard").mkdir(parents=True)
+        (pkg / "plugin.yaml").write_text("name: bare\n", encoding="utf-8")
+        (pkg / "dashboard" / "manifest.json").write_text('{"name": "bare"}', encoding="utf-8")
+        found = check_package(pkg)
+        check("missing __init__.py is caught", any("__init__.py" in p for p in found), found)
+
+        (pkg / "__init__.py").write_text("# no entry point\n", encoding="utf-8")
+        found = check_package(pkg)
+        check("missing register() is caught", any("register" in p for p in found), found)
+
+        (pkg / "__init__.py").write_text("def register(ctx):\n    return None\n", encoding="utf-8")
+        found = check_package(pkg)
+        check("valid entry point passes", not any("__init__.py" in p for p in found), found)
 
     print(f"self-test: {'PASS' if not failures else f'FAIL ({failures})'}")
     return 0 if not failures else 1
