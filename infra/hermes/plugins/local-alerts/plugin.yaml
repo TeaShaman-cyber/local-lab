@@ -1,0 +1,4 @@
+name: local-alerts
+version: 0.1.0
+description: "Grafana alert state in the status bar and a pane: what is firing right now, read through a backend so no token reaches the renderer."
+author: "Semyon Poklad + Svarog"

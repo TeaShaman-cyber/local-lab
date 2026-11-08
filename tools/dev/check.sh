@@ -17,6 +17,13 @@ echo "=== logfmt monitoring contract ==="
 python tools/contracts/check_logfmt.py
 python tools/contracts/check_logfmt.py --self-test
 
+# A Hermes plugin that fails to load does it quietly: a JSX tag in an
+# uncompiled file, an import the runtime refuses, a plugin_api.py without the
+# router the mount looks for. Cheaper to catch here than in the app.
+echo "=== hermes plugin packages ==="
+python tools/contracts/check_hermes_plugin.py
+python tools/contracts/check_hermes_plugin.py --self-test
+
 echo "=== infra self-test ==="
 python tools/contracts/check_infra.py --self-test
 

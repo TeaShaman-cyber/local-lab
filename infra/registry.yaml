@@ -379,6 +379,34 @@ services:
       нужен git fetch; в образе включён safe.directory. Path-корни переопределяются
       SKILLPACKS_CLONE_ROOT / SKILLPACKS_STATE / SKILLPACKS_REPO. Контур — local-lab#199.
 
+  - id: INFRA-021
+    name: local-alerts
+    criticality: P3
+    role: >-
+      состояние правил Grafana в интерфейсе Hermes — чип в статус-баре и панель со списком;
+      отвечает на вопрос «что горит сейчас», почту не заменяет и правилами не управляет
+    status: active
+    kind: hermes-plugin
+    location:
+      package: E:/local-lab/infra/hermes/plugins/local-alerts
+      installed: C:/Users/s.poklad/AppData/Local/hermes/plugins/local-alerts
+      desktop_half: C:/Users/s.poklad/AppData/Local/hermes/desktop-plugins/local-alerts
+      backend_route: /api/plugins/local-alerts/alerts
+      upstream: /api/prometheus/grafana/api/v1/rules
+    monitoring: >-
+      собственных метрик нет; сам читает Grafana через серверную половину (токен в окружении,
+      не в renderer). «Нет токена», «стек недоступен» и «бэкенд не смонтирован» показываются
+      серым, а не зелёным: спокойный зелёный огонь над неизвестным состоянием — тот самый отказ,
+      ради которого виджет и делается.
+    check: python tools/contracts/check_hermes_plugin.py
+    notes: >-
+      Две половины одного пакета: dashboard/plugin_api.py монтируется в гейтвей и импортируется
+      только при наличии плагина в plugins.enabled (config.yaml); desktop/plugin.js копируется
+      приложением в desktop-plugins и включается тумблером в Settings → Plugins. Renderer не
+      может ходить в Grafana напрямую: CORS-заголовков нет, preflight отдаёт 401. Токен —
+      service account с ролью Viewer; существующий GRAFANA_API_TOKEN на alerting API даёт 401.
+      Контур — local-lab#194.
+
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
 # Признак продового/тестового — RULE-009 в infrastructure.md.
 test_stands:
