@@ -87,6 +87,38 @@ DREAM__DEDUCTION_MODEL_CONFIG__FALLBACK__MODEL=gemini-2.5-flash
 
 `docker compose restart` **не перечитывает** `.env`: нужен `docker compose up -d`.
 
+## Настройки workspace: в базе, а не в файлах
+
+Третий слой настроек, помимо `config.toml` и `.env`. Лежит в БД записи workspace,
+задаётся и читается только через API (в v3.6.0 путей `/configuration` нет):
+
+```bash
+# задать — заменяет configuration целиком, {} очищает
+curl -X PUT http://127.0.0.1:8000/v3/workspaces/hermes \
+  -H 'content-type: application/json' \
+  -d '{"configuration":{"reasoning":{"custom_instructions":"..."}}}'
+
+# прочитать обратно
+curl -X POST http://127.0.0.1:8000/v3/workspaces/list \
+  -H 'content-type: application/json' -d '{}' \
+  | jq '.items[]|select(.id=="hermes").configuration'
+```
+
+Уровни: `workspace` → `session` → `message`; отдельно `PeerConfig` с `observe_me` /
+`observe_others`. Поле `reasoning.custom_instructions` бюджетно ограничено:
+`DERIVER.MAX_CUSTOM_INSTRUCTIONS_TOKENS` (у нас `2000`), превышение — ошибка
+валидации, а не тихое усечение.
+
+Что задано сейчас (2026-11-08, основание — local-lab#214): в workspace `hermes`
+`reasoning.custom_instructions` с правилом отбора наблюдений — писать только
+устойчивое (факты о пире, решения с причиной, инварианты, повторяющиеся отказы),
+не писать пересказ диалога, команды, пути, хеши, порты, логи, статусы CI и
+промежуточные состояния.
+
+Ловушка: этого текста нет ни в `config.toml`, ни в `.env`; `docker compose up -d`
+его не сбрасывает, потому что он не в контейнере, а в базе. Искать только через
+API, иначе настройка выглядит отсутствующей (RULE-019).
+
 ## Уборка повторов (dedup)
 
 - Linux-контейнер с `supercronic`, расписание `15 4 * * *`, `Europe/Kaliningrad`.

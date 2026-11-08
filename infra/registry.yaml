@@ -296,6 +296,14 @@ services:
       прежняя внешняя text-embedding-3-small больше не используется.
       Метрики /metrics отдают ~337 серий, в Grafana уходит только очередь/эмбеддинги/
       dialectic/API. Контур — local-lab#177, cache-прайс провайдеров — #179.
+      Конфигурация workspace — третий слой настроек, не файловый (RULE-019): в v3.6.0
+      отдельных путей /configuration нет, значение живёт в БД записи workspace,
+      задаётся PUT /v3/workspaces/{id}, читается POST /v3/workspaces/list.
+      С 2026-11-08 в workspace hermes задано reasoning.custom_instructions — правило
+      отбора наблюдений, 235 слов при бюджете DERIVER.MAX_CUSTOM_INSTRUCTIONS_TOKENS
+      = 2000; основание — local-lab#214 (42% документов были пересказом диалога).
+      Ни config.toml, ни .env этого текста не содержат, и docker compose up -d его
+      не сбрасывает: искать только через API.
 
   - id: INFRA-018
     name: honcho-embeddings
