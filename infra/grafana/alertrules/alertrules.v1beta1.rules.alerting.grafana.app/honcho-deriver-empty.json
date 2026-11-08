@@ -1,0 +1,80 @@
+{
+  "apiVersion": "rules.alerting.grafana.app/v1beta1",
+  "kind": "AlertRule",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/provenance": "api",
+      "grafana.com/updateTimestamp": "2026-11-08T11:52:16Z",
+      "grafana.com/updatedBy": "cg2aw002vdqtca"
+    },
+    "labels": {
+      "grafana.app/folder": "ag2b9ny7raxogc"
+    },
+    "name": "honcho-deriver-empty",
+    "namespace": "stacks-1891821"
+  },
+  "spec": {
+    "annotations": {
+      "description": "Разбор отвечает, но ничего не извлекает: в логе больше 5 строк `observation_count=0` за час.\n\nПочему это отдельный класс: модель может вернуть валидный JSON с пустым списком наблюдений. Ни ошибки, ни отката, ни роста очереди не будет — снаружи всё выглядит здоровым, а память просто не пополняется. Ни `honcho-deriver-stuck`, ни `honcho-api-down` такое не ловят.\n\nПочему порог 5: замер 2026-11-08 по часам (окно 14 часов, LogQL `count_over_time` по `observation_count=0`) — обычно 0–1 пустой разбор в час, максимум наблюдённого 3. Порог стоит почти вдвое выше максимума, плюс `for: 10m`.\n\nГраница: одиночные нули — норма. Короткие сообщения («ок», «да») честно не дают наблюдений, и это не дефект.",
+      "runbook_url": "https://github.com/TeaShaman-cyber/local-lab/issues/214",
+      "summary": "Разбор памяти отвечает, но ничего не извлекает"
+    },
+    "execErrState": "Error",
+    "expressions": {
+      "A": {
+        "datasourceUID": "grafanacloud-logs",
+        "model": {
+          "editorMode": "code",
+          "expr": "sum(count_over_time({service=\"deriver\"} |= \"observation_count=0\" [1h]))",
+          "instant": true,
+          "intervalMs": 60000,
+          "legendFormat": "__auto",
+          "maxDataPoints": 43200,
+          "queryType": "instant",
+          "refId": "A"
+        },
+        "queryType": "instant",
+        "relativeTimeRange": {
+          "from": "1h0m0s",
+          "to": "0s"
+        }
+      },
+      "B": {
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  5
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        },
+        "source": true
+      }
+    },
+    "for": "10m0s",
+    "labels": {
+      "area": "deriver",
+      "component": "honcho",
+      "severity": "warning"
+    },
+    "noDataState": "Ok",
+    "notificationSettings": {
+      "receiver": "theseus-email",
+      "type": "SimplifiedRouting"
+    },
+    "title": "Honcho deriver: пустые наблюдения",
+    "trigger": {
+      "interval": "1m"
+    }
+  }
+}

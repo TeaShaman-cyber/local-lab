@@ -1,0 +1,80 @@
+{
+  "apiVersion": "rules.alerting.grafana.app/v1beta1",
+  "kind": "AlertRule",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/provenance": "api",
+      "grafana.com/updateTimestamp": "2026-11-08T11:52:16Z",
+      "grafana.com/updatedBy": "cg2aw002vdqtca"
+    },
+    "labels": {
+      "grafana.app/folder": "ag2b9ny7raxogc"
+    },
+    "name": "honcho-deriver-fallback",
+    "namespace": "stacks-1891821"
+  },
+  "spec": {
+    "annotations": {
+      "description": "В логе разбора появилась строка `switching from … to backup …`: основная модель не ответила за три попытки, и Honcho ушёл на запасную.\n\nПочему лог, а не метрика: deriver публикует 23 метрики (проверено на `/metrics` внутри контейнера), и ни одна не говорит про модель. Факт отказа и факт подмены модели есть только в логе — строка `src.llm.runtime - WARNING - … switching from openai/X to backup openai/Y`. Контейнерные логи уже уходят в Loki через Alloy, отдельный сборщик не нужен.\n\nПочему одного события достаточно: перед подменой Honcho делает три попытки с задержкой ~20-30 с каждая, то есть одна строка = три отказа основной модели подряд.\n\nПочему `for: 1m`: событие редкое и дискретное, окно 15 минут держит его видимым достаточно долго для одного уведомления.\n\nНаблюдённый фон (2026-11-08): 18 строк за сутки, все в одном окне 11:24–11:25 — это был отказ модели `beam-1.0-501b`, которая отвечала пустым телом (`payload_bytes=0`).",
+      "runbook_url": "https://github.com/TeaShaman-cyber/local-lab/issues/214",
+      "summary": "Разбор памяти ушёл на запасную модель"
+    },
+    "execErrState": "Error",
+    "expressions": {
+      "A": {
+        "datasourceUID": "grafanacloud-logs",
+        "model": {
+          "editorMode": "code",
+          "expr": "sum(count_over_time({service=\"deriver\"} |= \"switching from\" [15m]))",
+          "instant": true,
+          "intervalMs": 60000,
+          "legendFormat": "__auto",
+          "maxDataPoints": 43200,
+          "queryType": "instant",
+          "refId": "A"
+        },
+        "queryType": "instant",
+        "relativeTimeRange": {
+          "from": "15m0s",
+          "to": "0s"
+        }
+      },
+      "B": {
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        },
+        "source": true
+      }
+    },
+    "for": "1m0s",
+    "labels": {
+      "area": "deriver",
+      "component": "honcho",
+      "severity": "warning"
+    },
+    "noDataState": "Ok",
+    "notificationSettings": {
+      "receiver": "theseus-email",
+      "type": "SimplifiedRouting"
+    },
+    "title": "Honcho deriver: откат на запасную модель",
+    "trigger": {
+      "interval": "1m"
+    }
+  }
+}
