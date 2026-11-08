@@ -75,7 +75,7 @@ local working tree -> local branch -> tracking ref -> live remote ref -> GitHub 
 - Источник истины — `.agents/skills/<name>/SKILL.md` в репозитории. `$HERMES_HOME/skills/local-lab/` — только проекция.
 - Порядок правки: ветка → PR → merge → `scripts/sync-skills.sh` (readback; отказывает при пустом источнике или пустом `HERMES_HOME`).
 - Не создавать параллельный `.hermes/skills/`. `skill_manage` пишет в профиль (installed) — для проектных скиллов этот путь не использовать.
-- Внешние скилпаки (matt-pocock, grafana, langfuse, timeweb) не патчить в installed: свежесть — `python tools/dev/skillpacks.py` (state в `E:/skillpacks-state.json`, mtime после checkout врёт), отличия — в `docs/agents/deviations.md`.
+- Внешние скилпаки (matt-pocock, grafana, langfuse, timeweb, honcho) не патчить в installed: свежесть — `python tools/dev/skillpacks.py` (state в `E:/skillpacks-state/state.json` — тот же файл, что читает контейнер; mtime после checkout врёт), отличия — в `docs/agents/deviations.md`.
 - Скилл вендора не копировать: сверить, что он уже есть у вендора, и держать указатель, а не устаревающую копию.
 
 ## Scope
