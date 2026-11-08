@@ -70,6 +70,24 @@ def _reason_for(exc: Exception) -> str:
     return "unexpected"
 
 
+def envelope_problem(payload: Any) -> str | None:
+    """Reason the answer cannot be trusted as a ruleset, or None.
+
+    An empty `data.groups` list is a real answer: a stack with no rules. A
+    missing envelope is not — Grafana also answers 200 with {"status":"error"}
+    or a truncated body, and reading those as "no rules" would paint a calm
+    green dot over a stack that never answered.
+    """
+    if not isinstance(payload, dict):
+        return "bad_envelope"
+    if str(payload.get("status") or "").lower() != "success":
+        return "bad_envelope"
+    data = payload.get("data")
+    if not isinstance(data, dict) or "groups" not in data or not isinstance(data.get("groups"), list):
+        return "bad_envelope"
+    return None
+
+
 def normalize(payload: Any, grafana: str) -> dict[str, Any]:
     """Flatten Grafana's grouped rules into one list plus counts.
 
@@ -137,8 +155,15 @@ async def collect(force: bool = False) -> dict[str, Any]:
     else:
         try:
             raw = await asyncio.to_thread(_get_json, f"{grafana}{RULES_PATH}", bearer)
-            payload = {"status": "ok", "reason": None, "grafana": grafana,
-                       "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **normalize(raw, grafana)}
+            problem = envelope_problem(raw)
+            if problem:
+                payload = {"status": "error", "reason": problem, "grafana": grafana,
+                           "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                           "counts": {"firing": 0, "pending": 0, "normal": 0, "nodata": 0},
+                           "rules": []}
+            else:
+                payload = {"status": "ok", "reason": None, "grafana": grafana,
+                           "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **normalize(raw, grafana)}
         except Exception as exc:  # noqa: BLE001 — the reason is the payload, not a crash
             payload = {"status": "error", "reason": _reason_for(exc), "grafana": grafana,
                        "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

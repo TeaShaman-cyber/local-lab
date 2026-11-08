@@ -21,7 +21,7 @@ const PANE = { placement: 'bottom', height: '260px' }
 
 function tone(state) {
   if (state === 'firing') return 'bad'
-  if (state === 'pending') return 'warn'
+  if (state === 'pending' || state === 'nodata') return 'warn'
   if (state === 'normal') return 'good'
   return 'muted'
 }
@@ -58,8 +58,13 @@ function headline(data) {
   if (data.status === 'error') return { state: 'error', text: data.reason || 'ошибка' }
   const firing = data.counts?.firing ?? 0
   const pending = data.counts?.pending ?? 0
+  const unhealthy = data.counts?.nodata ?? 0
   if (firing > 0) return { state: 'firing', text: String(firing) }
   if (pending > 0) return { state: 'pending', text: String(pending) }
+  // Quiet is not the same as healthy: a rule whose query fails or returns no
+  // data is inactive too, and painting that green is how a broken monitor
+  // looks like an all-clear.
+  if (unhealthy > 0) return { state: 'nodata', text: 'нет данных' }
   return { state: 'normal', text: 'ok' }
 }
 
@@ -97,6 +102,9 @@ function Row({ rule }) {
         ]
       }),
       rule.severity ? jsx(Badge, { variant: 'outline', children: rule.severity }) : null,
+      rule.health === 'nodata' || rule.health === 'error'
+        ? jsx(Badge, { variant: 'secondary', children: rule.health })
+        : null,
       jsx('span', {
         className: 'shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)',
         children: age(rule.active_at || rule.last_evaluated)

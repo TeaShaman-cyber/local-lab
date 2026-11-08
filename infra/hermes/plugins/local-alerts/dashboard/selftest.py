@@ -96,6 +96,19 @@ def main() -> int:
     check("empty payload yields no rules", empty["rules"] == [], empty["rules"])
     check("garbage payload does not raise", module.normalize({"data": None}, "https://example")["rules"] == [])
 
+    # Envelope: an empty stack is a real answer, a broken one is not.
+    check("valid empty stack accepted",
+          module.envelope_problem({"status": "success", "data": {"groups": []}}) is None)
+    check("missing envelope rejected", module.envelope_problem({}) == "bad_envelope")
+    check("error envelope rejected",
+          module.envelope_problem({"status": "error", "error": "query failed"}) == "bad_envelope")
+    check("missing groups rejected",
+          module.envelope_problem({"status": "success", "data": {}}) == "bad_envelope")
+    check("groups of wrong type rejected",
+          module.envelope_problem({"status": "success", "data": {"groups": {}}}) == "bad_envelope")
+    check("non-object payload rejected", module.envelope_problem([]) == "bad_envelope")
+    check("nodata health surfaces in counts", module.normalize(SAMPLE, "https://e")["counts"]["nodata"] == 1)
+
     saved = module.os.environ.pop("GRAFANA_ALERTS_TOKEN", None)
     module._cache["at"] = 0.0
     module._cache["payload"] = None
