@@ -24,6 +24,16 @@ echo "=== hermes plugin packages ==="
 python tools/contracts/check_hermes_plugin.py
 python tools/contracts/check_hermes_plugin.py --self-test
 
+# sync-skills.sh proves the copy at the moment it runs. A skill edited in the
+# installed profile, or a sync not re-run after the source changed, stayed
+# invisible until someone noticed by hand — that is how a procedure landed in
+# $HERMES_HOME instead of docs/. Local-only by nature: a machine without a
+# profile has nothing to compare and says SKIP, which is why this is not gated
+# on CI.
+echo "=== project skill projection ==="
+python tools/contracts/check_skills_projection.py
+python tools/contracts/check_skills_projection.py --self-test
+
 echo "=== infra self-test ==="
 python tools/contracts/check_infra.py --self-test
 
