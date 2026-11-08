@@ -312,6 +312,13 @@ services:
       = 2000; основание — local-lab#214 (42% документов были пересказом диалога).
       Ни config.toml, ни .env этого текста не содержат, и docker compose up -d его
       не сбрасывает: искать только через API.
+      На стороне Hermes зафиксирована менее шумная autorecall-компоновка:
+      contextTokens=2048 и injection.sessionStart=[summary, peerCard]; фактически
+      приходят Summary и, когда готов, Dialectic, а Representations исключены.
+      Peer Card не приходит из-за различия observer-target/self-card в plugin;
+      решение local-lab#214 — не патчить и не форкать plugin, recall-nudge hook
+      держать выключенным, собственный memory engine не начинать. Подробности и
+      откат — docs/reference/honcho/setup.md.
 
   - id: INFRA-018
     name: honcho-embeddings

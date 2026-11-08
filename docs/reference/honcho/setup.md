@@ -192,10 +192,50 @@ docker exec local-test-database-1 psql -U postgres -d postgres -tAc \
 этот же API, поэтому падение Honcho не роняет чат, но выключает recall — и до issue #209
 об этом никто бы не узнал.
 
+## Hermes autorecall: зафиксированная компоновка
+
+На стороне Hermes в
+`C:/Users/s.poklad/AppData/Local/hermes/honcho.json` действует отдельный лимит и
+фильтр автоматической вставки; это не настройки сервера Honcho:
+
+```json
+{
+  "contextTokens": 2048,
+  "injection": {
+    "sessionStart": ["summary", "peerCard"]
+  }
+}
+```
+
+`contextTokens=2048` был перенесён при установке по аналогии с Hindsight; это не
+upstream-дефолт Honcho (там отсутствие значения означает uncapped). Лимит оставлен как
+предохранитель от разрастания Representation.
+
+Почему включён фильтр: при прежней компоновке линейное обрезание стабильно заполняло
+весь бюджет (около 8.2 KB) секциями Session Summary и началом User Representation.
+Поздние Peer Card и Dialectic не доходили. С фильтром вставка занимает около 1.6 KB
+для Summary и до 2.2 KB, когда готов 601-символьный Dialectic; Representation не
+вставляется.
+
+`peerCard` оставлен в allowlist, но в текущем plugin фактически не приходит. При
+`ai.observeOthers=true` автоматический путь читает карточку как `svarog → semyon` и
+получает пустой результат, тогда как self-card `semyon → semyon` содержит 18 фактов.
+Явный accessor делает fallback на self-card, prefetch-путь — нет. Это не исправляется
+узкой настройкой: отключение `ai.observeOthers` меняет семантику наблюдений, а patch
+plugin создаёт локальный fork.
+
+Решение по local-lab#214: оставить менее шумную компоновку, recall-nudge hook держать
+выключенным, plugin не патчить и собственный memory engine не начинать. Устойчивые
+факты доступны через USER.md и явные Honcho tools. Возвращаться к теме только при
+наблюдаемой регрессии или после upstream-изменения `plastic-labs/honcho#1281` /
+`#1295`. Откат фильтра: удалить корневой блок `injection` из `honcho.json` и
+перезапустить gateway/Desktop.
+
 ## История решений
 
 | Тема | Где зафиксировано |
 |---|---|
+| Компоновка Hermes autorecall и решение не патчить plugin | issue #214 |
 | Dream-модели и вложенность overrides | PR #186 |
 | BotHub fallback и доказанный failover | PR #188 |
 | Dedup в контейнере по расписанию | PR #189 |
