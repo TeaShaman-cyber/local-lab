@@ -83,6 +83,14 @@ def check_package(package: pathlib.Path) -> list[str]:
         except py_compile.PyCompileError as exc:
             problems.append(f"{name}/__init__.py: does not compile: {exc.msg}")
 
+    # The marker is written by the installer and the reconcile pass; a hand-made
+    # one makes the app delete the very file it claims to own.
+    for marker in package.rglob(".hermes-package.json"):
+        problems.append(
+            f"{marker.relative_to(package)}: the package marker belongs to the installer, "
+            f"not to the repository — a foreign one is discarded and takes plugin.js with it"
+        )
+
     yaml_path = package / "plugin.yaml"
     if not yaml_path.is_file():
         problems.append(f"{name}: plugin.yaml missing")
