@@ -278,10 +278,18 @@ services:
     monitoring: Grafana Cloud — prometheus.scrape "honcho_api" (job=honcho-api, instance=theseus-laptop, 30s) через prometheus.relabel "honcho_keep" в Alloy
     check: curl -fsS http://127.0.0.1:8000/health
     notes: >-
-      Профиль local-test, ноутбук, не PVE. Deriver идёт через hermes-proxy
-      (host.docker.internal:8645/v1 → api.deepinfra.com). Фактические модели заданы в .env,
-      который перебивает config.toml (RULE-018): deriver = upstage/solar-mini4:free;
-      в config.toml остаётся неактивный дефолт gpt-5.4-mini.
+      Профиль local-test, ноутбук, не PVE. Deriver ходит напрямую в NVIDIA NIM
+      (2026-11-08): DERIVER_MODEL_CONFIG__OVERRIDES__BASE_URL=https://integrate.api.nvidia.com/v1,
+      модель nvidia/nemotron-3-ultra-550b-a55b, ключ NIM_KEY из %LOCALAPPDATA%/hermes/.env
+      (в .env профиля только значение, RULE-018). Fallback при трёх отказах —
+      upstage/solar-mini4:free через локальный hermes-proxy (host.docker.internal:8645/v1).
+      Почему не BotHub: та же модель, но 12.9 с против 33.1 с на одном окне; лимит
+      сервиса x-ratelimit-limit=90. До 2026-11-08 стояла solar-mini4 как primary —
+      она пересказывала разговор вместо фактов (см. issue #214), хотя схему держала.
+      Каталог NIM не равен обслуживаемому набору (RULE-020): nemotron-3-super-120b
+      и nemotron-nano-3-30b отвечают 404, nemotron-3.5-lightning отдаёт пустое тело
+      при json_schema. Фактические модели заданы в .env, который перебивает
+      config.toml (RULE-018); в config.toml остаётся неактивный дефолт gpt-5.4-mini.
       Dream (deduction/induction) вынесен на BotHub напрямую:
       DREAM__*_MODEL_CONFIG__OVERRIDES__BASE_URL=https://openai.bothub.chat/v1,
       модель mistral-small-3.2-24b-instruct, WRITE_WINDOW_ITERATIONS=5. base_url и api_key

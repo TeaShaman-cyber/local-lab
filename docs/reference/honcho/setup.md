@@ -38,16 +38,39 @@ C:\Users\s.poklad\.honcho\profiles\local-test\
 
 Разделены на два независимых контура, и это главное, что надо помнить.
 
-**Быстрый контур (deriver, summary, dialectic)** ходит через локальный прокси Nous:
+**Быстрый контур (deriver, summary, dialectic)** — два маршрута:
 
 ```text
-hermes proxy start --provider nous --host 0.0.0.0 --port 8645
-   ↓  host.docker.internal:8645/v1
-upstage/solar-mini4:free      primary
-stepfun/step-3.7-flash:free   fallback
+deriver:  https://integrate.api.nvidia.com/v1   (ключ NIM_KEY, только в .env)
+          nvidia/nemotron-3-ultra-550b-a55b     primary
+   ↓ при трёх отказах подряд
+          http://host.docker.internal:8645/v1   локальный прокси Nous
+          upstage/solar-mini4:free              fallback
 ```
 
-**Dream (deduction + induction)** идёт напрямую в BotHub, отдельными ключами:
+Почему напрямую в NVIDIA, а не через BotHub: та же модель, но на одном окне
+12.9 с против 33.1 с, и без промежуточного посредника. Лимит, который отдаёт
+сам сервис — `x-ratelimit-limit: 90` запросов с окном около минуты, для разбора
+с парой вызовов в час это не ограничение.
+
+## Выбор модели: каталог не равен обслуживаемому набору
+
+`GET /v1/models` перечисляет и то, что ключ не обслуживает, и то, что не держит
+JSON-схему. Проверено на BotHub и NVIDIA NIM 2026-11-08:
+
+| Наблюдение | Пример |
+|---|---|
+| модель есть в каталоге, вызов → `404` | `nvidia/nemotron-3-super-120b-a12b`, `nvidia/nemotron-nano-3-30b-a3b` на ключе NIM |
+| модель отвечает, но `response_format` с `json_schema` даёт пустое тело | `nemotron-3.5-lightning-30b-a3b` (NIM), `reflection/beam-1.0-501b` (прокси) |
+| модель держит схему и слушает прозу | `nemotron-3-ultra-550b-a55b`, `upstage/solar-mini4:free` (но solar пересказывает разговор) |
+
+Отсюда правило проверки: проба на коротком окне **не воспроизводит прод**.
+Beam прошёл короткий стенд и развалился на промпте реального размера
+(30 сообщений, 10.4 тыс. символов ≈ 2.6 тыс. токенов) — это и есть штатный
+размер пачки deriver'а.
+
+**Dream (deduction + induction)** идёт в BotHub, отдельными ключами:
+
 
 ```text
 mistral-small-3.2-24b-instruct   primary
