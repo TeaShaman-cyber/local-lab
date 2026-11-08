@@ -421,6 +421,40 @@ docker exec <container> env | grep <PREFIX>_   # подтвердить
 контейнера, а не содержимым файла; после пересоздания в логах нет обращения к
 старому адресу или модели.
 
+### RULE-019 — настройки workspace Honcho живут в базе, а не в файлах
+
+У Honcho три слоя настроек, и только два из них лежат на диске. Третий —
+`configuration` записи workspace — хранится в базе и задаётся API. В v3.6.0
+отдельных путей `/configuration` нет: значение приезжает в объекте workspace и
+меняется через `PUT /v3/workspaces/{id}`, а читается через
+`POST /v3/workspaces/list`.
+
+Практическое следствие: правка `config.toml` или `.env` этой настройки **не
+касается**, `docker compose up -d` её **не сбрасывает**, и файл, открытый для
+проверки, о ней не расскажет ничего. При этом она меняет поведение deriver'а —
+то есть то, что попадёт в память.
+
+```bash
+# задать (заменяет configuration целиком; {} очищает)
+curl -X PUT http://127.0.0.1:8000/v3/workspaces/hermes \
+  -H 'content-type: application/json' \
+  -d '{"configuration":{"reasoning":{"custom_instructions":"..."}}}'
+
+# прочитать обратно
+curl -X POST http://127.0.0.1:8000/v3/workspaces/list \
+  -H 'content-type: application/json' -d '{}' | jq '.items[]|select(.id=="hermes").configuration'
+```
+
+Первое применение (2026-11-08, local-lab#214): в workspace `hermes` задано
+`reasoning.custom_instructions` — правило отбора наблюдений, 235 слов при бюджете
+`DERIVER.MAX_CUSTOM_INSTRUCTIONS_TOKENS = 2000`. Основание: 42% документов были
+пересказом диалога, а не фактами.
+
+**Verification:** `POST /v3/workspaces/list` отдаёт ожидаемый текст в
+`configuration.reasoning.custom_instructions`; `grep` того же текста по
+`config.toml` и `.env` не находит ничего; после `docker compose up -d` readback
+совпадает.
+
 ## Границы
 
 - Адреса, порты, пути и имена хостов **входят** в реестр: без них снова начнётся

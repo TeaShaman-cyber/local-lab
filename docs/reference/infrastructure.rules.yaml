@@ -214,3 +214,17 @@ rules:
       docker exec <container> env | grep <PREFIX>_ показывает актуальное
       значение; после docker compose up -d повторная проверка совпадает, а в
       логах нет обращений к старому адресу или модели.
+
+  - id: RULE-019
+    obligation: MUST
+    statement: >-
+      Настройки workspace Honcho живут в базе, а не в файлах: configuration
+      задаётся через PUT /v3/workspaces/{id} (в v3.6.0 отдельных путей
+      /configuration нет), читается через POST /v3/workspaces/list, не
+      появляется ни в config.toml, ни в .env и переживает docker compose up -d.
+      Такая правка меняет поведение deriver'а и обязана быть записана в реестр
+      с датой и основанием: файл, открытый для проверки, о ней не расскажет.
+    verification: >-
+      POST /v3/workspaces/list отдаёт configuration.reasoning.custom_instructions
+      с ожидаемым текстом; grep того же текста по config.toml и .env не находит
+      ничего; после docker compose up -d readback совпадает.
