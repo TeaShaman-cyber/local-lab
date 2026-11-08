@@ -331,12 +331,19 @@ prometheus.scrape "honcho_api" {
 //   pagination_offset_shim_total                -> drop
 // Внимание: список имён проверялся на живом /metrics 2026-11-07; при обновлении
 // Honcho пересчитать (curl -s 127.0.0.1:8000/metrics | grep -vc '^#').
+//
+// `up` в списке обязателен, и это не про приложение: его генерирует сам scrape.
+// Без него правило honcho-api-down (issue #209) получает no-data вместо нуля, а
+// noDataState=Ok превращает настоящий отказ в тишину. Проверено расхождением:
+// установленный Alloy до этого списка ещё не дорос и `up` пропускает, поэтому
+// на живом стеке правило работает; с версионированным конфигом без этой строки
+// оно бы промолчало.
 prometheus.relabel "honcho_keep" {
   forward_to = [prometheus.remote_write.grafana_cloud.receiver]
 
   rule {
     source_labels = ["__name__"]
-    regex         = "api_requests_total|api_request_duration_seconds_(count|sum)|backfill_pending|db_connections_open|db_queries_in_flight|deriver_.*|dialectic_.*|dream.*|embed_now_tasks.*|message_embeddings_pending.*|messages_created_total"
+    regex         = "up|api_requests_total|api_request_duration_seconds_(count|sum)|backfill_pending|db_connections_open|db_queries_in_flight|deriver_.*|dialectic_.*|dream.*|embed_now_tasks.*|message_embeddings_pending.*|messages_created_total"
     action        = "keep"
   }
 }
