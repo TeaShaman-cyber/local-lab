@@ -35,6 +35,26 @@ DEFAULT_LIVE = pathlib.Path(r"C:/Program Files/GrafanaLabs/Alloy/config.alloy")
 
 PLACEHOLDER = re.compile(r"<([A-Z][A-Z0-9_]*)>")
 
+# A diagnostic must never carry a live credential. Anything that looks like a
+# secret assignment is printed with its value replaced.
+SECRET_LINE = re.compile(
+    r"(?i)\b(password|passwd|token|secret|api_key|apikey|bearer_token|client_secret)\b"
+)
+ASSIGNMENT = re.compile(r"^(\s*[\w.]+\s*=\s*).*$")
+
+
+def redact(line: str) -> str:
+    """Return ``line`` safe to print: secret values become ``"<redacted>"``."""
+    if not SECRET_LINE.search(line):
+        return line
+    match = ASSIGNMENT.match(line)
+    return f'{match.group(1)}"<redacted>"' if match else "<redacted line>"
+
+
+def unresolved_placeholders(lines: list[str]) -> list[str]:
+    """Lines of the installed file that still hold template placeholders."""
+    return [line for line in lines if PLACEHOLDER.search(line)]
+
 
 def lines_of(path: pathlib.Path) -> list[str]:
     return path.read_text(encoding="utf-8").replace("\r\n", "\n").split("\n")
@@ -56,6 +76,13 @@ def template_to_pattern(template_line: str) -> re.Pattern[str]:
 
 def compare(template: list[str], live: list[str]) -> list[str]:
     problems: list[str] = []
+
+    # A template deployed without rendering is not a rendering: every placeholder
+    # would otherwise be happily absorbed by the wildcard, and the check would
+    # report success on a config that cannot deliver telemetry.
+    for line in unresolved_placeholders(live):
+        problems.append(f"unresolved placeholder in the installed config: {redact(line).strip()[:120]}")
+
     if len(template) != len(live):
         problems.append(
             f"line count differs: template {len(template)} vs installed {len(live)} "
@@ -68,8 +95,8 @@ def compare(template: list[str], live: list[str]) -> list[str]:
             continue
         problems.append(
             f"line {index + 1}:\n"
-            f"    template:  {want.rstrip()[:120]}\n"
-            f"    installed: {have.rstrip()[:120]}"
+            f"    template:  {redact(want).rstrip()[:120]}\n"
+            f"    installed: {redact(have).rstrip()[:120]}"
         )
         if len(problems) >= 8:
             problems.append("... (first 8 differences only)")
@@ -130,6 +157,21 @@ def run_self_test() -> int:
     broken = list(rendered)
     broken[0] = 'url = "not a url at all"'
     check("placeholder mismatch is caught", any("line 1" in p for p in compare(template, broken)))
+
+    # The template deployed without rendering: placeholders still in the live file.
+    unrendered = list(template)
+    check(
+        "unrendered template in the collector is caught",
+        any("unresolved placeholder" in p for p in compare(template, unrendered)),
+        compare(template, unrendered),
+    )
+
+    # A diagnostic must not carry a live credential, even when the line moved.
+    shifted = list(rendered)
+    shifted[2] = '    password = "synthetic-sensitive-token"'
+    diag = "\n".join(compare(template, shifted))
+    check("diagnostic redacts live credential", "synthetic-sensitive-token" not in diag, diag)
+    check("diagnostic still names the problem", "line 3" in diag, diag)
 
     print(f"self-test: {'PASS' if failures == 0 else f'FAIL ({failures})'}")
     return 0 if failures == 0 else 1
