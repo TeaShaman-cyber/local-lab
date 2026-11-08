@@ -224,6 +224,27 @@ upstream-дефолт Honcho (там отсутствие значения оз�
 узкой настройкой: отключение `ai.observeOthers` меняет семантику наблюдений, а patch
 plugin создаёт локальный fork.
 
+### В контекст пишут две разные поверхности
+
+Фильтр `injection.sessionStart` действует только на сборку plugin. В тот же
+`~/.honcho/injection.log` пишет и memory-provider Hermes, и это разные payload:
+
+| Форма | Размер | Признак |
+|---|---|---|
+| A — сборка plugin | 1.9–2.5 KB | начинается с `## Session Summary` |
+| B — memory-provider | 0.6 KB | проза «Based on …», без `## Session Summary` |
+| пусто | 0 B | `reason=fetched-but-empty` |
+
+Форма B обёрнута как `<memory-context>` и приходит к модели как
+`[System note: The following is recalled memory context…]`; её формирует
+`agent/memory_context.py` в Hermes. Поэтому «Representation не вставляется» верно
+только для формы A: через memory-provider пересказ профиля продолжает приходить,
+около 600 байт на ход, иногда пустым. Суммарный объём при этом остаётся около 3 KB
+против прежних 8.2 KB.
+
+Читая лог, различать формы по заголовку `## Session Summary`, а не по размеру: размер
+меняется вместе с содержимым summary.
+
 Решение по local-lab#214: оставить менее шумную компоновку, recall-nudge hook держать
 выключенным, plugin не патчить и собственный memory engine не начинать. Устойчивые
 факты доступны через USER.md и явные Honcho tools. Возвращаться к теме только при
