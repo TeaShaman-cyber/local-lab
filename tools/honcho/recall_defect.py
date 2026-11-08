@@ -40,7 +40,9 @@ from datetime import datetime, timezone
 
 DEFAULT_URL = os.environ.get("HONCHO_URL", "http://127.0.0.1:8000")
 DEFAULT_WORKSPACE = os.environ.get("HONCHO_WORKSPACE", "hermes")
-DEFAULT_SESSION = os.environ.get("HONCHO_SESSION", "local-lab")
+DEFAULT_SESSION = os.environ.get("HONCHO_SESSION") or None  # workspace-scoped by default:
+# a defect outlives the session that produced it, which matters because deleting a
+# session cascades its conclusions away.
 AGENT_PEER = "svarog"
 PREFIX = "RECALL-DEFECT"
 LEVEL = "explicit"
