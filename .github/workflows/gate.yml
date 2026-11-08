@@ -75,8 +75,19 @@ jobs:
           pip install --quiet "ruff==0.17.3" "yamllint==1.38.0" "logfmtkv==0.2.1"
           sudo apt-get update -qq
           sudo apt-get install -y -qq shellcheck
-          curl -sL https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
-            | tar xz -C /usr/local/bin actionlint
+          # The release asset sits behind GitHub's CDN, which answered 504 for a
+          # whole evening (2026-11-08) — the gate failed on a download, not on
+          # code. Retry the asset, then fall back to the module proxy; only if
+          # both paths fail is a missing actionlint a real problem, and then it
+          # stays a failure.
+          url=https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          if curl -fsSL --retry 3 --retry-delay 3 -o /tmp/actionlint.tgz "$url"; then
+            sudo tar xz -f /tmp/actionlint.tgz -C /usr/local/bin actionlint
+          else
+            echo "actionlint asset unavailable — falling back to go install"
+            go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+            sudo install -m 0755 "$(go env GOPATH)/bin/actionlint" /usr/local/bin/actionlint
+          fi
           shellcheck --version | head -2
           actionlint -version
 
