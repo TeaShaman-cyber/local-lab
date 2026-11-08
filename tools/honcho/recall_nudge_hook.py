@@ -21,6 +21,7 @@ not cost the user a turn.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -33,6 +34,19 @@ REMINDER = (
     "`python tools/honcho/recall_defect.py \"<что сказала память>\" \"<что в реальности>\"`."
 )
 STATE_PATH = os.path.join(tempfile.gettempdir(), "hermes-recall-nudge-state.json")
+DEBUG_PATH = os.path.join(tempfile.gettempdir(), "hermes-recall-nudge-payload.json")
+
+
+def _debug_dump(payload: dict) -> None:
+    """Opt-in payload capture: HERMES_RECALL_HOOK_DEBUG=1, so the real wire shape can
+    be inspected instead of guessed. Best-effort; never affects the hook decision."""
+    if os.environ.get("HERMES_RECALL_HOOK_DEBUG") not in ("1", "true", "yes"):
+        return
+    try:
+        with open(DEBUG_PATH, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, default=str)
+    except Exception:
+        pass
 
 
 def _load_state() -> dict:
@@ -54,12 +68,6 @@ def _save_state(state: dict) -> None:
         pass
 
 
-def _history(payload: dict) -> list:
-    extra = payload.get("extra") or {}
-    history = extra.get("conversation_history") or []
-    return history if isinstance(history, list) else []
-
-
 def _text_of(message: dict) -> str:
     content = message.get("content")
     if isinstance(content, str):
@@ -69,15 +77,27 @@ def _text_of(message: dict) -> str:
     return ""
 
 
-def _last_recall_index(history: list) -> int:
-    """Index of the newest message carrying a recall block, or -1."""
-    for idx in range(len(history) - 1, -1, -1):
-        text = _text_of(history[idx])
-        if any(marker in text for marker in RECALL_MARKERS):
-            # Ignore our own reminder text so it never counts as recall.
-            if REMINDER not in text:
-                return idx
-    return -1
+def _recall_text(payload: dict) -> str:
+    """The newest text carrying a recall block, or "" if there is none.
+
+    Both sources are checked because recall can land in two places: the provider's
+    auto-injected block rides the *current* user message (`user_message`), while an
+    explicitly fetched or replayed block is in `conversation_history`. Looking only
+    at history was the first version's bug — it stayed silent in a live session.
+    """
+    extra = payload.get("extra") or {}
+    candidates: list[str] = []
+    user_message = extra.get("user_message")
+    if isinstance(user_message, str) and user_message.strip():
+        candidates.append(user_message)
+    history = extra.get("conversation_history") or []
+    if isinstance(history, list):
+        candidates.extend(_text_of(m) for m in history if isinstance(m, dict))
+
+    for text in reversed(candidates):
+        if any(marker in text for marker in RECALL_MARKERS) and REMINDER not in text:
+            return text
+    return ""
 
 
 def main() -> int:
@@ -87,20 +107,19 @@ def main() -> int:
     payload = json.loads(raw)
     if payload.get("hook_event_name") not in (None, "pre_llm_call"):
         return 0
+    _debug_dump(payload)
 
-    history = _history(payload)
-    recall_at = _last_recall_index(history)
-    if recall_at < 0:
+    recall = _recall_text(payload)
+    if not recall:
         return 0
 
     session = payload.get("session_id") or "unknown"
+    fingerprint = hashlib.sha1(recall.encode("utf-8", "replace")).hexdigest()
     state = _load_state()
-    already = state.get(session)
-    # -1/None means "never reminded". A recall block we already covered means silence.
-    if isinstance(already, int) and already >= recall_at:
-        return 0
+    if state.get(session) == fingerprint:
+        return 0  # this exact recall block was already reminded about
 
-    state[session] = recall_at
+    state[session] = fingerprint
     _save_state(state)
     print(json.dumps({"context": REMINDER}, ensure_ascii=False))
     return 0
