@@ -32,8 +32,14 @@ by hand (upstream `NousResearch/hermes-agent#84340`, observed 2026-08-11).
    not a user preference and not an environment fact.
 
 4. **`AGENTS.md` is not a memory file.** The agent reads it; the owner edits it. A
-   lesson learned during work goes to a skill or `docs/`, and reaches `AGENTS.md` only
-   by the owner's decision.
+   lesson learned during work goes to `docs/`, and reaches `AGENTS.md` only by the
+   owner's decision.
+
+   **Skills are not a destination in this project.** Writing one is a separate action
+   the owner asks for; `skills.write_approval` is a fuse against an accidental write,
+   not permission to propose one. A lesson that needs a procedure belongs in
+   `docs/reference/` — that is the versioned home, and it is read on demand exactly
+   like a skill would be.
 
 5. **Both memory files are budgeted.** `MEMORY.md` and `USER.md` are injected every
    turn, so their size is a cost paid on every request, forever. When either passes
