@@ -4,8 +4,8 @@
   "metadata": {
     "annotations": {
       "grafana.app/folder": "fg2ank14un9xcd",
-      "grafana.com/provenance": "",
-      "grafana.com/updateTimestamp": "2026-10-28T11:53:59Z",
+      "grafana.com/provenance": "api",
+      "grafana.com/updateTimestamp": "2026-11-08T08:34:38Z",
       "grafana.com/updatedBy": "cg2aw002vdqtca"
     },
     "labels": {

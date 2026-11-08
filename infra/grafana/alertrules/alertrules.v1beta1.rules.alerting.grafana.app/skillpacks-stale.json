@@ -2,32 +2,30 @@
   "apiVersion": "rules.alerting.grafana.app/v1beta1",
   "kind": "AlertRule",
   "metadata": {
-    "name": "skillpacks-stale",
-    "namespace": "stacks-1891821",
     "annotations": {
-      "grafana.app/folder": "ag2b9ny7raxogc"
+      "grafana.app/folder": "ag2b9ny7raxogc",
+      "grafana.com/provenance": "api",
+      "grafana.com/updateTimestamp": "2026-11-08T08:34:38Z",
+      "grafana.com/updatedBy": "cg2aw002vdqtca"
     },
     "labels": {
       "grafana.app/folder": "ag2b9ny7raxogc"
-    }
+    },
+    "name": "skillpacks-stale",
+    "namespace": "stacks-1891821"
   },
   "spec": {
-    "title": "Skill packs: вендор ушёл вперёд",
     "annotations": {
-      "summary": "Наш скилл-пак отстал от upstream — нужно посмотреть и решить",
-      "description": "Значение honcho_skillpacks_stale_total больше нуля (сейчас {{ $value }}): коммит вендора новее даты нашей синхронизации.\n\nЭто НЕ повод обновляться автоматически. Чужой скилл — это чужое мнение о своём продукте, и новая версия может оказаться для нас регрессом. Задача алерта — заставить человека открыть diff и решить: обновляем, откладываем или не берём вовсе.\n\nЧто делать:\n1. Посмотреть, что изменилось: git -C <clone> log --oneline <наш_синк>..origin/main -- <путь_пака>.\n2. Прочитать diff, а не заголовок коммита.\n3. Если берём — обновить копию и выполнить `python tools/dev/skillpacks.py --record <пак>`; алерт погаснет сам после следующей проверки.\n4. Если не берём — записать причину там, где живёт копия, и в issue.\n\nПроверка идёт раз в сутки в 09:00 (контейнер skillpacks, issue #199). noDataState=Ok: отсутствие данных означает «проверка не запускалась», а это отдельный класс — для него нужно правило на up, а не это.\n\nДетали по пакам — в строке event=skillpacks_check в логах контейнера skillpacks; там перечислено, какой именно пак устарел.",
-      "runbook_url": "https://github.com/TeaShaman-cyber/local-lab/issues/199"
+      "description": "Значение honcho_skillpacks_stale_total больше нуля (сейчас {{ $value }}): коммит вендора новее даты нашей синхронизации.\n\nЭто НЕ повод обновляться автоматически. Чужой скилл — это чужое мнение о своём продукте, и новая версия может оказаться для нас регрессом. Задача алерта — заставить человека открыть diff и решить: обновляем, откладываем или не берём вовсе.\n\nЧто делать:\n1. Посмотреть, что изменилось: git -C \u003cclone\u003e log --oneline \u003cнаш_синк\u003e..origin/main -- \u003cпуть_пака\u003e.\n2. Прочитать diff, а не заголовок коммита.\n3. Если берём — обновить копию и выполнить `python tools/dev/skillpacks.py --record \u003cпак\u003e`; алерт погаснет сам после следующей проверки.\n4. Если не берём — записать причину там, где живёт копия, и в issue.\n\nПроверка идёт раз в сутки в 09:00 (контейнер skillpacks, issue #199). noDataState=Ok: отсутствие данных означает «проверка не запускалась», а это отдельный класс — для него нужно правило на up, а не это.\n\nДетали по пакам — в строке event=skillpacks_check в логах контейнера skillpacks; там перечислено, какой именно пак устарел.",
+      "runbook_url": "https://github.com/TeaShaman-cyber/local-lab/issues/199",
+      "summary": "Наш скилл-пак отстал от upstream — нужно посмотреть и решить"
     },
-    "labels": {
-      "area": "skills",
-      "component": "skillpacks",
-      "severity": "warning"
-    },
+    "execErrState": "Ok",
     "expressions": {
       "A": {
         "datasourceUID": "grafanacloud-prom",
         "model": {
-          "expr": "max(honcho_skillpacks_stale_total) > 0",
+          "expr": "max(honcho_skillpacks_stale_total) \u003e 0",
           "instant": true,
           "intervalMs": 60000,
           "maxDataPoints": 43200,
@@ -59,14 +57,18 @@
         "source": true
       }
     },
-    "execErrState": "Ok",
-    "noDataState": "Ok",
     "for": "5m0s",
-    "keepFiringFor": "0s",
+    "labels": {
+      "area": "skills",
+      "component": "skillpacks",
+      "severity": "warning"
+    },
+    "noDataState": "Ok",
     "notificationSettings": {
       "receiver": "theseus-email",
       "type": "SimplifiedRouting"
     },
+    "title": "Skill packs: вендор ушёл вперёд",
     "trigger": {
       "interval": "1m"
     }

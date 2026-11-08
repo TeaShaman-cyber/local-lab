@@ -1,0 +1,149 @@
+# Honcho: установка, профиль и эффективная конфигурация
+
+Справочник по локальному Honcho на ноутбуке. Собран из истории сессий, живого
+профиля и контейнеров 2026-11-08; всё, что ниже, проверялось командой, а не памятью.
+Upstream-документация не копируется: она меняется, а здесь — наша конфигурация и её
+ловушки.
+
+## Где что лежит
+
+```text
+C:\Users\s.poklad\.honcho\profiles\local-test\
+  config.toml                 копия из образа, honcho start её не перезаписывает
+  .env                        секреты и переопределения; ПЕРЕБИВАЕТ config.toml
+  .env.bak-*                  следы правок (localemb, mistral)
+  docker-compose.yml          сгенерирован honcho start
+  docker-compose.override.yml наш: TEI в общем стеке
+```
+
+Профиль поднят штатной командой `honcho start` (профиль `local-test`), образ
+зафиксирован дайджестом — он записан первой строкой `config.toml`:
+`ghcr.io/plastic-labs/honcho@sha256:eb906a2d251aa48b22347e4465b40785ea7a84e2bfd1105780416bf1f0121099`.
+
+## Стек
+
+| Контейнер | Роль | Проверка |
+|---|---|---|
+| `local-test-api-1` | FastAPI, порт 8000 | `curl /health` → `{"status":"ok"}` |
+| `local-test-deriver-1` | извлечение наблюдений из сообщений | `deriver_metrics_last_success_timestamp_seconds` |
+| `local-test-database-1` | Postgres + pgvector, БД `postgres` | `psql -U postgres -d postgres` |
+| `local-test-redis-1` | очередь | healthy |
+| `local-test-embeddings-1` | TEI, порт 8080 | `/health` → 200, тело пустое (норма) |
+| `local-test-dedup-1` | ночная уборка повторов | `event=run_finished status=ok` |
+
+Имя базы — `postgres`, не `honcho`. Это стоило одного ложного диагноза: `psql -d honcho`
+отвечает `database "honcho" does not exist`.
+
+## Модели
+
+Разделены на два независимых контура, и это главное, что надо помнить.
+
+**Быстрый контур (deriver, summary, dialectic)** ходит через локальный прокси Nous:
+
+```text
+hermes proxy start --provider nous --host 0.0.0.0 --port 8645
+   ↓  host.docker.internal:8645/v1
+upstage/solar-mini4:free      primary
+stepfun/step-3.7-flash:free   fallback
+```
+
+**Dream (deduction + induction)** идёт напрямую в BotHub, отдельными ключами:
+
+```text
+mistral-small-3.2-24b-instruct   primary
+gemini-2.5-flash                 fallback
+https://openai.bothub.chat/v1
+```
+
+**Embeddings** — локальный TEI, без внешнего провайдера:
+
+```text
+sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+VECTOR_DIMENSIONS = 384
+base_url = http://host.docker.internal:8080/v1
+```
+
+## Ловушка: env сильнее config.toml, и вложенность важна
+
+`config.toml` — не источник истины. Источник — эффективные переменные **внутри**
+контейнера:
+
+```bash
+docker exec local-test-api-1 env | grep -iE 'model|dream|embed|base_url' | grep -vi key
+```
+
+Имена переменных повторяют структуру TOML двойным подчёркиванием, а `base_url` и
+`api_key` живут **внутри** `overrides`, не на верхнем уровне:
+
+```text
+DREAM__DEDUCTION_MODEL_CONFIG__MODEL=mistral-small-3.2-24b-instruct
+DREAM__DEDUCTION_MODEL_CONFIG__OVERRIDES__BASE_URL=https://openai.bothub.chat/v1
+DREAM__DEDUCTION_MODEL_CONFIG__OVERRIDES__API_KEY=...        # только в .env
+DREAM__DEDUCTION_MODEL_CONFIG__FALLBACK__MODEL=gemini-2.5-flash
+```
+
+`DREAM__MODEL_CONFIG__...` (без `DEDUCTION`/`INDUCTION`) молча игнорируется —
+правка выглядит применённой и не действует.
+
+`docker compose restart` **не перечитывает** `.env`: нужен `docker compose up -d`.
+
+## Уборка повторов (dedup)
+
+- Linux-контейнер с `supercronic`, расписание `15 4 * * *`, `Europe/Kaliningrad`.
+- Режим `exact` — безопасный дефолт; `near` выключен, потому что ошибочное слияние
+  необратимо.
+- Удаление только через Honcho API, не SQL: так сохраняются soft-delete и семантика
+  реконсиляции.
+- Каждый прогон пишет `event=run_finished` в logfmt; успех — `ok` (что-то удалил) или
+  `clean` (удалять было нечего). `failed`, `partial`, `guard_tripped` метку успеха не
+  двигают намеренно.
+
+## Наблюдаемость
+
+```text
+Alloy  --scrape job="honcho-api"-->  Grafana Cloud Prometheus
+Alloy  --log-derived logfmt----->    honcho_dedup_* (runs_total, live_documents,
+                                     deleted_total, last_success_timestamp_seconds)
+```
+
+Проверенные запросы (2026-11-08):
+
+```promql
+up{job="honcho-api"}                                  # 1
+deriver_queue_items_pending                           # 3
+deriver_queue_oldest_pending_age_seconds              # ~600
+time() - deriver_metrics_last_success_timestamp_seconds  # ~52
+dreams_due                                            # 0
+honcho_dedup_runs_total{status="ok"}                  # 56
+honcho_dedup_live_documents                           # 1971 на момент прогона 04:15
+```
+
+`live_documents` — снимок момента прогона, поэтому он отстаёт от `count(*) from documents`
+(2161): это не расхождение, а разное время съёмки.
+
+## Текущее состояние банка
+
+```bash
+docker exec local-test-database-1 psql -U postgres -d postgres -tAc \
+  "select 'peers='||(select count(*) from peers)||' sessions='||(select count(*) from sessions)||' messages='||(select count(*) from messages)||' documents='||(select count(*) from documents)||' dreams='||(select count(*) from dream_runs);"
+# peers=6 sessions=4 messages=223 documents=2161 dreams=17
+```
+
+Таблицы `conclusions` в схеме нет — этот факт проверен, а не предположен.
+
+## Связь с Hermes
+
+`memory.provider: honcho` в `%LOCALAPPDATA%/hermes/config.yaml`. Память Hermes читает
+этот же API, поэтому падение Honcho не роняет чат, но выключает recall — и до issue #209
+об этом никто бы не узнал.
+
+## История решений
+
+| Тема | Где зафиксировано |
+|---|---|
+| Dream-модели и вложенность overrides | PR #186 |
+| BotHub fallback и доказанный failover | PR #188 |
+| Dedup в контейнере по расписанию | PR #189 |
+| Logfmt-события прогонов | PR #190 |
+| Правила на dedup и skillpacks | PR #203, `infra/grafana/alertrules/` |
+| Доступность API и backlog deriver | issue #209 |

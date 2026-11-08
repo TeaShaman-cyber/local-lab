@@ -5,7 +5,7 @@
     "annotations": {
       "grafana.app/folder": "ag2b9ny7raxogc",
       "grafana.com/provenance": "api",
-      "grafana.com/updateTimestamp": "2026-11-07T21:38:16Z",
+      "grafana.com/updateTimestamp": "2026-11-08T08:34:38Z",
       "grafana.com/updatedBy": "cg2aw002vdqtca"
     },
     "labels": {
@@ -25,7 +25,7 @@
       "A": {
         "datasourceUID": "grafanacloud-prom",
         "model": {
-          "expr": "(time() - max(honcho_dedup_last_success_timestamp_seconds) > 108000) and on() (max(up{job=\"alloy-self\"}) == 1)",
+          "expr": "(time() - max(honcho_dedup_last_success_timestamp_seconds) \u003e 108000) and on() (max(up{job=\"alloy-self\"}) == 1)",
           "instant": true,
           "intervalMs": 60000,
           "maxDataPoints": 43200,
