@@ -63,7 +63,10 @@ def main() -> int:
     incompetent = tests.get("INCOMPETENT", 0) + tests.get("NONE", 0)
 
     never_run = max(meta["items"] - len(rows), 0)
-    unmeasured = never_run + len(failed)
+    # INCOMPETENT from a NORMAL worker is not a verdict about the mutant:
+    # cosmic-ray catches a failure while launching the test process and records
+    # it anyway. The row says "normal", but no test ran, so it is not measured.
+    unmeasured = never_run + len(failed) + incompetent
 
     survivors = []
     for job_id, _worker, test_outcome, diff in measured:
@@ -83,7 +86,7 @@ def main() -> int:
         "shards": meta["shards"],
         "session_total": meta["total"],
         "assigned": meta["items"],
-        "executed": len(measured),
+        "executed": len(measured) - incompetent,
         "failed": len(failed),
         "never_run": never_run,
         "unmeasured": unmeasured,
@@ -117,8 +120,8 @@ def main() -> int:
     if unmeasured:
         print(
             f"FAIL: {unmeasured} of {meta['items']} work items produced no test result "
-            f"({len(failed)} worker failures, {never_run} never run); "
-            "this shard measured less than it promised.",
+            f"({len(failed)} worker failures, {incompetent} incompetent, "
+            f"{never_run} never run); this shard measured less than it promised.",
             file=sys.stderr,
         )
         return 1

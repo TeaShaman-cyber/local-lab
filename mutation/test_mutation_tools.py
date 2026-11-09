@@ -100,6 +100,18 @@ def test_worker_failures_are_not_executions(tmp_path):
     assert "2 worker failures" in proc.stderr
 
 
+def test_incompetent_from_normal_worker_fails(tmp_path):
+    # cosmic-ray catches a failure while launching the test process and records
+    # INCOMPETENT under a NORMAL worker: the row exists, the test never ran.
+    write_shard(tmp_path, 0, incompetent=1, unmeasured=1)
+    write_shard(tmp_path, 1)
+
+    proc = run_aggregate(tmp_path, shards=2)
+
+    assert proc.returncode == 1
+    assert "1 incompetent" in proc.stderr
+
+
 def test_overlapping_shards_fail(tmp_path):
     shared = [f"m{i}" for i in range(20)]
     write_shard(tmp_path, 0, job_ids=shared)

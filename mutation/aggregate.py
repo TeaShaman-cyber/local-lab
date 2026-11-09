@@ -106,7 +106,8 @@ def main() -> int:
     if total_unmeasured:
         failures.append(
             f"{total_unmeasured} mutants produced no test result "
-            f"({total_failed} worker failures, {total_never_run} never run)"
+            f"({total_failed} worker failures, {total_incompetent} incompetent, "
+            f"{total_never_run} never run)"
         )
 
     for failure in failures:
