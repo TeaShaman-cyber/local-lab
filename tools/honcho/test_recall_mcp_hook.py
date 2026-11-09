@@ -218,7 +218,9 @@ class TestDelivers(HookTestCase):
         self.assertIn("Bearer custom-token", server.auth_headers)
         self.assertEqual(server.tool_calls[0]["arguments"]["workspace_id"], "hermes")
 
-    def test_block_budget_drops_records_and_never_cuts_text(self):
+    def test_delivers_every_record_untouched(self):
+        # Sizing belongs to the MCP formatter: the hook must not drop or trim
+        # records to fit a budget of its own (boundary from local-lab#231).
         long_text = "ж" * 900
         inner = {
             "messages": [{"id": f"m{i}", "content": long_text,
@@ -226,39 +228,24 @@ class TestDelivers(HookTestCase):
             "conclusions": [],
         }
         with FakeMCP(inner=inner) as server:
-            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"),
-                                 server.url, HONCHO_RECALL_MAX_CHARS="2000")
-
-        # The budget is a promise about the emitted context, preamble included --
-        # not about the decoded envelope (Codex review, PR #232).
-        context = json.loads(proc.stdout)["context"]
-        self.assertLessEqual(len(context), 2000)
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
 
         block = self.decode(proc)
-        self.assertGreaterEqual(len(block["messages"]), 1)
-        self.assertLess(len(block["messages"]), 5)
-        for message in block["messages"]:
-            self.assertEqual(len(message["content"]), 900)
+        self.assertEqual(len(block["messages"]), 5)
+        for index, message in enumerate(block["messages"]):
+            self.assertEqual(message["id"], f"m{index}")
+            self.assertEqual(message["content"], long_text)
+            self.assertEqual(message["content_chars"], 900)
 
-    def test_preamble_counts_against_the_budget(self):
-        # The preamble and the JSON wrapper are part of the emitted context.
-        # 1600 chars still fit under a 2000 budget; 1850 no longer does, and the
-        # record must be dropped rather than overshooting the promise.
-        def run_with(size: str):
-            inner = {"messages": [{"id": "m1", "content": size,
-                                   "content_chars": len(size), "content_truncated": False}],
-                     "conclusions": []}
-            with FakeMCP(inner=inner) as server:
-                return self.run_hook(self.payload("расскажи про динамическую шпаргалку"),
-                                     server.url, HONCHO_RECALL_MAX_CHARS="2000")
+    def test_content_is_verbatim(self):
+        text = 'кавычки "x" и бэкслеш \\ и перевод\nстроки — 😀'
+        inner = {"messages": [{"id": "m1", "content": text, "content_chars": len(text),
+                               "content_truncated": False}], "conclusions": []}
+        with FakeMCP(inner=inner) as server:
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
 
-        fits = run_with("ж" * 1600)
-        self.assertTrue(fits.stdout.strip())
-        self.assertLessEqual(len(json.loads(fits.stdout)["context"]), 2000)
-
-        overflows = run_with("ж" * 1850)
-        self.assertEqual(overflows.stdout.strip(), "")
-        self.assertEqual(overflows.returncode, 0)
+        block = self.decode(proc)
+        self.assertEqual(block["messages"][0]["content"], text)
 
 
 class TestStaysSilent(HookTestCase):

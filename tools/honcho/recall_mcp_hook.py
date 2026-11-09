@@ -3,9 +3,15 @@
 
 Boundary (deliberate, see local-lab#231):
   * the MCP formatter owns *sizing* — it bounds every message and reports
-    `content_chars` / `content_truncated`; this hook never edits text;
+    `content_chars` / `content_truncated`; this hook never edits, trims or
+    drops what the server sent. Picking how many records to ask for
+    (`message_limit`, `conclusion_top_k`) is a request parameter, not a limit
+    applied after the fact;
   * the hook owns *timing and delivery* — when to ask, and what reaches the
     turn. It projects a fixed field subset and nothing else.
+
+A whole-response byte budget is intentionally **not** implemented here: it
+belongs to the MCP formatter and is tracked as a separate step in #231.
 
 Transport is plain JSON-RPC over the MCP streamable-HTTP endpoint. The server
 answers `Content-Type: application/json` (not SSE), so stdlib `urllib` is
@@ -20,7 +26,6 @@ Environment:
   HONCHO_RECALL_TIMEOUT      default 4 (seconds, per request)
   HONCHO_RECALL_MESSAGES     default 3 (records, not characters)
   HONCHO_RECALL_CONCLUSIONS  default 3
-  HONCHO_RECALL_MAX_CHARS    default 6000 (whole injected block)
   HONCHO_RECALL_MIN_QUERY    default 12 (shorter prompts are not searched)
 """
 
@@ -199,18 +204,6 @@ def _build_block(query: str) -> dict | None:
         "messages": messages,
         "conclusions": conclusions,
     }
-
-    # Whole-block guard: drop trailing records rather than cutting text, so a
-    # record is either delivered as the MCP formatter shaped it or not at all.
-    # The preamble is part of the emitted context, so it counts against the budget.
-    budget = _env_int("HONCHO_RECALL_MAX_CHARS", 6000)
-    while len(PREAMBLE) + len(json.dumps(envelope, ensure_ascii=False)) > budget:
-        if envelope["conclusions"]:
-            envelope["conclusions"].pop()
-        elif envelope["messages"]:
-            envelope["messages"].pop()
-        else:
-            return None
     return envelope
 
 
