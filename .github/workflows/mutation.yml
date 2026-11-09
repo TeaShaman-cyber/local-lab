@@ -11,6 +11,13 @@ on:
         default: "-1"
   schedule:
     - cron: "0 4 * * 1"
+  # Self-check: only when the sweep itself or the thing it mutates changes.
+  # This is what proves the workflow works before it is merged.
+  pull_request:
+    paths:
+      - "mutation/**"
+      - "tools/honcho/recall_mcp_hook.py"
+      - ".github/workflows/mutation.yml"
 
 concurrency:
   group: mutation-${{ github.ref }}
