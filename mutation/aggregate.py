@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Combine shard results and fail when the sweep did not actually happen.
 
-Two failure modes are checked here, and they are different:
+Three failure modes are checked here, and they are different:
 
   * a shard artifact is absent — the job died before it reported anything;
-  * a shard reported `missing > 0` — it ran, but not over all its items.
+  * a shard reported `unmeasured > 0` — it ran, but did not obtain a test
+    verdict for every assigned mutant;
+  * shard job IDs overlap or leave a gap — counters add up, but the shards did
+    not partition one mutation set.
 
-Both mean "no measurement", and both must fail. Only then does the survivor
-count mean what it appears to mean.
+All mean "no complete measurement", and all must fail. Only then does the
+survivor count mean what it appears to mean.
 """
 
 from __future__ import annotations

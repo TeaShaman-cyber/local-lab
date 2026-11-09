@@ -47,7 +47,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install
-        run: pip install --quiet "cosmic-ray==8.8.0" pytest
+        run: pip install --quiet "cosmic-ray==8.8.0" "pytest==9.2.0"
 
       # Mutation results are meaningless if the suite already fails unmutated.
       - name: Baseline

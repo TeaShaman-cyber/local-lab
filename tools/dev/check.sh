@@ -48,7 +48,7 @@ python tools/contracts/check_infra.py --self-test
 echo "=== python syntax ==="
 while IFS= read -r -d '' f; do
     python -m py_compile "$f"
-done < <(find tools scripts -name "*.py" -print0 2>/dev/null)
+done < <(find tools scripts mutation -name "*.py" -print0 2>/dev/null)
 echo "ok"
 
 echo "=== yaml syntax ==="
@@ -77,6 +77,18 @@ PY
 # instead of pretending it verified something.
 STRICT="${STRICT:-0}"
 lint_fail=0
+
+echo "=== mutation helper tests ==="
+if python -c 'import pytest' >/dev/null 2>&1; then
+    python -m pytest mutation/test_mutation_tools.py -q
+else
+    if [ "$STRICT" -eq 1 ]; then
+        echo "FAIL pytest not installed (STRICT=1)" >&2
+        exit 1
+    else
+        echo "SKIP pytest not installed"
+    fi
+fi
 
 find_tool() {
     local name="$1"
@@ -116,7 +128,7 @@ fi
 
 echo "=== ruff ==="
 if ruf="$(find_tool ruff)"; then
-    if ! "$ruf" check tools scripts --quiet; then
+    if ! "$ruf" check tools scripts mutation --quiet; then
         echo "FAIL ruff" >&2
         lint_fail=1
     fi

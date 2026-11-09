@@ -15,7 +15,8 @@
 
 266 мутантов на текущий файл. Один поток — около 40 минут, поэтому прогон
 режется на 16 шардов: каждый job делает `init`, удаляет чужие work items
-(`rowid % 16`), исполняет свои и публикует `shard-result.json`.
+(`(rowid - 1) % 16` переводит однобазовый SQLite `rowid` в номер шарда 0–15),
+исполняет свои и публикует `shard-result.json`.
 
 Шардирование воспроизводимо: `init` вставляет строки в одном и том же порядке
 для одного дерева и одной версии cosmic-ray, а версия закреплена в workflow.
@@ -50,7 +51,7 @@ gh workflow run mutation -f max_survivors=0
 
 # локально, один шард, на копии (монтирование только для чтения)
 docker run --rm -v "$PWD:/repo:ro" -w /tmp python:3.12-slim bash -lc '
-  pip install -q "cosmic-ray==8.8.0" pytest
+  pip install -q "cosmic-ray==8.8.0" "pytest==9.2.0"
   cp -r /repo /tmp/work && cd /tmp/work
   python -m pytest tools/honcho/test_recall_mcp_hook.py -q
   cosmic-ray init mutation/cr.toml session.sqlite
@@ -61,7 +62,10 @@ docker run --rm -v "$PWD:/repo:ro" -w /tmp python:3.12-slim bash -lc '
 
 ## Границы
 
-- Это аудит, а не гейт на каждый коммит: запуск по кнопке и по расписанию.
+- Это аудит, а не обязательный порог качества на каждый коммит: запуск по
+  кнопке, по расписанию и на релевантных PR (`mutation/**`, workflow или сам
+  мутируемый hook). PR-проверка гарантирует исправность измерителя и свежий
+  baseline, но не падает из-за числа survivors, пока порог равен `-1`.
 - In-process рефакторинг тестов не требуется: cosmic-ray мутирует файл и
   запускает команду тестов как есть, `mutmut` для этого не подходит — ему нужен
   импорт модуля тестами.
