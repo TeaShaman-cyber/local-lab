@@ -258,7 +258,9 @@ def main() -> int:
     _save_state(state)
 
     context = PREAMBLE + json.dumps(block, ensure_ascii=False, separators=(",", ":"))
-    print(json.dumps({"context": context}, ensure_ascii=False))
+    # ASCII-escaped JSON on stdout: the hook must not depend on the console code
+    # page (cp866/cp1251 on Windows would either mangle the payload or raise).
+    print(json.dumps({"context": context}, ensure_ascii=True))
     return 0
 
 

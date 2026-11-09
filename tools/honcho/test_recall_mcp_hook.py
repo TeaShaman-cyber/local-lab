@@ -246,6 +246,20 @@ class TestDelivers(HookTestCase):
 
         block = self.decode(proc)
         self.assertEqual(block["messages"][0]["content"], text)
+        # The payload must survive a cp866/cp1251 console: ASCII-only stdout.
+        self.assertTrue(proc.stdout.isascii(), "stdout is not ASCII-escaped JSON")
+
+    def test_stdout_survives_a_legacy_console_encoding(self):
+        text = "кириллица и 😀"
+        inner = {"messages": [{"id": "m1", "content": text, "content_chars": len(text),
+                               "content_truncated": False}], "conclusions": []}
+        with FakeMCP(inner=inner) as server:
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"),
+                                 server.url, PYTHONIOENCODING="cp1251")
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        block = self.decode(proc)
+        self.assertEqual(block["messages"][0]["content"], text)
 
 
 class TestStaysSilent(HookTestCase):
