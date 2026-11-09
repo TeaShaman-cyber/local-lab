@@ -25,24 +25,33 @@
 Отчёт различает два состояния, и оба — провал:
 
 - артефакта шарда нет — job умер, ничего не измерив;
-- `missing > 0` — job отработал, но не по всем своим мутантам.
+- `unmeasured > 0` — job отработал, но не по всем своим мутантам. Сюда же
+  входит `worker_outcome != NORMAL`: cosmic-ray сохраняет строку с
+  `test_outcome=INCOMPETENT`, хотя тест против мутанта не запускался, и
+  считать такую строку исполнением — значит соврать в отчёте.
 
 Считать такое «нулевым числом выживших» — известный способ получить зелёный
-гейт над невыполненной работой. `report.py` падает при `missing > 0`,
-`aggregate.py` падает при отсутствующем шарде.
+гейт над невыполненной работой. `report.py` падает при `unmeasured > 0`,
+`aggregate.py` падает при отсутствующем шарде, при провале воркера и когда
+шарды не покрывают один и тот же набор `job_id` без пересечений.
 
 Порог по выжившим по умолчанию отключён (`-1`): первый прогон должен показать
 картину, а не покраснеть на ровном месте.
 
 ## Запуск
 
+Локально — только на копии. cosmic-ray пишет мутации в рабочее дерево и при
+прерывании не откатывает их: прерванный прогон уже оставил в
+`recall_mcp_hook.py` строку `str ** None` вместо `str | None`.
+
 ```bash
 # вручную, с порогом
 gh workflow run mutation -f max_survivors=0
 
-# локально, один шард
-docker run --rm -v "$PWD:/repo" -w /repo python:3.12-slim bash -lc '
+# локально, один шард, на копии (монтирование только для чтения)
+docker run --rm -v "$PWD:/repo:ro" -w /tmp python:3.12-slim bash -lc '
   pip install -q "cosmic-ray==8.8.0" pytest
+  cp -r /repo /tmp/work && cd /tmp/work
   python -m pytest tools/honcho/test_recall_mcp_hook.py -q
   cosmic-ray init mutation/cr.toml session.sqlite
   python mutation/shard.py session.sqlite 0 16
