@@ -17,6 +17,7 @@ on:
     paths:
       - "mutation/**"
       - "tools/honcho/recall_mcp_hook.py"
+      - "tools/honcho/test_recall_mcp_hook.py"
       - ".github/workflows/mutation.yml"
 
 concurrency:
