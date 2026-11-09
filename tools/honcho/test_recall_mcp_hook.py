@@ -229,12 +229,36 @@ class TestDelivers(HookTestCase):
             proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"),
                                  server.url, HONCHO_RECALL_MAX_CHARS="2000")
 
+        # The budget is a promise about the emitted context, preamble included --
+        # not about the decoded envelope (Codex review, PR #232).
+        context = json.loads(proc.stdout)["context"]
+        self.assertLessEqual(len(context), 2000)
+
         block = self.decode(proc)
-        self.assertLessEqual(len(json.dumps(block, ensure_ascii=False)), 2000)
         self.assertGreaterEqual(len(block["messages"]), 1)
         self.assertLess(len(block["messages"]), 5)
         for message in block["messages"]:
             self.assertEqual(len(message["content"]), 900)
+
+    def test_preamble_counts_against_the_budget(self):
+        # The preamble and the JSON wrapper are part of the emitted context.
+        # 1600 chars still fit under a 2000 budget; 1850 no longer does, and the
+        # record must be dropped rather than overshooting the promise.
+        def run_with(size: str):
+            inner = {"messages": [{"id": "m1", "content": size,
+                                   "content_chars": len(size), "content_truncated": False}],
+                     "conclusions": []}
+            with FakeMCP(inner=inner) as server:
+                return self.run_hook(self.payload("расскажи про динамическую шпаргалку"),
+                                     server.url, HONCHO_RECALL_MAX_CHARS="2000")
+
+        fits = run_with("ж" * 1600)
+        self.assertTrue(fits.stdout.strip())
+        self.assertLessEqual(len(json.loads(fits.stdout)["context"]), 2000)
+
+        overflows = run_with("ж" * 1850)
+        self.assertEqual(overflows.stdout.strip(), "")
+        self.assertEqual(overflows.returncode, 0)
 
 
 class TestStaysSilent(HookTestCase):
