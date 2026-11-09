@@ -35,3 +35,8 @@ node_modules/
 
 # Rendered dashboard snapshots: a build artifact, regenerated on demand.
 snapshots/
+
+# Mutation testing artifacts
+session.sqlite
+shard-meta.json
+shard-result.json
