@@ -3,9 +3,10 @@
 
 `cosmic-ray exec` runs every pending work item in the session, so the cheapest
 cross-job sharding is to delete the ones that belong to other shards before
-`exec`. The selection is `rowid % shards == shard`, which is stable: `init`
-inserts the same rows in the same order for the same source tree and the same
-cosmic-ray version, so shard boundaries are reproducible across jobs and runs.
+`exec`. The selection is `(rowid - 1) % shards == shard`, which maps SQLite's
+one-based rowids onto zero-based shard numbers. It is stable: `init` inserts the
+same rows in the same order for the same source tree and the same cosmic-ray
+version, so shard boundaries are reproducible across jobs and runs.
 
 Writes `shard-meta.json` next to the session so `report.py` can tell a shard
 that finished from a shard that never ran.
