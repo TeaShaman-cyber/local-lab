@@ -1,0 +1,103 @@
+name: mutation
+
+# Mutation testing is a periodic audit, not a per-commit gate: 266 mutants cost
+# minutes, not seconds. Run it by hand or weekly, and read the survivor list.
+on:
+  workflow_dispatch:
+    inputs:
+      max_survivors:
+        description: "Fail above this many survivors (-1 = report only)"
+        required: false
+        default: "-1"
+  schedule:
+    - cron: "0 4 * * 1"
+  # Self-check: only when the sweep itself or the thing it mutates changes.
+  # This is what proves the workflow works before it is merged.
+  pull_request:
+    paths:
+      - "mutation/**"
+      - "tools/honcho/recall_mcp_hook.py"
+      - ".github/workflows/mutation.yml"
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  mutate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # One shard failing must not hide the others: the aggregate job needs
+      # every report, including the bad ones.
+      fail-fast: false
+      # Free plan on a public repository allows 20 concurrent jobs; 16 leaves
+      # room for the rest of the queue.
+      max-parallel: 16
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install --quiet "cosmic-ray==8.8.0" pytest
+
+      # Mutation results are meaningless if the suite already fails unmutated.
+      - name: Baseline
+        run: python -m pytest tools/honcho/test_recall_mcp_hook.py -q
+
+      - name: Initialize session
+        run: cosmic-ray init mutation/cr.toml session.sqlite
+
+      - name: Keep this shard
+        run: python mutation/shard.py session.sqlite ${{ matrix.shard }} 16
+
+      - name: Execute
+        run: cosmic-ray exec mutation/cr.toml session.sqlite
+
+      - name: Report
+        shell: bash
+        run: |
+          set -o pipefail
+          python mutation/report.py session.sqlite | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload shard result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shard-${{ matrix.shard }}
+          path: shard-result.json
+          if-no-files-found: warn
+
+  summary:
+    needs: mutate
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A missing artifact is itself a finding, so let the aggregate job run and
+      # say so instead of dying inside the download step.
+      - name: Download shard results
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          path: results
+          pattern: shard-*
+
+      - name: Aggregate
+        shell: bash
+        run: |
+          set -o pipefail
+          python mutation/aggregate.py \
+            --results results \
+            --shards 16 \
+            --max-survivors "${{ github.event.inputs.max_survivors || '-1' }}" \
+            | tee -a "$GITHUB_STEP_SUMMARY"

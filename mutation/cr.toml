@@ -1,0 +1,10 @@
+[cosmic-ray]
+# One module, one file: the hook is the thing whose logic is worth mutating.
+# Keep tests outside this path — cosmic-ray mutates everything it is pointed at.
+module-path = "tools/honcho/recall_mcp_hook.py"
+timeout = 60.0
+excluded-modules = []
+test-command = "python -m pytest tools/honcho/test_recall_mcp_hook.py -q"
+
+[cosmic-ray.distributor]
+name = "local"

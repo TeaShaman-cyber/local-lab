@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+"""Summarize one mutation shard and refuse to report a green result it did not earn.
+
+Two distinct failure modes, and both must fail the shard:
+
+  * a work item was never executed at all — the job died or `exec` stopped;
+  * a worker recorded EXCEPTION/TIMEOUT — cosmic-ray still persists a row with
+    `test_outcome=INCOMPETENT`, but no test ran against that mutant.
+
+Counting a row as proof of execution is how a mutation gate reports success over
+work it never did, so completeness is counted on `worker_outcome=NORMAL` only.
+
+Survivors carry their mutation spec (operator, function, position) and diff, so
+the list can guide a test improvement instead of naming opaque job IDs.
+
+Writes `shard-result.json` for the aggregate job and prints a markdown table.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sqlite3
+import sys
+from collections import Counter
+
+DIFF_LIMIT = 600
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Summarize one mutation shard")
+    parser.add_argument("session", help="path to session.sqlite")
+    parser.add_argument("--meta", default="shard-meta.json")
+    parser.add_argument("--out", default="shard-result.json")
+    args = parser.parse_args()
+
+    with open(args.meta, encoding="utf-8") as handle:
+        meta = json.load(handle)
+
+    with sqlite3.connect(args.session) as con:
+        rows = con.execute(
+            "select job_id, worker_outcome, test_outcome, diff from work_results"
+        ).fetchall()
+        specs = {
+            job_id: {
+                "operator": operator,
+                "function": function,
+                "location": f"{row}:{col}",
+            }
+            for job_id, operator, row, col, function in con.execute(
+                "select job_id, operator_name, start_pos_row, start_pos_col, "
+                "definition_name from mutation_specs"
+            )
+        }
+
+    workers = Counter((row[1] or "NONE") for row in rows)
+    measured = [row for row in rows if row[1] == "NORMAL"]
+    failed = [row for row in rows if row[1] != "NORMAL"]
+
+    tests = Counter((row[2] or "NONE") for row in measured)
+    killed = tests.get("KILLED", 0)
+    survived = tests.get("SURVIVED", 0)
+    incompetent = tests.get("INCOMPETENT", 0) + tests.get("NONE", 0)
+
+    never_run = max(meta["items"] - len(rows), 0)
+    # INCOMPETENT from a NORMAL worker is not a verdict about the mutant:
+    # cosmic-ray catches a failure while launching the test process and records
+    # it anyway. The row says "normal", but no test ran, so it is not measured.
+    unmeasured = never_run + len(failed) + incompetent
+
+    survivors = []
+    for job_id, _worker, test_outcome, diff in measured:
+        if test_outcome != "SURVIVED":
+            continue
+        spec = specs.get(job_id, {})
+        survivors.append({
+            "job_id": job_id,
+            "operator": spec.get("operator"),
+            "function": spec.get("function"),
+            "location": spec.get("location"),
+            "diff": (diff or "")[:DIFF_LIMIT],
+        })
+
+    result = {
+        "shard": meta["shard"],
+        "shards": meta["shards"],
+        "session_total": meta["total"],
+        "assigned": meta["items"],
+        "executed": len(measured) - incompetent,
+        "failed": len(failed),
+        "never_run": never_run,
+        "unmeasured": unmeasured,
+        "killed": killed,
+        "survived": survived,
+        "incompetent": incompetent,
+        "worker_outcomes": dict(workers),
+        "survivors": survivors,
+        # Every mutant this shard touched. The aggregate uses it to prove the
+        # shards partition one set instead of trusting the counts.
+        "job_ids": [row[0] for row in rows],
+    }
+    with open(args.out, "w", encoding="utf-8") as handle:
+        json.dump(result, handle, indent=2)
+
+    print(f"### shard {result['shard']}/{result['shards']}")
+    print()
+    print("| metric | value |")
+    print("| --- | --- |")
+    for key in ("assigned", "executed", "killed", "survived", "incompetent",
+                "failed", "never_run", "unmeasured"):
+        print(f"| {key} | {result[key]} |")
+    print()
+
+    if survivors:
+        print("Survivors:")
+        for item in survivors:
+            print(f"- `{item['function']}` {item['operator']} at {item['location']}")
+        print()
+
+    if unmeasured:
+        print(
+            f"FAIL: {unmeasured} of {meta['items']} work items produced no test result "
+            f"({len(failed)} worker failures, {incompetent} incompetent, "
+            f"{never_run} never run); this shard measured less than it promised.",
+            file=sys.stderr,
+        )
+        return 1
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
