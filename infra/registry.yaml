@@ -434,6 +434,57 @@ services:
       service account с ролью Viewer; существующий GRAFANA_API_TOKEN на alerting API даёт 401.
       Контур — local-lab#194; ловушки и проверки — docs/reference/hermes/desktop-plugins.md.
 
+  - id: INFRA-022
+    name: honcho-mcp
+    criticality: P2
+    role: >-
+      MCP-поверхность над Honcho для recall — форк официального сервера с ограничением
+      размера сообщения в выдаче, пригодный для автоматической доставки в контекст
+    status: active
+    kind: docker-container
+    location:
+      image: local/honcho-mcp:dad6848
+      container: honcho-mcp-probe
+      endpoint: "http://127.0.0.1:3000/mcp"
+      published_port: "127.0.0.1:3000 -> 3000/tcp"
+      network: local-test_default (external, принадлежит INFRA-017)
+      upstream_api: http://api:8000 (INFRA-017)
+      fork: https://github.com/TeaShaman-cyber/honcho
+      checkout: E:/honcho-upstream
+      base_commit: 3326373c35f6538fb3b7af97803abe328c5aafb4
+      merge_commit: dad684849021d4f7c24d73b0cac48a7dd9b5b1c7
+      qa:
+        image: local/honcho-mcp-qa:dev
+        build: docker build --target qa -t local/honcho-mcp-qa:dev E:/honcho-upstream/mcp
+        runs: bun run typecheck + bun test + biome lint
+        workflow: E:/honcho-upstream/.github/workflows/mcp-qa.yml
+    monitoring: >-
+      Grafana Cloud — container_* метрики через docker-exporter (INFRA-004),
+      label container_name="honcho-mcp-probe" (проверено: container_uptime_seconds
+      отдаёт серию); логи в Loki через Alloy, {container="honcho-mcp-probe"}
+      (job=docker, host=theseus-laptop). Отдельного правила на «процесс умер»
+      пока нет — это долг, а не отсутствие наблюдения; зафиксировано в local-lab#231.
+    check: >-
+      curl -fsS http://127.0.0.1:3000/health (ожидается 200);
+      затем read-only tools/call search с message_limit=2 — в ответе у длинного
+      сообщения должны стоять content_chars и content_truncated=true.
+    notes: >-
+      Зачем форк: официальный MCP ограничивал только число записей (message_limit),
+      а content отдавал целиком — одно сообщение со статьёй пришло на 15738 символов
+      и делало автоматическую доставку в контекст небезопасной. Патч переносит
+      ограничение в форматтер: MCP_MAX_MESSAGE_CONTENT_CHARS (default 2000,
+      допустимо 1..100000 Unicode code points, невалидное значение откатывается
+      к дефолту), поля content_chars и content_truncated, многоточие входит в лимит,
+      surrogate pair не разрывается. Настройка проведена в Worker, HTTP и stdio.
+      Наблюдаемая проверка на живом стенде с лимитом 2000:
+      returned [365, 2000, 317] при original [365, 15738, 317], truncated [false, true, false];
+      тот же результат через вызов Hermes mcp__honcho_mcp_local__search.
+      В Hermes подключён как MCP honcho-mcp-local, include-filter разрешает только
+      search; плагин Honcho, хуки и MemoryProvider не менялись.
+      Общий бюджет ответа и усечение conclusions в этот этап не входят.
+      Устаревшие теги образов (bounded-dev, honcho-mcp-qa:test) — те же digest'ы,
+      удалены, чтобы не путать с действующим dad6848. Контур — local-lab#231.
+
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
 # Признак продового/тестового — RULE-009 в infrastructure.md.
 test_stands:
