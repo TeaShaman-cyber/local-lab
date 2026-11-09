@@ -261,6 +261,21 @@ class TestDelivers(HookTestCase):
         block = self.decode(proc)
         self.assertEqual(block["messages"][0]["content"], text)
 
+    def test_state_write_failure_does_not_drop_recall(self):
+        state_directory = os.path.join(self._tmp.name, "state-directory")
+        os.mkdir(state_directory)
+        inner = {"messages": [{"id": "m1", "content": "x", "content_chars": 1,
+                               "content_truncated": False}], "conclusions": []}
+        with FakeMCP(inner=inner) as server:
+            proc = self.run_hook(
+                self.payload("расскажи про динамическую шпаргалку"),
+                server.url,
+                HERMES_HONCHO_RECALL_STATE=state_directory,
+            )
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIsNotNone(self.decode(proc))
+
 
 class TestStaysSilent(HookTestCase):
     def test_second_identical_turn_is_throttled(self):
@@ -271,20 +286,72 @@ class TestStaysSilent(HookTestCase):
 
         self.assertIsNotNone(self.decode(first))
         self.assertIsNone(self.decode(second))
+        self.assertEqual(second.returncode, 0)
         self.assertEqual(len(server.tool_calls), 1)
+
+    def test_same_query_in_different_sessions_is_not_throttled(self):
+        query = "расскажи про динамическую шпаргалку"
+        inner = {"messages": [{"id": "m1", "content": "x", "content_chars": 1,
+                               "content_truncated": False}], "conclusions": []}
+        with FakeMCP(inner=inner) as server:
+            first = self.run_hook(self.payload(query, session="s-1"), server.url)
+            second = self.run_hook(self.payload(query, session="s-2"), server.url)
+
+        self.assertIsNotNone(self.decode(first))
+        self.assertIsNotNone(self.decode(second))
+        self.assertEqual(len(server.tool_calls), 2)
 
     def test_continuation_turn_is_not_searched(self):
         with FakeMCP(inner={"messages": [{"id": "m1", "content": "x"}], "conclusions": []}) as server:
             proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку", first_turn=False),
                                  server.url)
         self.assertIsNone(self.decode(proc))
+        self.assertEqual(proc.returncode, 0)
         self.assertEqual(len(server.tool_calls), 0)
         self.assertEqual(server.initialize_calls, 0)
+
+    def test_first_turn_requires_json_boolean_true(self):
+        payload = self.payload("расскажи про динамическую шпаргалку")
+        payload["extra"]["is_first_turn"] = 1
+        with FakeMCP(inner={"messages": [{"id": "m1", "content": "x"}]}) as server:
+            proc = self.run_hook(payload, server.url)
+
+        self.assertIsNone(self.decode(proc))
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(server.initialize_calls, 0)
+
+    def test_minimum_query_length_boundary(self):
+        inner = {"messages": [{"id": "m1", "content": "x", "content_chars": 1,
+                               "content_truncated": False}], "conclusions": []}
+        with FakeMCP(inner=inner) as server:
+            below = self.run_hook(self.payload("x" * 11, session="below"), server.url)
+            exact = self.run_hook(self.payload("x" * 12, session="exact"), server.url)
+
+        self.assertIsNone(self.decode(below))
+        self.assertIsNotNone(self.decode(exact))
+        self.assertEqual(len(server.tool_calls), 1)
+
+    def test_positive_integer_environment_boundary(self):
+        inner = {"messages": [{"id": "m1", "content": "x", "content_chars": 1,
+                               "content_truncated": False}], "conclusions": []}
+        with FakeMCP(inner=inner) as server:
+            zero = self.run_hook(self.payload("x" * 11, session="zero"), server.url,
+                                 HONCHO_RECALL_MIN_QUERY="0")
+            one = self.run_hook(self.payload("x", session="one"), server.url,
+                                HONCHO_RECALL_MIN_QUERY="1")
+            five = self.run_hook(self.payload("x" * 5, session="five"), server.url,
+                                 HONCHO_RECALL_MIN_QUERY="5")
+
+        self.assertIsNone(self.decode(zero))
+        self.assertIsNotNone(self.decode(one))
+        self.assertIsNotNone(self.decode(five))
+        self.assertEqual(len(server.tool_calls), 2)
 
     def test_short_prompt_is_not_searched(self):
         with FakeMCP(inner={"messages": [{"id": "m1", "content": "x"}], "conclusions": []}) as server:
             proc = self.run_hook(self.payload("привет"), server.url)
         self.assertIsNone(self.decode(proc))
+        self.assertEqual(proc.returncode, 0)
         self.assertEqual(server.initialize_calls, 0)
 
     def test_missing_peer_id_is_not_searched(self):
@@ -325,8 +392,22 @@ class TestStaysSilent(HookTestCase):
         payload["hook_event_name"] = "post_llm_call"
         with FakeMCP(inner={"messages": [{"id": "m1", "content": "x"}]}) as server:
             proc = self.run_hook(payload, server.url)
+        self.assertEqual(proc.returncode, 0)
         self.assertEqual(proc.stdout.strip(), "")
         self.assertEqual(server.initialize_calls, 0)
+
+    def test_empty_stdin_exits_clean(self):
+        proc = subprocess.run(
+            [sys.executable, str(HOOK)],
+            input="",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env={**os.environ, "HERMES_HONCHO_RECALL_STATE": self.state},
+            timeout=60,
+        )
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(proc.stdout.strip(), "")
 
     def test_garbage_stdin_exits_clean(self):
         proc = subprocess.run([sys.executable, str(HOOK)], input="{not json", capture_output=True,
