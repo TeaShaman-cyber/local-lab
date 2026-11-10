@@ -92,7 +92,8 @@ def _server_json_budget() -> int | None:
     return value
 
 
-def _post(url: str, body: dict, timeout: float, session_id: str | None = None) -> tuple[int, dict, str]:
+def _post(url: str, body: dict, timeout: float, session_id: str | None = None,
+          protocol_version: str | None = None) -> tuple[int, dict, str]:
     data = json.dumps(body, ensure_ascii=False).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
@@ -108,6 +109,12 @@ def _post(url: str, body: dict, timeout: float, session_id: str | None = None) -
         headers["X-Honcho-Workspace-ID"] = workspace
     if session_id:
         headers["Mcp-Session-Id"] = session_id
+    if protocol_version:
+        headers["MCP-Protocol-Version"] = protocol_version
+        headers["Mcp-Method"] = body["method"]
+        params = body.get("params") or {}
+        if body["method"] == "tools/call":
+            headers["Mcp-Name"] = params["name"]
     request = urllib.request.Request(url, data=data, headers=headers, method="POST")
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return response.status, dict(response.headers), response.read().decode("utf-8", "replace")
@@ -127,29 +134,34 @@ def _rpc_result(raw: str) -> dict:
 
 def _mcp_search(url: str, peer_id: str, query: str, messages: int,
                 conclusions: int, timeout: float, json_budget: int | None = None) -> dict:
-    status, headers, body = _post(url, {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": "2025-06-18",
-            "capabilities": {},
-            "clientInfo": {"name": "hermes-pre-llm-call", "version": "1"},
-        },
-    }, timeout)
-    if status != 200:
-        raise ValueError("initialize returned %s" % status)
-
+    protocol = os.environ.get("HONCHO_RECALL_MCP_PROTOCOL", "2025-06-18").strip()
+    if protocol not in ("2025-06-18", "2026-07-28"):
+        raise ValueError("HONCHO_RECALL_MCP_PROTOCOL must be 2025-06-18 or 2026-07-28")
     session_id = None
-    for key, value in headers.items():
-        if key.lower() == "mcp-session-id":
-            session_id = value
-            break
-    if not session_id:
-        raise ValueError("server did not return a session id")
-    _rpc_result(body)
+    if protocol == "2025-06-18":
+        status, headers, body = _post(url, {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "hermes-pre-llm-call", "version": "1"},
+            },
+        }, timeout)
+        if status != 200:
+            raise ValueError("initialize returned %s" % status)
 
-    _post(url, {"jsonrpc": "2.0", "method": "notifications/initialized"}, timeout, session_id)
+        session_id = None
+        for key, value in headers.items():
+            if key.lower() == "mcp-session-id":
+                session_id = value
+                break
+        if not session_id:
+            raise ValueError("server did not return a session id")
+        _rpc_result(body)
+
+        _post(url, {"jsonrpc": "2.0", "method": "notifications/initialized"}, timeout, session_id)
 
     arguments = {
         "query": query,
@@ -164,12 +176,21 @@ def _mcp_search(url: str, peer_id: str, query: str, messages: int,
         # Per-call scoping is the documented contract; the header is only a default.
         arguments["workspace_id"] = workspace
 
+    params = {"name": "search", "arguments": arguments}
+    if protocol == "2026-07-28":
+        params["_meta"] = {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities": {},
+            "io.modelcontextprotocol/clientInfo": {
+                "name": "hermes-pre-llm-call", "version": "1",
+            },
+        }
     status, _headers, body = _post(url, {
         "jsonrpc": "2.0",
         "id": 2,
         "method": "tools/call",
-        "params": {"name": "search", "arguments": arguments},
-    }, timeout, session_id)
+        "params": params,
+    }, timeout, session_id, protocol if protocol == "2026-07-28" else None)
     if status != 200:
         raise ValueError("tools/call returned %s" % status)
 

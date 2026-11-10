@@ -27,11 +27,14 @@ class FakeMCP:
     """Minimal JSON-RPC over HTTP stand-in for the Honcho MCP server."""
 
     def __init__(self, inner: dict | None = None, broken_inner: bool = False,
-                 init_status: int = 200, require_auth: bool = True):
+                 init_status: int = 200, require_auth: bool = True,
+                 modern: bool = False):
         self.inner = inner
         self.broken_inner = broken_inner
         self.init_status = init_status
         self.require_auth = require_auth
+        self.modern = modern
+        self.request_headers: list[dict] = []
         self.tool_calls: list[dict] = []
         self.auth_headers: list[str] = []
         self.initialize_calls = 0
@@ -61,6 +64,23 @@ class FakeMCP:
                     self.end_headers()
                     return
                 outer.auth_headers.append(auth)
+                outer.request_headers.append(dict(self.headers))
+
+                if outer.modern:
+                    metadata = (body.get("params") or {}).get("_meta") or {}
+                    valid = (
+                        method == "tools/call" and
+                        self.headers.get("Mcp-Method") == "tools/call" and
+                        self.headers.get("Mcp-Name") == "search" and
+                        self.headers.get("MCP-Protocol-Version") == "2026-07-28" and
+                        metadata.get("io.modelcontextprotocol/protocolVersion") == "2026-07-28" and
+                        "io.modelcontextprotocol/clientCapabilities" in metadata
+                    )
+                    if not valid:
+                        self.send_response(400)
+                        self.send_header("Content-Length", "0")
+                        self.end_headers()
+                        return
 
                 if method == "initialize":
                     outer.initialize_calls += 1
@@ -202,6 +222,29 @@ class TestDelivers(HookTestCase):
         self.assertEqual(block["messages"][0]["content"], "полный текст")
         self.assertEqual(block["messages"][0]["content_chars"], 15738)
         self.assertIs(block["messages"][0]["content_truncated"], True)
+
+    def test_modern_stateless_search_uses_meta_and_headers_without_initialize(self):
+        inner = {"messages": [{"id": "m1", "content": "modern",
+                               "content_chars": 6, "content_truncated": False}],
+                 "conclusions": []}
+        with FakeMCP(inner=inner, modern=True) as server:
+            proc = self.run_hook(self.payload("найди структуру нашего контекста"),
+                                 server.url,
+                                 HONCHO_RECALL_MCP_PROTOCOL="2026-07-28")
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(self.decode(proc)["messages"][0]["content"], "modern")
+        self.assertEqual(server.initialize_calls, 0)
+        self.assertEqual(len(server.tool_calls), 1)
+        self.assertEqual(len(server.request_headers), 1)
+
+    def test_invalid_protocol_fails_open_before_network(self):
+        with FakeMCP(inner={"messages": [{"id": "m1", "content": "x"}]}) as server:
+            proc = self.run_hook(self.payload("найди структуру нашего контекста"),
+                                 server.url, HONCHO_RECALL_MCP_PROTOCOL="2099-01-01")
+        self.assertEqual(proc.returncode, 0)
+        self.assertIsNone(self.decode(proc))
+        self.assertEqual(server.initialize_calls, 0)
+        self.assertEqual(server.tool_calls, [])
 
     def test_sends_bearer_and_per_call_workspace(self):
         inner = {"messages": [{"id": "m1", "content": "x", "content_chars": 1,
