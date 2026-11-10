@@ -265,10 +265,11 @@ plugin создаёт локальный fork.
 
 Поэтому форк: <https://github.com/TeaShaman-cyber/honcho>, checkout
 `E:/honcho-upstream` (`fork-main` отслеживает `fork/main`), база `3326373c35f6`.
-Первый принятый merge `dad6848` ограничил отдельное сообщение; действующий merge
-`a4c3680` добавил opt-in бюджет всего search JSON. Ограничения живут в MCP
-форматтере, а не в вызывающей стороне: так один и тот же контракт получает любой
-harness, а хук остаётся тонким.
+Первый принятый merge `dad6848` ограничил отдельное сообщение; `a4c3680` добавил
+opt-in бюджет всего search JSON. Действующий сервер — merge `d04090e` (PR #11),
+переход на stateless MCP `2026-07-28`. Ограничения живут в MCP форматтере, а не в
+вызывающей стороне: так один и тот же контракт получает любой harness, а хук
+остаётся тонким.
 
 Два слоя контракта:
 
@@ -322,22 +323,50 @@ bounded 2000: 2000 bytes, 2/5 messages, 2/10 conclusions, provenance retained
 invalid 511:  rejected (exit 1)
 ```
 
-Действующий контейнер `honcho-mcp-probe` собран локально из `mcp/Dockerfile`
-exact merge `a4c3680` как `local/honcho-mcp:a4c3680`; image ID
-`sha256:0c355f008a135d96225ae30ccbfe1ff3de0d86c0b621e982cde09249d2c12dcb`.
-Остановленный `honcho-mcp-probe-rollback-dad6848` оставлен для отката. Публичный
-`ghcr.io/teashaman-cyber/honcho:latest@sha256:7161a0a4…` здесь использовать
-нельзя: workflow собирает корневой Python/FastAPI Dockerfile (порт 8000), а не
-`mcp/Dockerfile` (Bun, порт 3000).
+Артефакт приходит из пайплайна, а не из локальной сборки. Workflow
+`.github/workflows/docker-build-mcp.yml` собирает `mcp/Dockerfile` только на push
+в `main` по пути `mcp/**` и публикует в
+`ghcr.io/teashaman-cyber/honcho-mcp` **единственный** тег `sha-<полный SHA>`;
+шаг `Verify only the source-commit tag is published` валит сборку, если появится
+`latest` или плавающий алиас.
 
-Native Hermes legacy-call после переключения прошёл. Schema MCP tools кэшируется
-на старте сессии, поэтому уже открытая сессия не показывает новый
-`max_result_json_bytes`; нужен reload каталога или новая сессия. Это клиентская
-staleness, серверный opt-in контракт отдельно доказан mcporter.
+```text
+merge:  d04090ec7fe9d191d94c616fe6341f4402b8ce38
+tag:    ghcr.io/teashaman-cyber/honcho-mcp:sha-d04090ec7fe9d191d94c616fe6341f4402b8ce38
+digest: sha256:544c5d46b83d90b36306716a99fc64e47be62d9045483a37a1c88545e9889b55
+run:    TeaShaman-cyber/honcho actions run 42888178408 (success)
+```
+
+Контейнер `honcho-mcp-probe` запускается **по digest**, поэтому работающий образ
+неподвижен и проверяем. Остановленные `honcho-mcp-rollback-f67c4d6` (локальная
+сборка, временное отклонение) и `honcho-mcp-rollback-a4c3680` (legacy wire)
+оставлены для отката. Корневой
+`ghcr.io/teashaman-cyber/honcho:latest@sha256:7161a0a4…` — это другой пакет:
+Python/FastAPI, порт 8000; MCP-образ берётся только из `honcho-mcp`.
+
+Протокол `2026-07-28` — stateless: `initialize` и `Mcp-Session-Id` больше нет.
+Клиент обязан прислать `MCP-Protocol-Version`, `Mcp-Method` и (для `tools/call`)
+`Mcp-Name`, а в теле — `params._meta` с
+`io.modelcontextprotocol/protocolVersion` и `.../clientCapabilities`; расхождение
+заголовка и тела даёт `400/-32020`. Ответ приходит как `text/event-stream`, поэтому
+разбирать нужно кадры, а не тело целиком. Legacy-клиент получает молчаливый отказ —
+это решение (TeaShaman-cyber/honcho#10), а не регрессия.
+
+Приёмка на живом порту `127.0.0.1:3000` 2026-11-10:
+
+```text
+hook (local-lab PR #247): 3 messages + 3 conclusions, 3583 bytes
+hook bounded 2000:        honcho_search_bounded_v1, 2+2, coverage с вытеснением
+native Hermes (mcp 2.3.0): initialize ok, 40 tools, search 2534 chars
+```
+
+Schema MCP tools кэшируется на старте сессии, поэтому уже открытая сессия может
+показывать каталог старого сервера; нужен reload каталога или новая сессия. Это
+клиентская staleness, серверный контракт отдельно доказан живым вызовом.
 
 ### Ловушки
 
-- MCP-шлюз требует **непустой** `Authorization: Bearer …`; без него initialize
+- MCP-шлюз требует **непустой** `Authorization: Bearer …`; без него `tools/call`
   отдаёт `401`, и fail-open клиент молча ничего не вставляет. Локальный API
   значение не проверяет, удалённый — проверяет.
 - `workspace_id` надёжнее передавать аргументом `tools/call`, а не только
@@ -347,11 +376,13 @@ staleness, серверный opt-in контракт отдельно дока�
 
 ### QA
 
-Сборка проверок отдельным таргетом, production-образ — другим:
+Локально собирается **только** QA-таргет — для проверок перед push. Production-образ
+локально не собирается: его публикует пайплайн, и деплой берёт опубликованный digest.
 
 ```bash
 docker build --target qa -t local/honcho-mcp-qa:dev E:/honcho-upstream/mcp
-docker build -t local/honcho-mcp:a4c3680 E:/honcho-upstream/mcp
+# production: push in mcp/** to main -> ghcr.io/teashaman-cyber/honcho-mcp:sha-<commit>
+# deploy:     docker run <digest> (тег только для чтения, контейнер — по digest)
 ```
 
 QA-таргет прогоняет `typecheck`, полный Bun-набор и Biome; то же самое делает
