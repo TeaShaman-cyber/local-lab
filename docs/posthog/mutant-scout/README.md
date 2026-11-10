@@ -10,3 +10,14 @@ Mandatory initial posture: enabled=false; emit=false; write_scopes=[]; network_a
 The present PostHog warehouse ingests GitHub workflow jobs, NOT complete mutation specs and diffs. If precise current survivor diff, identity and manifest cannot be retrieved, Scout must close with INPUT_INCOMPLETE. Default repo checkout alone does not prove PR-head or workflow artifact access. Never generate synthetic conclusions from CI success.
 
 The PostHog skill/config are deployed PROJECTIONS of Git-owned source. Validate version and disabled posture by readback before claiming installed success. Static fixture validation does NOT constitute an LLM evaluation. Any future run or enablement may consume AI quota, and is separately authorized.
+
+## Mutation artifact contract — updated under Local Lab #234
+
+The CI artifact now identifies the actual checked-out commit and tree, plus
+its GitHub Actions run URL; each surviving mutant includes complete canonical
+mutation spec, full diff, stable 64-character fingerprint and explicit
+worker/test verdict. Aggregation fails when runs or source trees differ.
+
+This does NOT prove that PostHog's Scout sandbox can fetch the artifact.
+No extra data warehouse pipeline or Scout execution is implied. Keep the
+Scout disabled and non-emitting until read-only artifact access is verified.

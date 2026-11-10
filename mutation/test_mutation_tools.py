@@ -38,6 +38,9 @@ SHARD = {
     "worker_outcomes": {"NORMAL": 20},
     "manifest_sha256": MANIFEST_SHA256,
     "manifest_total": 40,
+    "source_commit_sha": "a" * 40,
+    "source_tree_sha": "b" * 40,
+    "run_url": "https://github.com/TeaShaman-cyber/local-lab/actions/runs/111",
     "survivors": [{"function": "_save_state", "operator": "core/Add_Sub", "location": "221:25"}],
 }
 
@@ -75,6 +78,7 @@ def run_report(
     operator: str = "core/Add_Sub",
     result_job_id: str | None = None,
     expected_returncode: int = 0,
+    diff: str = "diff",
 ):
     session = root / f"{name}.sqlite"
     with sqlite3.connect(session) as con:
@@ -98,7 +102,7 @@ def run_report(
         )
         con.execute(
             "insert into work_results values (?, ?, ?, ?, ?)",
-            ("NORMAL", "", "SURVIVED", "diff", result_job_id or job_id),
+            ("NORMAL", "", "SURVIVED", diff, result_job_id or job_id),
         )
 
     meta = root / f"{name}-meta.json"
@@ -108,7 +112,9 @@ def run_report(
         encoding="utf-8",
     )
     proc = subprocess.run(
-        [sys.executable, str(REPORT), str(session), "--meta", str(meta), "--out", str(out)],
+        [sys.executable, str(REPORT), str(session), "--meta", str(meta), "--out", str(out),
+         "--source-commit", "a" * 40, "--source-tree", "b" * 40,
+         "--run-url", "https://github.com/TeaShaman-cyber/local-lab/actions/runs/111"],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -284,3 +290,52 @@ def test_survivor_threshold_fails_only_when_set(tmp_path):
     blocked = run_aggregate(tmp_path, shards=2, max_survivors=4)
     assert blocked.returncode == 1
     assert "exceed the allowed 4" in blocked.stderr
+
+
+def test_scout_artifact_includes_checkout_and_untruncated_spec(tmp_path):
+    long_diff = "long-mutant-diff:" + "x" * 980
+    result = run_report(tmp_path, "full-evidence", "random-job-z", diff=long_diff)
+    survivor = result["survivors"][0]
+    spec = survivor["spec"]
+    assert result["source_commit_sha"] == "a" * 40
+    assert result["source_tree_sha"] == "b" * 40
+    assert result["run_url"].endswith("/111")
+    assert spec == {
+        "module_path": "module.py",
+        "operator_name": "core/Add_Sub",
+        "operator_args": {},
+        "occurrence": 0,
+        "start": [10, 2],
+        "end": [10, 3],
+        "definition_name": "function",
+    }
+    from mutation.report import _fingerprint
+    assert _fingerprint(spec) == survivor["mutation_id"]
+    assert survivor["diff"] == long_diff
+    assert survivor["worker_outcome"] == "NORMAL"
+    assert survivor["test_outcome"] == "SURVIVED"
+
+
+def test_aggregate_rejects_mixed_checkout_lineage(tmp_path):
+    write_shard(tmp_path, 0)
+    write_shard(tmp_path, 1, source_tree_sha="c" * 40)
+    result = run_aggregate(tmp_path, shards=2)
+    assert result.returncode == 1
+    assert "source tree" in result.stderr
+
+
+def test_aggregate_rejects_missing_checkout_lineage(tmp_path):
+    write_shard(tmp_path, 0)
+    write_shard(tmp_path, 1, source_commit_sha=None)
+    result = run_aggregate(tmp_path, shards=2)
+    assert result.returncode == 1
+    assert "source commit" in result.stderr
+
+
+
+def test_aggregate_rejects_mixed_workflow_runs(tmp_path):
+    write_shard(tmp_path, 0)
+    write_shard(tmp_path, 1, run_url="https://github.com/TeaShaman-cyber/local-lab/actions/runs/222")
+    result = run_aggregate(tmp_path, shards=2)
+    assert result.returncode == 1
+    assert "run URL" in result.stderr
