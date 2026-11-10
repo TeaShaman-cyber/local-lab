@@ -305,6 +305,19 @@ class TestDelivers(HookTestCase):
         self.assertEqual(set(server.workspace_headers), {"hermes"})
         self.assertEqual(server.tool_calls[0]["arguments"]["workspace_id"], "hermes")
 
+    def test_query_is_truncated_at_the_documented_ceiling(self):
+        # MAX_QUERY_CHARS is a request-shaping contract: an off-by-one either
+        # leaks payload past the ceiling or silently drops a character.
+        long_message = "я" * 500
+        inner = {"messages": [{"id": "m1", "content": "x", "content_chars": 1,
+                               "content_truncated": False}], "conclusions": []}
+        with FakeMCP(inner=inner) as server:
+            self.run_hook(self.payload(long_message), server.url)
+
+        sent = server.tool_calls[0]["arguments"]["query"]
+        self.assertEqual(len(sent), 400, f"query length {len(sent)} is not the ceiling")
+        self.assertEqual(sent, long_message[:400])
+
     def test_omits_empty_workspace_header(self):
         inner = {"messages": [], "conclusions": []}
         with FakeMCP(inner=inner) as server:
@@ -422,6 +435,19 @@ class TestBoundedServerContract(HookTestCase):
                 self.assertEqual(proc.returncode, 0)
                 self.assertIsNone(self.decode(proc))
                 self.assertEqual(server.request_count(), 0)
+
+    def test_budget_accepts_the_documented_bounds(self):
+        # 512 and 65536 are inclusive boundaries: an off-by-one here silently
+        # rejects a value the documented contract allows.
+        for value in (512, 65536):
+            with self.subTest(value=value), FakeMCP(inner={"messages": []}) as server:
+                self.run_hook(
+                    self.payload("расскажи про динамическую шпаргалку"),
+                    server.url, HONCHO_RECALL_MAX_JSON_BYTES=str(value),
+                )
+                self.assertEqual(server.request_count(), 1, "boundary value was rejected")
+                self.assertEqual(
+                    server.tool_calls[0]["arguments"]["max_result_json_bytes"], value)
 
     def test_budget_requested_but_legacy_server_reply_fails_open(self):
         # Old MCP servers may ignore an unknown tool argument. That must not
