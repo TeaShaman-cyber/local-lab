@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 """Summarize one mutation shard and refuse to report a green result it did not earn.
 
-Two distinct failure modes, and both must fail the shard:
-
-  * a work item was never executed at all — the job died or `exec` stopped;
-  * a worker recorded EXCEPTION/TIMEOUT — cosmic-ray still persists a row with
-    `test_outcome=INCOMPETENT`, but no test ran against that mutant.
-
-Counting a row as proof of execution is how a mutation gate reports success over
-work it never did, so completeness is counted on `worker_outcome=NORMAL` only.
+The shard fails closed when any assigned mutant lacks a real verdict: never
+executed work, worker failures, `INCOMPETENT` test launches, or result rows that
+cannot be joined back to a mutation spec. Counting any such row as proof of
+execution is how a mutation gate reports success over work it never did.
 
 Survivors carry their mutation spec (operator, function, position) and diff, so
 the list can guide a test improvement instead of naming opaque job IDs.
@@ -19,12 +15,56 @@ Writes `shard-result.json` for the aggregate job and prints a markdown table.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sqlite3
 import sys
 from collections import Counter
 
 DIFF_LIMIT = 600
+
+
+def _canonical_operator_args(raw):
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return raw
+
+
+def _stable_spec(row) -> dict:
+    (
+        _job_id,
+        module_path,
+        operator_name,
+        operator_args,
+        occurrence,
+        start_row,
+        start_col,
+        end_row,
+        end_col,
+        definition_name,
+    ) = row
+    return {
+        "module_path": module_path,
+        "operator_name": operator_name,
+        "operator_args": _canonical_operator_args(operator_args),
+        "occurrence": occurrence,
+        "start": [start_row, start_col],
+        "end": [end_row, end_col],
+        "definition_name": definition_name,
+    }
+
+
+def _fingerprint(spec: dict) -> str:
+    canonical = json.dumps(spec, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _manifest_fingerprint(mutation_ids) -> str:
+    canonical = "\n".join(sorted(mutation_ids))
+    return hashlib.sha256(canonical.encode("ascii")).hexdigest()
 
 
 def main() -> int:
@@ -41,21 +81,30 @@ def main() -> int:
         rows = con.execute(
             "select job_id, worker_outcome, test_outcome, diff from work_results"
         ).fetchall()
-        specs = {
-            job_id: {
-                "operator": operator,
-                "function": function,
-                "location": f"{row}:{col}",
+        spec_rows = con.execute(
+            "select job_id, module_path, operator_name, operator_args, occurrence, "
+            "start_pos_row, start_pos_col, end_pos_row, end_pos_col, definition_name "
+            "from mutation_specs"
+        ).fetchall()
+        specs = {}
+        for spec_row in spec_rows:
+            stable = _stable_spec(spec_row)
+            specs[spec_row[0]] = {
+                **stable,
+                "mutation_id": _fingerprint(stable),
+                "operator": stable["operator_name"],
+                "function": stable["definition_name"],
+                "location": f"{stable['start'][0]}:{stable['start'][1]}",
             }
-            for job_id, operator, row, col, function in con.execute(
-                "select job_id, operator_name, start_pos_row, start_pos_col, "
-                "definition_name from mutation_specs"
-            )
-        }
 
-    workers = Counter((row[1] or "NONE") for row in rows)
-    measured = [row for row in rows if row[1] == "NORMAL"]
-    failed = [row for row in rows if row[1] != "NORMAL"]
+    manifest_ids = [spec["mutation_id"] for spec in specs.values()]
+    manifest_sha256 = _manifest_fingerprint(manifest_ids)
+    orphaned = [row for row in rows if row[0] not in specs]
+    known_rows = [row for row in rows if row[0] in specs]
+
+    workers = Counter((row[1] or "NONE") for row in known_rows)
+    measured = [row for row in known_rows if row[1] == "NORMAL"]
+    failed = [row for row in known_rows if row[1] != "NORMAL"]
 
     tests = Counter((row[2] or "NONE") for row in measured)
     killed = tests.get("KILLED", 0)
@@ -66,18 +115,19 @@ def main() -> int:
     # INCOMPETENT from a NORMAL worker is not a verdict about the mutant:
     # cosmic-ray catches a failure while launching the test process and records
     # it anyway. The row says "normal", but no test ran, so it is not measured.
-    unmeasured = never_run + len(failed) + incompetent
+    unmeasured = never_run + len(orphaned) + len(failed) + incompetent
 
     survivors = []
     for job_id, _worker, test_outcome, diff in measured:
         if test_outcome != "SURVIVED":
             continue
-        spec = specs.get(job_id, {})
+        spec = specs[job_id]
         survivors.append({
             "job_id": job_id,
-            "operator": spec.get("operator"),
-            "function": spec.get("function"),
-            "location": spec.get("location"),
+            "mutation_id": spec["mutation_id"],
+            "operator": spec["operator"],
+            "function": spec["function"],
+            "location": spec["location"],
             "diff": (diff or "")[:DIFF_LIMIT],
         })
 
@@ -88,6 +138,7 @@ def main() -> int:
         "assigned": meta["items"],
         "executed": len(measured) - incompetent,
         "failed": len(failed),
+        "orphaned_results": len(orphaned),
         "never_run": never_run,
         "unmeasured": unmeasured,
         "killed": killed,
@@ -95,9 +146,11 @@ def main() -> int:
         "incompetent": incompetent,
         "worker_outcomes": dict(workers),
         "survivors": survivors,
-        # Every mutant this shard touched. The aggregate uses it to prove the
-        # shards partition one set instead of trusting the counts.
-        "job_ids": [row[0] for row in rows],
+        # job_id is run-local. Stable mutation IDs come from the full mutation
+        # spec, so independent shard sessions can prove one shared manifest.
+        "manifest_sha256": manifest_sha256,
+        "manifest_total": len(manifest_ids),
+        "mutation_ids": [specs[row[0]]["mutation_id"] for row in known_rows],
     }
     with open(args.out, "w", encoding="utf-8") as handle:
         json.dump(result, handle, indent=2)
@@ -107,7 +160,7 @@ def main() -> int:
     print("| metric | value |")
     print("| --- | --- |")
     for key in ("assigned", "executed", "killed", "survived", "incompetent",
-                "failed", "never_run", "unmeasured"):
+                "failed", "orphaned_results", "never_run", "unmeasured"):
         print(f"| {key} | {result[key]} |")
     print()
 
@@ -121,7 +174,8 @@ def main() -> int:
         print(
             f"FAIL: {unmeasured} of {meta['items']} work items produced no test result "
             f"({len(failed)} worker failures, {incompetent} incompetent, "
-            f"{never_run} never run); this shard measured less than it promised.",
+            f"{len(orphaned)} results without specs, {never_run} never run); "
+            "this shard measured less than it promised.",
             file=sys.stderr,
         )
         return 1
