@@ -44,7 +44,8 @@ class FakeMCP:
                  sse: bool = True, legacy_server: bool = False,
                  notify_first: bool = False, crlf: bool = False,
                  comment_first: bool = False, broken_frame_first: bool = False,
-                 no_space_after_data: bool = False):
+                 no_space_after_data: bool = False,
+                 content_items: list | None = None):
         self.inner = inner
         self.broken_inner = broken_inner
         self.fail_status = fail_status
@@ -56,6 +57,9 @@ class FakeMCP:
         self.comment_first = comment_first
         self.broken_frame_first = broken_frame_first
         self.no_space_after_data = no_space_after_data
+        # Overrides the whole `result.content` list, so non-text and multi-item
+        # tool results are expressible.
+        self.content_items = content_items
         self.tool_calls: list[dict] = []
         self.auth_headers: list[str] = []
         self.workspace_headers: list[str | None] = []
@@ -144,8 +148,11 @@ class FakeMCP:
                     return
                 text = "not json at all" if outer.broken_inner else json.dumps(
                     outer.inner or {}, ensure_ascii=False)
+                content = outer.content_items
+                if content is None:
+                    content = [{"type": "text", "text": text}]
                 payload = {"jsonrpc": "2.0", "id": body.get("id"),
-                           "result": {"content": [{"type": "text", "text": text}]}}
+                           "result": {"content": content}}
                 outer._send(self, payload)
 
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -664,6 +671,18 @@ class TestStaysSilent(HookTestCase):
             proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
         self.assertIsNone(self.decode(proc))
         self.assertEqual(proc.returncode, 0)
+
+    def test_non_text_tool_content_is_not_delivered(self):
+        # Only a text content block carries the search payload. A different
+        # block type that happens to hold JSON must never be parsed as recall:
+        # loosening the guard turns it into fabricated context.
+        carried = json.dumps({"messages": [{"id": "img", "content": "from an image block"}],
+                              "conclusions": []})
+        with FakeMCP(content_items=[{"type": "image", "text": carried}]) as server:
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
+
+        self.assertIsNone(self.decode(proc), "non-text content was delivered as recall")
+        self.assertEqual(proc.stdout.strip(), "")
 
     def test_other_hook_event_is_ignored(self):
         payload = self.payload("расскажи про динамическую шпаргалку")
