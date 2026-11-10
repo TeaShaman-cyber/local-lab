@@ -1,0 +1,17 @@
+{
+ "version":1,
+ "source_issue":"https://github.com/TeaShaman-cyber/local-lab/issues/234",
+ "source_review":"https://github.com/TeaShaman-cyber/local-lab/issues/234#issuecomment-6770500231",
+ "source_sha":"c4267846c1174bd8105f68e71e9f2526a50caa0f",
+ "manifest_sha256":"cef0235ba726211580dba413dffb1c6e719fe89b92c270937a567528e47e037f",
+ "scope":"calibration only; prefixes are NOT full stable mutation IDs",
+ "cases":[
+ {"case_id":"header-negation","fingerprint":"d00b7f08bca66b4743a450693cbf24495fe7dfa026db9a1bb616314660c77819","expected":"CONFIRMED_TEST_GAP","evidence":"Header-negation mutant KILLED in independently verified shard 8, worker NORMAL; black-box workspace header assertion detects it."},
+ {"case_id":"annotation-post","fingerprint_prefix":"2930ef8881","expected":"EQUIVALENT_OBSERVED_CONTRACT","evidence":"Postponed type annotation in module with future annotations; runtime hook contract does not observe it."},
+ {"case_id":"annotation-build","fingerprint_prefix":"57b3a2e90","expected":"EQUIVALENT_OBSERVED_CONTRACT","evidence":"Postponed annotation expression; contract excludes annotations introspection."},
+ {"case_id":"exception-string-1","fingerprint_prefix":"d0307ff206","expected":"EQUIVALENT_OBSERVED_CONTRACT","evidence":"Changes ValueError formatting but outer hook remains fail-open and exception string is not external output."},
+ {"case_id":"exception-string-2","fingerprint_prefix":"5791190e9e","expected":"EQUIVALENT_OBSERVED_CONTRACT","evidence":"Changes non-200 ValueError message construction; caller remains fail-open."},
+ {"case_id":"content-predicate","fingerprint_prefix":"e605c02871","expected":"REVIEW_REQUIRED","evidence":"or-to-and changes error path for invalid or empty content; input domain not fully bounded, equivalence provisional."},
+ {"case_id":"invalid-content-type","fingerprint_prefix":"02bf02752e","expected":"TEST_GAP_CANDIDATE","evidence":"Comparison change may admit invalid type zzz with parseable text; needs concrete replay."}
+ ]
+}
