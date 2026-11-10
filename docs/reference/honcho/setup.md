@@ -264,18 +264,28 @@ plugin создаёт локальный fork.
 форматтеру MCP).
 
 Поэтому форк: <https://github.com/TeaShaman-cyber/honcho>, checkout
-`E:/honcho-upstream`, база `3326373c35f6`, принятый merge `dad6848`.
-Ограничение живёт в форматтере, а не в вызывающей стороне: так один и тот же
-контракт получает любой harness, а хук остаётся тонким.
+`E:/honcho-upstream` (`fork-main` отслеживает `fork/main`), база `3326373c35f6`.
+Первый принятый merge `dad6848` ограничил отдельное сообщение; действующий merge
+`a4c3680` добавил opt-in бюджет всего search JSON. Ограничения живут в MCP
+форматтере, а не в вызывающей стороне: так один и тот же контракт получает любой
+harness, а хук остаётся тонким.
 
-Что изменено:
+Два слоя контракта:
 
 - `MCP_MAX_MESSAGE_CONTENT_CHARS` — предел на сообщение, default `2000`,
   допустимо `1..100000` Unicode code points; невалидное значение откатывается
   к дефолту;
 - многоточие входит в лимит, surrogate pair не разрывается;
 - каждая запись несёт `content_chars` и `content_truncated`;
-- настройка проведена во всех трёх хостах: Worker, HTTP, stdio.
+- настройка проведена во всех трёх хостах: Worker, HTTP, stdio;
+- optional `max_result_json_bytes=512..65536` ограничивает UTF-8 размер всего
+  `content[0].text` search JSON. Без параметра legacy-ответ не меняется;
+- bounded envelope `honcho_search_bounded_v1` явно сообщает
+  `retrieved/returned/omitted` отдельно для messages и conclusions,
+  `total_matches=null` и `total_matches_status=UNKNOWN_UPSTREAM`; возвращённые
+  conclusions сохраняют `source_ids`, `source_message_ids`, `observer_id`,
+  `observed_id` и `session_id`;
+- enclosing JSON-RPC frame в этот бюджет не входит.
 
 Наблюдаемая проверка на живом стенде (лимит по умолчанию 2000):
 
@@ -284,7 +294,31 @@ returned_chars [365, 2000, 317]   original_chars [365, 15738, 317]
 truncated      [false, true, false]
 ```
 
-Тот же результат приходит через Hermes при вызове `mcp__honcho_mcp_local__search`.
+Тот же per-message результат приходит через Hermes при вызове
+`mcp__honcho_mcp_local__search`.
+
+Живая opt-in проверка merge `a4c3680` через настоящий MCP-клиент (`mcporter`) на
+изолированном candidate, затем на endpoint `127.0.0.1:3000`:
+
+```text
+legacy:       8463 compact UTF-8 bytes, старые keys messages/conclusions
+bounded 512:   512 bytes, 1/5 messages, 0/10 conclusions, omissions accounted
+bounded 2000: 2000 bytes, 2/5 messages, 2/10 conclusions, provenance retained
+invalid 511:  rejected (exit 1)
+```
+
+Действующий контейнер `honcho-mcp-probe` собран локально из `mcp/Dockerfile`
+exact merge `a4c3680` как `local/honcho-mcp:a4c3680`; image ID
+`sha256:0c355f008a135d96225ae30ccbfe1ff3de0d86c0b621e982cde09249d2c12dcb`.
+Остановленный `honcho-mcp-probe-rollback-dad6848` оставлен для отката. Публичный
+`ghcr.io/teashaman-cyber/honcho:latest@sha256:7161a0a4…` здесь использовать
+нельзя: workflow собирает корневой Python/FastAPI Dockerfile (порт 8000), а не
+`mcp/Dockerfile` (Bun, порт 3000).
+
+Native Hermes legacy-call после переключения прошёл. Schema MCP tools кэшируется
+на старте сессии, поэтому уже открытая сессия не показывает новый
+`max_result_json_bytes`; нужен reload каталога или новая сессия. Это клиентская
+staleness, серверный opt-in контракт отдельно доказан mcporter.
 
 ### Ловушки
 
@@ -302,7 +336,7 @@ truncated      [false, true, false]
 
 ```bash
 docker build --target qa -t local/honcho-mcp-qa:dev E:/honcho-upstream/mcp
-docker build -t local/honcho-mcp:dad6848 E:/honcho-upstream/mcp
+docker build -t local/honcho-mcp:a4c3680 E:/honcho-upstream/mcp
 ```
 
 QA-таргет прогоняет `typecheck`, полный Bun-набор и Biome; то же самое делает
@@ -316,15 +350,16 @@ QA-таргет прогоняет `typecheck`, полный Bun-набор и B
 ### Границы этапа
 
 Размер — собственность MCP: одна запись ограничена `MCP_MAX_MESSAGE_CONTENT_CHARS`
-и несёт `content_truncated`. Число записей — параметр запроса (`message_limit`,
-`conclusion_top_k`), а не постобработка на клиенте. Хук не режет и не выбрасывает
-записи: иначе ограничение расползлось бы по каждому harness, а контракт перестал
-бы быть переносимым.
+и несёт `content_truncated`; opt-in `max_result_json_bytes` ограничивает весь
+search JSON и явно учитывает пропущенные records. Число upstream records — параметры
+запроса (`message_limit`, `conclusion_top_k`), а не постобработка на клиенте. Хук
+не режет и не выбрасывает записи: иначе ограничение расползлось бы по каждому
+harness, а контракт перестал бы быть переносимым.
 
-Не входит и намеренно не сделано: общий бюджет байтов на весь ответ, усечение
-`conclusions`, включение hook'а в Hermes, изменения плагина Honcho и
-MemoryProvider. Recall пока вызывается вручную; автоматическая доставка — отдельный
-шаг.
+Не входит и намеренно не сделано: включение whole-response budget по умолчанию,
+ограничение enclosing JSON-RPC frame или других search-like tools, включение hook'а
+в Hermes, изменения Honcho plugin и MemoryProvider. Recall пока вызывается вручную;
+автоматическая доставка — отдельный шаг.
 
 ## История решений
 
@@ -337,4 +372,4 @@ MemoryProvider. Recall пока вызывается вручную; автом�
 | Logfmt-события прогонов | PR #190 |
 | Правила на dedup и skillpacks | PR #203, `infra/grafana/alertrules/` |
 | Доступность API и backlog deriver | issue #209 |
-| MCP-поверхность и ограничение размера сообщения | issue #231, PR TeaShaman-cyber/honcho#1 |
+| MCP-поверхность, per-message и whole-search бюджеты | local-lab#231, TeaShaman-cyber/honcho#1/#4/#5 |
