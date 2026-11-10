@@ -538,9 +538,11 @@ services:
     artifacts:
       - role: deployed-scout-body
         path: docs/posthog/mutant-scout/scout-body.md
+        canonicalization: text-lf
         sha256: 383be6cb0aa8c27a24236a5c262b8737e3bb8935d02aca6383d597e20ca4d5d2
       - role: calibration-cases
         path: docs/posthog/mutant-scout/known-cases.json
+        canonicalization: text-lf
         sha256: 2cdd69ce1b4f2416dd46e7db493f0e3b9003dae741a8c15305a01ff73b7bfc0e
     monitoring: >-
       Сам является observability provider. Живость проверяется через project GET,

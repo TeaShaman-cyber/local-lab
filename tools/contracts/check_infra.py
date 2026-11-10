@@ -220,11 +220,15 @@ def check_artifacts(data: dict) -> list[str]:
                 continue
             role = artifact.get("role")
             rel_path = artifact.get("path")
+            canonicalization = artifact.get("canonicalization")
             expected = artifact.get("sha256")
             if not isinstance(role, str) or not role.strip():
                 errors.append(f"{label}: missing role")
             if not isinstance(rel_path, str) or not rel_path.strip():
                 errors.append(f"{label}: missing path")
+                continue
+            if canonicalization not in ("raw", "text-lf"):
+                errors.append(f"{label}: canonicalization must be raw or text-lf")
                 continue
             if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
                 errors.append(f"{label}: sha256 must be 64 lowercase hex characters")
@@ -238,7 +242,15 @@ def check_artifacts(data: dict) -> list[str]:
             if not candidate.is_file():
                 errors.append(f"{label}: file not found: {rel_path}")
                 continue
-            actual = hashlib.sha256(candidate.read_bytes()).hexdigest()
+            payload = candidate.read_bytes()
+            if canonicalization == "text-lf":
+                try:
+                    text = payload.decode("utf-8")
+                except UnicodeDecodeError:
+                    errors.append(f"{label}: text-lf artifact is not UTF-8: {rel_path}")
+                    continue
+                payload = text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+            actual = hashlib.sha256(payload).hexdigest()
             if actual != expected:
                 errors.append(
                     f"{label}: sha256 drift for {rel_path}: expected {expected}, got {actual}"
@@ -335,6 +347,15 @@ def self_test() -> int:
     if artifact_service is not None:
         artifact_service["artifacts"][0]["sha256"] = "0" * 64
         cases.append(("Git-owned artifact digest drift", artifact_drift, rules, doc_text))
+
+        bad_canonicalization = copy.deepcopy(registry)
+        bad_artifact_service = next(
+            service for service in bad_canonicalization["services"] if service.get("artifacts")
+        )
+        bad_artifact_service["artifacts"][0]["canonicalization"] = "platform-default"
+        cases.append(
+            ("unknown artifact canonicalization", bad_canonicalization, rules, doc_text)
+        )
 
     failures = 0
     for name, reg, rul, doc in cases:

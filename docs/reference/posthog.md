@@ -27,8 +27,10 @@ server-side reason.
 
 `docs/posthog/mutant-scout/` владеет инструкцией и calibration cases. Деплой в PostHog —
 проекция. `INFRA-023.artifacts` хранит SHA-256 Git-файлов, а
-`python tools/contracts/check_infra.py` пересчитывает digest. Это ловит забытое обновление
-registry при изменении source, но не доказывает, что live projection синхронизирована.
+`python tools/contracts/check_infra.py` пересчитывает digest. Текстовые artifacts явно
+объявляют `text-lf`: перед хешированием checker приводит CRLF и lone CR к LF, поэтому
+Windows checkout не выглядит source drift. Это ловит забытое обновление registry при
+изменении source, но не доказывает, что live projection синхронизирована.
 
 Live projection проверяется отдельно:
 
