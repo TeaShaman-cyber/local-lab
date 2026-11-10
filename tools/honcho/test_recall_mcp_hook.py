@@ -191,6 +191,7 @@ class TestDelivers(HookTestCase):
         self.assertEqual(params["arguments"]["peer_id"], "semyon")
         self.assertEqual(params["arguments"]["message_limit"], 3)
         self.assertEqual(params["arguments"]["conclusion_top_k"], 3)
+        self.assertNotIn("max_result_json_bytes", params["arguments"])
 
         # projection: no unlisted fields leak through
         self.assertEqual(set(block["messages"][0]),
@@ -275,6 +276,85 @@ class TestDelivers(HookTestCase):
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIsNotNone(self.decode(proc))
+
+
+class TestBoundedServerContract(HookTestCase):
+    def test_opt_in_budget_preserves_source_provenance_and_coverage(self):
+        inner = {
+            "format": "honcho_search_bounded_v1",
+            "messages": [{"id": "m1", "content": "evidence", "content_chars": 8,
+                          "content_truncated": False}],
+            "conclusions": [{
+                "id": "c1", "content": "deduction", "level": "deductive",
+                "source_ids": ["c0"], "source_message_ids": None,
+                "times_derived": 2, "observer_id": "agent", "observed_id": "semyon",
+                "session_id": "s1", "content_chars": 9, "content_truncated": False,
+            }],
+            "coverage": {
+                "retrieved_messages": 3, "returned_messages": 1, "omitted_messages": 2,
+                "retrieved_conclusions": 4, "returned_conclusions": 1, "omitted_conclusions": 3,
+                "total_matches": None, "total_matches_status": "UNKNOWN_UPSTREAM",
+            },
+        }
+        with FakeMCP(inner=inner) as server:
+            proc = self.run_hook(
+                self.payload("расскажи про динамическую шпаргалку"),
+                server.url, HONCHO_RECALL_MAX_JSON_BYTES="2048",
+            )
+        block = self.decode(proc)
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(server.tool_calls[0]["arguments"]["max_result_json_bytes"], 2048)
+        self.assertEqual(block["format"], "honcho_search_bounded_v1")
+        self.assertEqual(block["coverage"], inner["coverage"])
+        self.assertEqual(block["conclusions"][0]["source_ids"], ["c0"])
+        self.assertIsNone(block["conclusions"][0]["source_message_ids"])
+        self.assertEqual(block["conclusions"][0]["times_derived"], 2)
+        self.assertEqual(block["conclusions"][0]["observer_id"], "agent")
+        self.assertEqual(block["conclusions"][0]["level"], "deductive")
+
+    def test_invalid_budget_is_rejected_before_network_not_silently_ignored(self):
+        for value in ("511", "65537", "invalid", "0"):
+            with self.subTest(value=value), FakeMCP(inner={"messages": []}) as server:
+                proc = self.run_hook(
+                    self.payload("расскажи про динамическую шпаргалку"),
+                    server.url, HONCHO_RECALL_MAX_JSON_BYTES=value,
+                )
+                self.assertEqual(proc.returncode, 0)
+                self.assertIsNone(self.decode(proc))
+                self.assertEqual(server.initialize_calls, 0)
+
+    def test_budget_requested_but_legacy_server_reply_fails_open(self):
+        # Old MCP servers may ignore an unknown tool argument. That must not
+        # silently bypass an explicitly requested whole-response budget.
+        with FakeMCP(inner={"messages": [{"id": "m1", "content": "x"}]}) as server:
+            proc = self.run_hook(
+                self.payload("расскажи про динамическую шпаргалку"),
+                server.url, HONCHO_RECALL_MAX_JSON_BYTES="2048",
+            )
+        self.assertEqual(proc.returncode, 0)
+        self.assertIsNone(self.decode(proc))
+        self.assertEqual(len(server.tool_calls), 1)
+
+    def test_bounded_all_omitted_is_distinct_from_no_matches(self):
+        inner = {
+            "format": "honcho_search_bounded_v1",
+            "messages": [], "conclusions": [],
+            "coverage": {
+                "retrieved_messages": 2, "returned_messages": 0, "omitted_messages": 2,
+                "retrieved_conclusions": 0, "returned_conclusions": 0,
+                "omitted_conclusions": 0, "total_matches": None,
+                "total_matches_status": "UNKNOWN_UPSTREAM",
+            },
+        }
+        with FakeMCP(inner=inner) as server:
+            proc = self.run_hook(
+                self.payload("расскажи про динамическую шпаргалку"),
+                server.url, HONCHO_RECALL_MAX_JSON_BYTES="512",
+            )
+        block = self.decode(proc)
+        self.assertEqual(block["messages"], [])
+        self.assertEqual(block["coverage"]["omitted_messages"], 2)
+        self.assertEqual(block["coverage"]["total_matches_status"], "UNKNOWN_UPSTREAM")
 
 
 class TestStaysSilent(HookTestCase):
