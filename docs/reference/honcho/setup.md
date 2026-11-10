@@ -333,9 +333,15 @@ invalid 511:  rejected (exit 1)
 ```text
 merge:  d04090ec7fe9d191d94c616fe6341f4402b8ce38
 tag:    ghcr.io/teashaman-cyber/honcho-mcp:sha-d04090ec7fe9d191d94c616fe6341f4402b8ce38
-digest: sha256:544c5d46b83d90b36306716a99fc64e47be62d9045483a37a1c88545e9889b55
+index:  sha256:544c5d46b83d90b36306716a99fc64e47be62d9045483a37a1c88545e9889b55  (OCI index, multi-arch)
+amd64:  manifest sha256:78b5317a…  config sha256:74880f82…
 run:    TeaShaman-cyber/honcho actions run 42888178408 (success)
 ```
+
+Три digest — три разных объекта. `docker inspect .Id` на этом хосте (containerd
+image store) равен digest индекса, а не config digest, поэтому в registry нет поля
+`image_id`: конфигурация и манифест записаны отдельными ключами, чтобы проверка не
+сравнивала несравнимое.
 
 Контейнер `honcho-mcp-probe` запускается **по digest**, поэтому работающий образ
 неподвижен и проверяем. Остановленные `honcho-mcp-rollback-f67c4d6` (локальная

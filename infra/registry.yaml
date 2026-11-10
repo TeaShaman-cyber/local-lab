@@ -448,7 +448,14 @@ services:
     location:
       image: ghcr.io/teashaman-cyber/honcho-mcp:sha-d04090ec7fe9d191d94c616fe6341f4402b8ce38
       image_digest: ghcr.io/teashaman-cyber/honcho-mcp@sha256:544c5d46b83d90b36306716a99fc64e47be62d9045483a37a1c88545e9889b55
-      image_id: sha256:544c5d46b83d90b36306716a99fc64e47be62d9045483a37a1c88545e9889b55
+      image_index_media_type: application/vnd.oci.image.index.v1+json
+      image_manifest_amd64: sha256:78b5317a5d79c1f22397fb5fcfe0dc88fcca7564abf5f2fef696302958daac19
+      image_config_amd64: sha256:74880f82549c984136b1245c24e086c69bda3eefdf182c36333062684e5fbece
+      image_id_note: >-
+        отдельного image_id нет намеренно: это разные объекты. Docker на этом хосте
+        (containerd image store) отдаёт в `docker inspect .Id` digest индекса, то есть
+        совпадение .Id == image_digest — наблюдённый факт, а не определение; config
+        digest linux/amd64 записан отдельно как image_config_amd64
       container: honcho-mcp-probe
       endpoint: "http://127.0.0.1:3000/mcp"
       published_port: "127.0.0.1:3000 -> 3000/tcp"
