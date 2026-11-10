@@ -34,6 +34,7 @@ class FakeMCP:
         self.require_auth = require_auth
         self.tool_calls: list[dict] = []
         self.auth_headers: list[str] = []
+        self.workspace_headers: list[str | None] = []
         self.initialize_calls = 0
         self._server = None
         self._thread = None
@@ -61,6 +62,9 @@ class FakeMCP:
                     self.end_headers()
                     return
                 outer.auth_headers.append(auth)
+                outer.workspace_headers.append(
+                    self.headers.get("X-Honcho-Workspace-ID")
+                )
 
                 if method == "initialize":
                     outer.initialize_calls += 1
@@ -217,7 +221,23 @@ class TestDelivers(HookTestCase):
         for header in server.auth_headers:
             self.assertTrue(header.lower().startswith("bearer "), header)
         self.assertIn("Bearer custom-token", server.auth_headers)
+        self.assertTrue(server.workspace_headers)
+        self.assertEqual(set(server.workspace_headers), {"hermes"})
         self.assertEqual(server.tool_calls[0]["arguments"]["workspace_id"], "hermes")
+
+    def test_omits_empty_workspace_header(self):
+        inner = {"messages": [], "conclusions": []}
+        with FakeMCP(inner=inner) as server:
+            proc = self.run_hook(
+                self.payload("расскажи про динамическую шпаргалку"),
+                server.url,
+                HONCHO_RECALL_WORKSPACE="",
+            )
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertTrue(server.workspace_headers)
+        self.assertEqual(set(server.workspace_headers), {None})
+        self.assertNotIn("workspace_id", server.tool_calls[0]["arguments"])
 
     def test_delivers_every_record_untouched(self):
         # Sizing belongs to the MCP formatter: the hook must not drop or trim
