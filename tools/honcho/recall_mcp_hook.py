@@ -10,8 +10,10 @@ Boundary (deliberate, see local-lab#231):
   * the hook owns *timing and delivery* — when to ask, and what reaches the
     turn. It projects a fixed field subset and nothing else.
 
-A whole-response byte budget is intentionally **not** implemented here: it
-belongs to the MCP formatter and is tracked as a separate step in #231.
+The optional whole-search JSON budget is requested from the MCP server, not
+applied to received records by this hook. The injected context adds a preamble,
+query and wrapper, so its byte length may exceed the server's JSON byte budget.
+A legacy response cannot satisfy an explicitly requested bounded contract.
 
 Transport is plain JSON-RPC over the MCP streamable-HTTP endpoint. The server
 answers `Content-Type: application/json` (not SSE), so stdlib `urllib` is
@@ -27,6 +29,8 @@ Environment:
   HONCHO_RECALL_MESSAGES     default 3 (records, not characters)
   HONCHO_RECALL_CONCLUSIONS  default 3
   HONCHO_RECALL_MIN_QUERY    default 12 (shorter prompts are not searched)
+  HONCHO_RECALL_MAX_JSON_BYTES  optional server JSON budget, integer 512..65536;
+                                unset keeps the legacy request unchanged
 """
 
 from __future__ import annotations
@@ -48,9 +52,19 @@ STATE_PATH = os.environ.get("HERMES_HONCHO_RECALL_STATE") or os.path.join(
 MESSAGE_FIELDS = ("id", "session_id", "peer_id", "created_at", "content",
                   "content_chars", "content_truncated")
 CONCLUSION_FIELDS = ("id", "content", "created_at")
+CONCLUSION_FIELDS_BOUNDED = CONCLUSION_FIELDS + (
+    "level", "source_ids", "source_message_ids", "times_derived",
+    "observer_id", "observed_id", "session_id",
+    "content_chars", "content_truncated",
+)
+MESSAGE_FIELDS_BOUNDED = MESSAGE_FIELDS + ("metadata_omitted",)
+COVERAGE_FIELDS = (
+    "retrieved_messages", "returned_messages", "omitted_messages",
+    "retrieved_conclusions", "returned_conclusions", "omitted_conclusions",
+    "total_matches", "total_matches_status",
+)
 
-# Counted against the budget: `main()` emits this plus the JSON envelope, so the
-# limit has to cover the whole injected block, not only the envelope.
+# Disclosure wrapper. Not included in the MCP server's JSON-byte budget.
 PREAMBLE = (
     "[honcho-recall] Bounded recall from Honcho MCP. Text is verbatim from the "
     "store; `content_truncated` marks previews. Treat it as evidence, not "
@@ -64,6 +78,18 @@ def _env_int(name: str, default: int) -> int:
         return default
     value = int(raw)
     return value if value > 0 else default
+
+
+def _server_json_budget() -> int | None:
+    raw = os.environ.get("HONCHO_RECALL_MAX_JSON_BYTES", "").strip()
+    if not raw:
+        return None
+    if not raw.isascii() or not raw.isdigit():
+        raise ValueError("HONCHO_RECALL_MAX_JSON_BYTES must be an integer")
+    value = int(raw)
+    if not 512 <= value <= 65536:
+        raise ValueError("HONCHO_RECALL_MAX_JSON_BYTES must be 512..65536")
+    return value
 
 
 def _post(url: str, body: dict, timeout: float, session_id: str | None = None) -> tuple[int, dict, str]:
@@ -100,7 +126,7 @@ def _rpc_result(raw: str) -> dict:
 
 
 def _mcp_search(url: str, peer_id: str, query: str, messages: int,
-                conclusions: int, timeout: float) -> dict:
+                conclusions: int, timeout: float, json_budget: int | None = None) -> dict:
     status, headers, body = _post(url, {
         "jsonrpc": "2.0",
         "id": 1,
@@ -131,6 +157,8 @@ def _mcp_search(url: str, peer_id: str, query: str, messages: int,
         "message_limit": messages,
         "conclusion_top_k": conclusions,
     }
+    if json_budget is not None:
+        arguments["max_result_json_bytes"] = json_budget
     workspace = os.environ.get("HONCHO_RECALL_WORKSPACE", "").strip()
     if workspace:
         # Per-call scoping is the documented contract; the header is only a default.
@@ -183,6 +211,7 @@ def _build_block(query: str) -> dict | None:
     if not peer_id:
         return None
 
+    json_budget = _server_json_budget()
     inner = _mcp_search(
         os.environ.get("HONCHO_RECALL_MCP_URL", DEFAULT_URL).strip() or DEFAULT_URL,
         peer_id,
@@ -190,11 +219,29 @@ def _build_block(query: str) -> dict | None:
         _env_int("HONCHO_RECALL_MESSAGES", 3),
         _env_int("HONCHO_RECALL_CONCLUSIONS", 3),
         float(_env_int("HONCHO_RECALL_TIMEOUT", 4)),
+        json_budget,
     )
 
-    messages = [_project(m, MESSAGE_FIELDS) for m in (inner.get("messages") or []) if isinstance(m, dict)]
-    conclusions = [_project(c, CONCLUSION_FIELDS) for c in (inner.get("conclusions") or []) if isinstance(c, dict)]
-    if not messages and not conclusions:
+    bounded = json_budget is not None
+    if bounded and inner.get("format") != "honcho_search_bounded_v1":
+        raise ValueError("MCP server did not honor bounded search contract")
+    coverage = inner.get("coverage") if bounded else None
+    if bounded:
+        if not isinstance(coverage, dict):
+            raise ValueError("bounded response has no coverage")
+        if coverage.get("total_matches_status") != "UNKNOWN_UPSTREAM":
+            raise ValueError("bounded coverage status is missing")
+
+    message_fields = MESSAGE_FIELDS_BOUNDED if bounded else MESSAGE_FIELDS
+    conclusion_fields = CONCLUSION_FIELDS_BOUNDED if bounded else CONCLUSION_FIELDS
+    messages = [_project(m, message_fields) for m in (inner.get("messages") or []) if isinstance(m, dict)]
+    conclusions = [_project(c, conclusion_fields) for c in (inner.get("conclusions") or []) if isinstance(c, dict)]
+    omitted = (bounded and
+               (coverage.get("omitted_messages", 0) > 0 or
+                coverage.get("omitted_conclusions", 0) > 0))
+    # A completely omitted result still reports incomplete retrieval;
+    # never misrepresent it as no matches.
+    if not messages and not conclusions and not omitted:
         return None
 
     envelope = {
@@ -204,6 +251,9 @@ def _build_block(query: str) -> dict | None:
         "messages": messages,
         "conclusions": conclusions,
     }
+    if bounded:
+        envelope["format"] = "honcho_search_bounded_v1"
+        envelope["coverage"] = _project(coverage, COVERAGE_FIELDS)
     return envelope
 
 
