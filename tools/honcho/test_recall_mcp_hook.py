@@ -42,7 +42,10 @@ class FakeMCP:
     def __init__(self, inner: dict | None = None, broken_inner: bool = False,
                  fail_status: int = 200, require_auth: bool = True,
                  sse: bool = True, legacy_server: bool = False,
-                 notify_first: bool = False, crlf: bool = False):
+                 notify_first: bool = False, crlf: bool = False,
+                 comment_first: bool = False, broken_frame_first: bool = False,
+                 no_space_after_data: bool = False,
+                 content_items: list | None = None):
         self.inner = inner
         self.broken_inner = broken_inner
         self.fail_status = fail_status
@@ -51,6 +54,12 @@ class FakeMCP:
         self.legacy_server = legacy_server
         self.notify_first = notify_first
         self.crlf = crlf
+        self.comment_first = comment_first
+        self.broken_frame_first = broken_frame_first
+        self.no_space_after_data = no_space_after_data
+        # Overrides the whole `result.content` list, so non-text and multi-item
+        # tool results are expressible.
+        self.content_items = content_items
         self.tool_calls: list[dict] = []
         self.auth_headers: list[str] = []
         self.workspace_headers: list[str | None] = []
@@ -139,8 +148,11 @@ class FakeMCP:
                     return
                 text = "not json at all" if outer.broken_inner else json.dumps(
                     outer.inner or {}, ensure_ascii=False)
+                content = outer.content_items
+                if content is None:
+                    content = [{"type": "text", "text": text}]
                 payload = {"jsonrpc": "2.0", "id": body.get("id"),
-                           "result": {"content": [{"type": "text", "text": text}]}}
+                           "result": {"content": content}}
                 outer._send(self, payload)
 
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -159,11 +171,18 @@ class FakeMCP:
             # A stream may legally interleave notifications before the response.
             separator = b"\r\n" if self.crlf else b"\n"
             frames = []
+            if self.comment_first:
+                # Comment frames ARE the keep-alive mechanism; they carry no
+                # `data:` line at all and must be skipped, not treated as the end.
+                frames.append(b": keep-alive" + separator + separator)
+            if self.broken_frame_first:
+                frames.append(b"data: {not json" + separator + separator)
             if self.notify_first:
                 note = json.dumps({"jsonrpc": "2.0", "method": "notifications/message",
                                    "params": {"level": "info"}}).encode("utf-8")
                 frames.append(b"event: message" + separator + b"data: " + note + separator + separator)
-            frames.append(b"event: message" + separator + b"data: " + data + separator + separator)
+            prefix = b"data:" if self.no_space_after_data else b"data: "
+            frames.append(b"event: message" + separator + prefix + data + separator + separator)
             framed = b"".join(frames)
             handler.send_response(200)
             handler.send_header("Content-Type", "text/event-stream")
@@ -497,6 +516,40 @@ class TestModernTransport(HookTestCase):
         self.assertIsNotNone(block, "CRLF framing was not normalised")
         self.assertEqual(block["messages"][0]["id"], "m1")
 
+    def test_skips_a_frame_that_carries_no_data_line(self):
+        # Comment frames (`: keep-alive`) are the normal SSE keep-alive and carry
+        # no `data:` line. Treating one as the end of the stream aborts parsing
+        # and drops recall silently.
+        with FakeMCP(inner=self.INNER, sse=True, comment_first=True) as server:
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        block = self.decode(proc)
+        self.assertIsNotNone(block, "a data-less frame ended the stream")
+        self.assertEqual(block["messages"][0]["id"], "m1")
+
+    def test_skips_a_frame_that_is_not_valid_json(self):
+        # A truncated or unparsable frame must be skipped, not raise: the real
+        # stream can carry one, and failing there loses the whole recall.
+        with FakeMCP(inner=self.INNER, sse=True, broken_frame_first=True) as server:
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        block = self.decode(proc)
+        self.assertIsNotNone(block, "an unparsable frame aborted the stream")
+        self.assertEqual(block["messages"][0]["id"], "m1")
+
+    def test_strips_exactly_the_data_prefix(self):
+        # `data:` may arrive without the space. Off-by-one in the slice leaves a
+        # stray quote in front of the JSON and the response is lost.
+        with FakeMCP(inner=self.INNER, sse=True, no_space_after_data=True) as server:
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        block = self.decode(proc)
+        self.assertIsNotNone(block, "the data: prefix was not stripped exactly")
+        self.assertEqual(block["messages"][0]["id"], "m1")
+
     def test_session_based_server_gets_no_silent_fallback(self):
         # honcho#10: legacy framing is not supported. An old server must produce
         # silence (fail-open), not a second, session-based attempt.
@@ -618,6 +671,18 @@ class TestStaysSilent(HookTestCase):
             proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
         self.assertIsNone(self.decode(proc))
         self.assertEqual(proc.returncode, 0)
+
+    def test_non_text_tool_content_is_not_delivered(self):
+        # Only a text content block carries the search payload. A different
+        # block type that happens to hold JSON must never be parsed as recall:
+        # loosening the guard turns it into fabricated context.
+        carried = json.dumps({"messages": [{"id": "img", "content": "from an image block"}],
+                              "conclusions": []})
+        with FakeMCP(content_items=[{"type": "image", "text": carried}]) as server:
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
+
+        self.assertIsNone(self.decode(proc), "non-text content was delivered as recall")
+        self.assertEqual(proc.stdout.strip(), "")
 
     def test_other_hook_event_is_ignored(self):
         payload = self.payload("расскажи про динамическую шпаргалку")
