@@ -77,9 +77,8 @@ local working tree -> local branch -> tracking ref -> live remote ref -> GitHub 
 `head SHA` и **до** финального заключения о готовности PR:
 
 1. Через доступный **в собственной среде основного агента** PostHog
-   прочитать состояние соответствующего GitHub warehouse source:
-   проект `649512` (`https://us.posthog.com/project/649512`),
-   `locallab` для `local-lab` или `honcho` для `honcho`. Убедиться,
+   прочитать `INFRA-023` из `infra/registry.yaml`, затем состояние указанного там
+   GitHub warehouse source для целевого репозитория. Убедиться,
    что источник включён и что данные синхронизировались.
 2. Если данные есть, кратко изучить повторяющиеся сбои/длительность
    сопоставимых workflow/jobs за последние 14 дней (и предшествующее окно,

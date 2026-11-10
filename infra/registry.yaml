@@ -1,6 +1,6 @@
-revision: 2026-10-30-infra-v1
+revision: 2026-11-10-infra-v2
 migrated_from: legacy infrastructure-registry.yaml (schema_version 2, last_verified 2026-10-28)
-last_verified: 2026-10-30
+last_verified: 2026-11-10
 
 services:
   - id: INFRA-001
@@ -261,7 +261,10 @@ services:
       FIFO); профиль gcloud лежит в /home/sprite/.config/gcloud-theseus и переживает сон.
       Drive API проверен чтением about: Семён Поклад, 18.25 GB. Код Google проходит только
       через форму или файл-поток, не через чат. Процедура и грабли —
-      docs/reference/sprites.md, контур — local-lab#166.
+      docs/reference/sprites.md, контур — local-lab#166. Provider API и Issue #16 называют
+      этот же named runtime exe.dev VM; локальный control plane по-прежнему sprite CLI,
+      sprite ID/URL и статус cold прочитаны обратно 2026-11-10. Привязанная provider-managed
+      PostHog integration описана только в INFRA-023, чтобы секрет и маршрут не дублировались.
 
   - id: INFRA-017
     name: honcho-local-test
@@ -490,6 +493,77 @@ services:
       собран локально из mcp/Dockerfile exact merge a4c3680. Hermes include-filter всё
       ещё разрешает только search; hook, Honcho plugin и MemoryProvider не менялись.
       Контуры: local-lab#231 и TeaShaman-cyber/honcho#4.
+
+  - id: INFRA-023
+    name: posthog
+    criticality: P2
+    role: >-
+      производная история GitHub CI для PR-review и отключённый mutation-survivor Scout;
+      GitHub Actions и полные Cosmic Ray artifacts остаются авторитетом результатов
+    status: active-read-routes-verified-scout-paused
+    kind: cloud-observability
+    location:
+      provider: PostHog Cloud US
+      project_id: 649512
+      project_url: https://us.posthog.com/project/649512
+      routes:
+        hermes_hosted_connector:
+          name: posthog_mcp
+          status: enabled-connected-active
+        hermes_api_cli:
+          credential: POSTHOG_KEY in Hermes environment (not-in-registry)
+          cli: posthog-cli
+          cli_version: 0.19.0
+        exe_dev:
+          integration: posthog
+          attachment: vm:theseus-exe-shell-probe
+          endpoint: https://posthog.int.exe.xyz
+          host_service: INFRA-016
+      warehouse_sources:
+        local-lab: locallab
+        honcho: honcho
+      scout:
+        skill_name: signals-scout-local-lab-mutants
+        skill_version: 1
+        config_id: 01a1c63f-5548-7871-8b20-3b478179c731
+        status: paused_by_user
+        enabled: false
+        emit: false
+        write_scopes: []
+        network_access: trusted
+        run_cron_schedule: none
+        run_interval_minutes: 43200
+        last_run_at: none
+        source: docs/posthog/mutant-scout
+    artifacts:
+      - role: deployed-scout-body
+        path: docs/posthog/mutant-scout/scout-body.md
+        sha256: 383be6cb0aa8c27a24236a5c262b8737e3bb8935d02aca6383d597e20ca4d5d2
+      - role: calibration-cases
+        path: docs/posthog/mutant-scout/known-cases.json
+        sha256: 2cdd69ce1b4f2416dd46e7db493f0e3b9003dae741a8c15305a01ff73b7bfc0e
+    monitoring: >-
+      Сам является observability provider. Живость проверяется через project GET,
+      external-data-sources-list (locallab/honcho: Completed, latest_error=null),
+      warehouse freshness и scout metadata/config readback; merge-авторитет остаётся
+      за GitHub Actions. Автоматического алерта на source drift пока нет.
+    check: >-
+      POSTHOG_KEY не печатать: через posthog-cli 0.19.0 выполнить read-only projects-get,
+      external-data-sources-list, scout-config-list, scout-metadata-get, scout-runs-list и
+      skill-get; сверить project_id, оба source prefix, disabled/non-emitting posture,
+      runs=0 и sha256 body с artifacts[]. Затем сверить актуальный head в GitHub Actions.
+    notes: >-
+      Readback 2026-11-10: laptop hosted connector и прямой API/CLI видят project 649512;
+      locallab и honcho Completed без latest_error; Scout enrolled, enabled=false,
+      emit=false, write_scopes=[], paused_by_user, cron отсутствует, last_run_at=null,
+      runs_today=0, runs_remaining_today=100, run list empty. Deployed skill body version 1,
+      3821 chars, byte-for-byte и sha256 совпадает с Git source. Exe.dev native integration
+      posthog привязана только к vm:theseus-exe-shell-probe, не auto:all; ключ хранит provider.
+      Один разрешённый manual run POST вернул HTTP 429 до старта; причина UNKNOWN, run/sandbox
+      не создан, поэтому не повторять dispatch без evidence. Laptop hosted MCP, laptop
+      POSTHOG_KEY и exe.dev provider credential — разные runtime/authority surfaces.
+      Контуры: local-lab#234 и TeaShaman-cyber/theseus-cloud-shell#16;
+      процедура: docs/reference/posthog.md.
 
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
 # Признак продового/тестового — RULE-009 в infrastructure.md.

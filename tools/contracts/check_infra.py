@@ -10,6 +10,8 @@ Checks (no network, CI-safe):
      name exactly the same set of RULE-NNN ids.
   6. No secrets: known token prefixes, or api_key/password/token fields holding a
      literal value instead of a reference.
+  7. Optional Git-owned service artifacts exist inside the repository and match
+     their declared SHA-256 digest.
 
 What it does NOT check: whether a service is alive, whether the registry matches
 reality, or whether rules contradict each other semantically. A PASS here is a
@@ -23,6 +25,7 @@ Usage:
 
 from __future__ import annotations
 
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -197,6 +200,52 @@ def check_secrets(data: dict) -> list[str]:
     return errors
 
 
+def check_artifacts(data: dict) -> list[str]:
+    """Validate optional Git-owned artifact receipts declared by services."""
+    errors: list[str] = []
+    for svc in data.get("services") or []:
+        if not isinstance(svc, dict):
+            continue
+        sid = svc.get("id", "?")
+        artifacts = svc.get("artifacts")
+        if artifacts is None:
+            continue
+        if not isinstance(artifacts, list) or not artifacts:
+            errors.append(f"registry service {sid}: artifacts must be a non-empty list")
+            continue
+        for index, artifact in enumerate(artifacts):
+            label = f"registry service {sid} artifact {index}"
+            if not isinstance(artifact, dict):
+                errors.append(f"{label}: not a mapping")
+                continue
+            role = artifact.get("role")
+            rel_path = artifact.get("path")
+            expected = artifact.get("sha256")
+            if not isinstance(role, str) or not role.strip():
+                errors.append(f"{label}: missing role")
+            if not isinstance(rel_path, str) or not rel_path.strip():
+                errors.append(f"{label}: missing path")
+                continue
+            if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
+                errors.append(f"{label}: sha256 must be 64 lowercase hex characters")
+                continue
+            candidate = (ROOT / rel_path).resolve()
+            try:
+                candidate.relative_to(ROOT.resolve())
+            except ValueError:
+                errors.append(f"{label}: path escapes repository: {rel_path}")
+                continue
+            if not candidate.is_file():
+                errors.append(f"{label}: file not found: {rel_path}")
+                continue
+            actual = hashlib.sha256(candidate.read_bytes()).hexdigest()
+            if actual != expected:
+                errors.append(
+                    f"{label}: sha256 drift for {rel_path}: expected {expected}, got {actual}"
+                )
+    return errors
+
+
 def run_checks(registry: dict, rules: dict, doc_text: str) -> list[str]:
     errors = check_registry(registry)
     errors.extend(check_stands(registry))
@@ -205,6 +254,7 @@ def run_checks(registry: dict, rules: dict, doc_text: str) -> list[str]:
     if rule_ids:
         errors.extend(check_cross_ref(rule_ids, doc_text))
     errors.extend(check_secrets(registry))
+    errors.extend(check_artifacts(registry))
     return errors
 
 
@@ -221,7 +271,8 @@ def list_services() -> None:
     for svc in registry.get("services", []):
         loc = svc.get("location") or {}
         where = (loc.get("compose") or loc.get("install_path") or loc.get("endpoint")
-                 or loc.get("profile") or loc.get("config") or loc.get("image")
+                 or loc.get("project_url") or loc.get("provider") or loc.get("profile")
+                 or loc.get("config") or loc.get("image")
                  or loc.get("iac_project") or "-")
         rows.append((
             str(svc.get("id", "")),
@@ -275,6 +326,15 @@ def self_test() -> int:
     bad_class = copy.deepcopy(registry)
     bad_class["services"][0]["criticality"] = "P9"
     cases.append(("invalid criticality", bad_class, rules, doc_text))
+
+    artifact_drift = copy.deepcopy(registry)
+    artifact_service = next(
+        (service for service in artifact_drift["services"] if service.get("artifacts")),
+        None,
+    )
+    if artifact_service is not None:
+        artifact_service["artifacts"][0]["sha256"] = "0" * 64
+        cases.append(("Git-owned artifact digest drift", artifact_drift, rules, doc_text))
 
     failures = 0
     for name, reg, rul, doc in cases:

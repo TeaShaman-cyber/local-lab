@@ -209,6 +209,7 @@ stateful или внешне значимое действие.
 | `GLOSSARY.md` | термины проекта: мониторинг, сервис, плагин, провайдер |
 | `infra/registry.yaml` | единственное место фактов об инфраструктуре |
 | `docs/reference/infrastructure.md` | правила обращения с инфраструктурой (RULE-NNN) |
+| `docs/reference/posthog.md` | маршруты PostHog и процедура проверки drift |
 | `tools/contracts/check_infra.py` | структурная проверка реестра и правил |
 | `.agents/skills/` | проектные скиллы: `local-core-router`, `sonar` |
 | `scripts/sync-skills.sh` | установка скиллов в Hermes (`$HERMES_HOME/skills/local-lab/`) с readback |
