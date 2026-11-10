@@ -287,6 +287,28 @@ harness, а хук остаётся тонким.
   `observed_id` и `session_id`;
 - enclosing JSON-RPC frame в этот бюджет не входит.
 
+**Версионированный протокол MCP для отдельного hook (Honcho #10):**
+
+- По умолчанию `HONCHO_RECALL_MCP_PROTOCOL=2025-06-18`: прежний
+  `initialize` + `Mcp-Session-Id` для установленного сессионного HTTP-хоста.
+  Старые настройки продолжают работать без изменения окружения.
+- При переходе на MCP SDK v2 установи
+  `HONCHO_RECALL_MCP_PROTOCOL=2026-07-28`: hook вызывает read-only
+  `tools/call` без `initialize` и передаёт обязательные `_meta`,
+  `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name`. Ошибка или неизвестная
+  версия протокола приводит к fail-open (`exit 0`, без вставки в контекст).
+- Это явный переключатель wire-контракта, **не выбор backend памяти**.
+  Отсутствие `Mcp-Session-Id` у нового stateless-сервера не должно ломать
+  recall. Прежний сервер на v1 не поддерживает этот современный режим.
+- Обновление только MCP-контейнера при старом hook привело бы к потере
+  recall: legacy hook требует session ID, а v2 stateless его не выдаёт.
+  Обновление сервера и hook должно проверяться вместе; в рантайме оба
+  компонента оставляем неизменными до отдельного acceptance.
+- Облачный canary на изолированном SDK v2 HTTP-хосте и фальшивом Honcho
+  backend подтвердил `tools/call` с `HONCHO_RECALL_MAX_JSON_BYTES=2048`,
+  перенос сообщения и `coverage`. Это **не** live Hermes-проверка.
+  Проверка встроенного MCP-клиента Hermes 1.18.2 остаётся отдельной.
+
 Интеграция с Hermes hook остаётся опциональной: переменная
 HONCHO_RECALL_MAX_JSON_BYTES (512..65536) задаёт размер JSON для запроса
 MCP search. Без неё запрос не меняется. При явно заданном лимите hook
