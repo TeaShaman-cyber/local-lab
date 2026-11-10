@@ -22,22 +22,49 @@ from pathlib import Path
 
 HOOK = Path(__file__).with_name("recall_mcp_hook.py")
 
+# Stateless MCP revision the hook must speak. Kept literal on purpose: a
+# black-box test that imported the hook's constants would not notice the
+# hook changing them.
+PROTOCOL_VERSION = "2026-07-28"
+META_VERSION_KEY = "io.modelcontextprotocol/protocolVersion"
+META_CAPABILITIES_KEY = "io.modelcontextprotocol/clientCapabilities"
+
 
 class FakeMCP:
-    """Minimal JSON-RPC over HTTP stand-in for the Honcho MCP server."""
+    """Stateless MCP `2026-07-28` stand-in for the Honcho MCP server.
+
+    Mirrors the two behaviours a client must get right: the per-request `_meta`
+    envelope with its mandatory headers, and a reply that may be framed as
+    server-sent events. `legacy_server=True` emulates a session-based server
+    that speaks none of it, so "no silent legacy fallback" stays testable.
+    """
 
     def __init__(self, inner: dict | None = None, broken_inner: bool = False,
-                 init_status: int = 200, require_auth: bool = True):
+                 fail_status: int = 200, require_auth: bool = True,
+                 sse: bool = True, legacy_server: bool = False,
+                 notify_first: bool = False, crlf: bool = False):
         self.inner = inner
         self.broken_inner = broken_inner
-        self.init_status = init_status
+        self.fail_status = fail_status
         self.require_auth = require_auth
+        self.sse = sse
+        self.legacy_server = legacy_server
+        self.notify_first = notify_first
+        self.crlf = crlf
         self.tool_calls: list[dict] = []
         self.auth_headers: list[str] = []
         self.workspace_headers: list[str | None] = []
-        self.initialize_calls = 0
+        self.protocol_headers: list[str | None] = []
+        self.method_headers: list[str | None] = []
+        self.name_headers: list[str | None] = []
+        self.envelopes: list[dict | None] = []
+        self.session_headers: list[str | None] = []
+        self.requests = 0
         self._server = None
         self._thread = None
+
+    def request_count(self) -> int:
+        return self.requests
 
     # -- lifecycle ---------------------------------------------------------
     def __enter__(self) -> "FakeMCP":
@@ -49,51 +76,72 @@ class FakeMCP:
             def log_message(self, *_args):  # keep test output clean
                 pass
 
+            def _empty(self, status: int) -> None:
+                self.send_response(status)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
             def do_POST(self):
+                outer.requests += 1
                 length = int(self.headers.get("Content-Length", "0"))
                 body = json.loads(self.rfile.read(length) or b"{}")
-                method = body.get("method")
 
                 # Mirror the real gateway: a non-empty bearer is mandatory.
                 auth = (self.headers.get("Authorization") or "").strip()
                 if outer.require_auth and not auth.lower().startswith("bearer "):
-                    self.send_response(401)
-                    self.send_header("Content-Length", "0")
-                    self.end_headers()
+                    self._empty(401)
                     return
                 outer.auth_headers.append(auth)
                 outer.workspace_headers.append(
                     self.headers.get("X-Honcho-Workspace-ID")
                 )
 
-                if method == "initialize":
-                    outer.initialize_calls += 1
-                    if outer.init_status != 200:
-                        self.send_response(outer.init_status)
-                        self.send_header("Content-Length", "0")
-                        self.end_headers()
-                        return
-                    payload = {"jsonrpc": "2.0", "id": body.get("id"),
-                               "result": {"protocolVersion": "2025-06-18", "capabilities": {}}}
-                    outer._send(self, payload, session="test-session")
+                if outer.legacy_server:
+                    # A session-based server has nothing to say to a stateless call.
+                    self._empty(400)
+                    return
 
-                elif method == "notifications/initialized":
-                    self.send_response(202)
-                    self.send_header("Content-Length", "0")
-                    self.end_headers()
+                method = body.get("method")
+                params = body.get("params") or {}
+                meta = params.get("_meta")
+                outer.protocol_headers.append(self.headers.get("MCP-Protocol-Version"))
+                outer.method_headers.append(self.headers.get("Mcp-Method"))
+                outer.name_headers.append(self.headers.get("Mcp-Name"))
+                outer.session_headers.append(self.headers.get("Mcp-Session-Id"))
+                outer.envelopes.append(meta)
 
-                elif method == "tools/call":
-                    outer.tool_calls.append(body.get("params") or {})
-                    text = "not json at all" if outer.broken_inner else json.dumps(
-                        outer.inner or {}, ensure_ascii=False)
-                    payload = {"jsonrpc": "2.0", "id": body.get("id"),
-                               "result": {"content": [{"type": "text", "text": text}]}}
-                    outer._send(self, payload)
+                # The real server rejects a header/body disagreement instead of
+                # guessing which request the caller meant; so does this stub.
+                problem = None
+                if self.headers.get("MCP-Protocol-Version") != PROTOCOL_VERSION:
+                    problem = "protocol version header"
+                elif self.headers.get("Mcp-Method") != method:
+                    problem = "Mcp-Method header"
+                elif not isinstance(meta, dict):
+                    problem = "envelope _meta"
+                elif meta.get(META_VERSION_KEY) != PROTOCOL_VERSION:
+                    problem = "envelope protocolVersion"
+                elif META_CAPABILITIES_KEY not in meta:
+                    problem = "envelope clientCapabilities"
+                elif method == "tools/call" and self.headers.get("Mcp-Name") != params.get("name"):
+                    problem = "Mcp-Name header"
+                if problem:
+                    self._empty(400)
+                    return
 
-                else:
-                    self.send_response(400)
-                    self.send_header("Content-Length", "0")
-                    self.end_headers()
+                if method != "tools/call":
+                    self._empty(400)
+                    return
+
+                outer.tool_calls.append(params)
+                if outer.fail_status != 200:
+                    self._empty(outer.fail_status)
+                    return
+                text = "not json at all" if outer.broken_inner else json.dumps(
+                    outer.inner or {}, ensure_ascii=False)
+                payload = {"jsonrpc": "2.0", "id": body.get("id"),
+                           "result": {"content": [{"type": "text", "text": text}]}}
+                outer._send(self, payload)
 
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
@@ -105,14 +153,27 @@ class FakeMCP:
         self._server.server_close()
         self._thread.join(timeout=5)
 
-    @staticmethod
-    def _send(handler, payload: dict, session: str | None = None) -> None:
+    def _send(self, handler, payload: dict) -> None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        if self.sse:
+            # A stream may legally interleave notifications before the response.
+            separator = b"\r\n" if self.crlf else b"\n"
+            frames = []
+            if self.notify_first:
+                note = json.dumps({"jsonrpc": "2.0", "method": "notifications/message",
+                                   "params": {"level": "info"}}).encode("utf-8")
+                frames.append(b"event: message" + separator + b"data: " + note + separator + separator)
+            frames.append(b"event: message" + separator + b"data: " + data + separator + separator)
+            framed = b"".join(frames)
+            handler.send_response(200)
+            handler.send_header("Content-Type", "text/event-stream")
+            handler.send_header("Content-Length", str(len(framed)))
+            handler.end_headers()
+            handler.wfile.write(framed)
+            return
         handler.send_response(200)
         handler.send_header("Content-Type", "application/json")
         handler.send_header("Content-Length", str(len(data)))
-        if session:
-            handler.send_header("Mcp-Session-Id", session)
         handler.end_headers()
         handler.wfile.write(data)
 
@@ -341,7 +402,7 @@ class TestBoundedServerContract(HookTestCase):
                 )
                 self.assertEqual(proc.returncode, 0)
                 self.assertIsNone(self.decode(proc))
-                self.assertEqual(server.initialize_calls, 0)
+                self.assertEqual(server.request_count(), 0)
 
     def test_budget_requested_but_legacy_server_reply_fails_open(self):
         # Old MCP servers may ignore an unknown tool argument. That must not
@@ -377,6 +438,77 @@ class TestBoundedServerContract(HookTestCase):
         self.assertEqual(block["coverage"]["total_matches_status"], "UNKNOWN_UPSTREAM")
 
 
+class TestModernTransport(HookTestCase):
+    """The stateless revision is a contract, not an implementation detail."""
+
+    INNER = {"messages": [{"id": "m1", "content": "x", "content_chars": 1,
+                           "content_truncated": False}], "conclusions": []}
+
+    def test_sends_stateless_envelope_and_matching_headers(self):
+        with FakeMCP(inner=self.INNER) as server:
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
+
+        self.assertIsNotNone(self.decode(proc))
+        # Exactly one request, and it is the tool call: no initialize handshake.
+        self.assertEqual(server.method_headers, ["tools/call"])
+        self.assertEqual(server.protocol_headers, [PROTOCOL_VERSION])
+        self.assertEqual(server.name_headers, ["search"])
+        # No session lifecycle at all.
+        self.assertEqual(server.session_headers, [None])
+
+        envelope = server.envelopes[0]
+        self.assertEqual(envelope[META_VERSION_KEY], PROTOCOL_VERSION)
+        self.assertEqual(envelope[META_CAPABILITIES_KEY], {})
+
+    def test_parses_event_stream_reply(self):
+        # The modern server answers text/event-stream, so a bare json.loads fails.
+        with FakeMCP(inner=self.INNER, sse=True) as server:
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        block = self.decode(proc)
+        self.assertIsNotNone(block)
+        self.assertEqual(block["messages"][0]["id"], "m1")
+
+    def test_parses_plain_json_reply(self):
+        with FakeMCP(inner=self.INNER, sse=False) as server:
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
+
+        self.assertIsNotNone(self.decode(proc))
+
+    def test_ignores_notifications_before_the_response(self):
+        # Legal per the transport spec: a notification frame may precede the
+        # response. Returning the first frame would drop valid recall.
+        with FakeMCP(inner=self.INNER, sse=True, notify_first=True) as server:
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        block = self.decode(proc)
+        self.assertIsNotNone(block, "notification was mistaken for the response")
+        self.assertEqual(block["messages"][0]["id"], "m1")
+
+    def test_parses_crlf_framed_event_stream(self):
+        # CRLF separators are permitted; splitting on "\n\n" alone merges events.
+        with FakeMCP(inner=self.INNER, sse=True, notify_first=True, crlf=True) as server:
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        block = self.decode(proc)
+        self.assertIsNotNone(block, "CRLF framing was not normalised")
+        self.assertEqual(block["messages"][0]["id"], "m1")
+
+    def test_session_based_server_gets_no_silent_fallback(self):
+        # honcho#10: legacy framing is not supported. An old server must produce
+        # silence (fail-open), not a second, session-based attempt.
+        with FakeMCP(inner=self.INNER, legacy_server=True) as server:
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
+
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(proc.stdout.strip(), "")
+        self.assertEqual(server.request_count(), 1)
+        self.assertEqual(server.tool_calls, [])
+
+
 class TestStaysSilent(HookTestCase):
     def test_second_identical_turn_is_throttled(self):
         with FakeMCP(inner={"messages": [{"id": "m1", "content": "x", "content_chars": 1,
@@ -408,7 +540,7 @@ class TestStaysSilent(HookTestCase):
         self.assertIsNone(self.decode(proc))
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(len(server.tool_calls), 0)
-        self.assertEqual(server.initialize_calls, 0)
+        self.assertEqual(server.request_count(), 0)
 
     def test_first_turn_requires_json_boolean_true(self):
         payload = self.payload("расскажи про динамическую шпаргалку")
@@ -418,7 +550,7 @@ class TestStaysSilent(HookTestCase):
 
         self.assertIsNone(self.decode(proc))
         self.assertEqual(proc.returncode, 0)
-        self.assertEqual(server.initialize_calls, 0)
+        self.assertEqual(server.request_count(), 0)
 
     def test_minimum_query_length_boundary(self):
         inner = {"messages": [{"id": "m1", "content": "x", "content_chars": 1,
@@ -452,14 +584,14 @@ class TestStaysSilent(HookTestCase):
             proc = self.run_hook(self.payload("привет"), server.url)
         self.assertIsNone(self.decode(proc))
         self.assertEqual(proc.returncode, 0)
-        self.assertEqual(server.initialize_calls, 0)
+        self.assertEqual(server.request_count(), 0)
 
     def test_missing_peer_id_is_not_searched(self):
         with FakeMCP(inner={"messages": [{"id": "m1", "content": "x"}], "conclusions": []}) as server:
             proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"),
                                  server.url, HONCHO_RECALL_PEER_ID="")
         self.assertIsNone(self.decode(proc))
-        self.assertEqual(server.initialize_calls, 0)
+        self.assertEqual(server.request_count(), 0)
 
     def test_empty_store_produces_no_context(self):
         with FakeMCP(inner={"messages": [], "conclusions": []}) as server:
@@ -481,8 +613,8 @@ class TestStaysSilent(HookTestCase):
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(proc.stdout.strip(), "")
 
-    def test_initialize_failure_fails_open(self):
-        with FakeMCP(inner={"messages": []}, init_status=500) as server:
+    def test_server_error_fails_open(self):
+        with FakeMCP(inner={"messages": []}, fail_status=500) as server:
             proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
         self.assertIsNone(self.decode(proc))
         self.assertEqual(proc.returncode, 0)
@@ -494,7 +626,7 @@ class TestStaysSilent(HookTestCase):
             proc = self.run_hook(payload, server.url)
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(proc.stdout.strip(), "")
-        self.assertEqual(server.initialize_calls, 0)
+        self.assertEqual(server.request_count(), 0)
 
     def test_empty_stdin_exits_clean(self):
         proc = subprocess.run(

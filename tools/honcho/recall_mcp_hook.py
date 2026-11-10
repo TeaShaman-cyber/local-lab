@@ -13,11 +13,16 @@ Boundary (deliberate, see local-lab#231):
 The optional whole-search JSON budget is requested from the MCP server, not
 applied to received records by this hook. The injected context adds a preamble,
 query and wrapper, so its byte length may exceed the server's JSON byte budget.
-A legacy response cannot satisfy an explicitly requested bounded contract.
+A response that does not honour an explicitly requested bounded contract is
+rejected rather than delivered.
 
-Transport is plain JSON-RPC over the MCP streamable-HTTP endpoint. The server
-answers `Content-Type: application/json` (not SSE), so stdlib `urllib` is
-enough and the hook has no third-party dependency that can go missing.
+Transport speaks the stateless MCP revision `2026-07-28`: no `initialize`, no
+`Mcp-Session-Id` lifecycle, a per-request `_meta` envelope, and the
+`MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name` headers. Legacy session-based
+framing is deliberately not supported (TeaShaman-cyber/honcho#10); a server that
+only speaks it fails open, it does not get a silent fallback. Both
+`application/json` and `text/event-stream` replies are accepted, because the
+modern server chooses the framing. stdlib `urllib` only.
 
 Fail-open by construction: every error path prints nothing and exits 0. A
 recall that cannot be fetched must never cost the user a turn.
@@ -30,7 +35,7 @@ Environment:
   HONCHO_RECALL_CONCLUSIONS  default 3
   HONCHO_RECALL_MIN_QUERY    default 12 (shorter prompts are not searched)
   HONCHO_RECALL_MAX_JSON_BYTES  optional server JSON budget, integer 512..65536;
-                                unset keeps the legacy request unchanged
+                                unset sends the unbounded request
 """
 
 from __future__ import annotations
@@ -48,6 +53,13 @@ MAX_QUERY_CHARS = 400
 STATE_PATH = os.environ.get("HERMES_HONCHO_RECALL_STATE") or os.path.join(
     tempfile.gettempdir(), "hermes-honcho-recall-state.json"
 )
+
+# Stateless MCP revision. Both the wire revision and the envelope keys come from
+# the server's own rejection messages, not from a local convention: a plain
+# `protocolVersion` key is not recognised and the call fails.
+PROTOCOL_VERSION = "2026-07-28"
+META_VERSION_KEY = "io.modelcontextprotocol/protocolVersion"
+META_CAPABILITIES_KEY = "io.modelcontextprotocol/clientCapabilities"
 
 MESSAGE_FIELDS = ("id", "session_id", "peer_id", "created_at", "content",
                   "content_chars", "content_truncated")
@@ -92,7 +104,16 @@ def _server_json_budget() -> int | None:
     return value
 
 
-def _post(url: str, body: dict, timeout: float, session_id: str | None = None) -> tuple[int, dict, str]:
+def _envelope() -> dict:
+    """Per-request `_meta` envelope required by the stateless revision."""
+    return {
+        META_VERSION_KEY: PROTOCOL_VERSION,
+        META_CAPABILITIES_KEY: {},
+    }
+
+
+def _post(url: str, body: dict, timeout: float, *, method: str,
+          tool: str | None = None) -> tuple[int, dict, str]:
     data = json.dumps(body, ensure_ascii=False).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
@@ -102,19 +123,58 @@ def _post(url: str, body: dict, timeout: float, session_id: str | None = None) -
         "Authorization": "Bearer %s" % (
             os.environ.get("HONCHO_RECALL_TOKEN", "").strip() or "local-only"
         ),
+        # The server cross-checks these against the body and refuses a mismatch
+        # instead of guessing which request the caller meant.
+        "MCP-Protocol-Version": PROTOCOL_VERSION,
+        "Mcp-Method": method,
     }
+    if tool:
+        headers["Mcp-Name"] = tool
     workspace = os.environ.get("HONCHO_RECALL_WORKSPACE", "").strip()
     if workspace:
         headers["X-Honcho-Workspace-ID"] = workspace
-    if session_id:
-        headers["Mcp-Session-Id"] = session_id
     request = urllib.request.Request(url, data=data, headers=headers, method="POST")
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return response.status, dict(response.headers), response.read().decode("utf-8", "replace")
 
 
+def _sse_payload(raw: str) -> str:
+    """Return the JSON body of a reply that may be framed as server-sent events.
+
+    The modern server answers `text/event-stream` even for a single message, so a
+    bare `json.loads` on the raw body fails. Only `data:` frames carry RPC
+    messages; `event:`/`id:`/comment lines are ignored.
+
+    A stream may legally carry notifications before the response, so the first
+    frame is not necessarily ours. Only a frame holding `result` or `error` is a
+    response; everything else is skipped. Framing is newline-normalised first,
+    because CRLF separators are permitted and splitting on `\\n\\n` alone would
+    merge two events into one unparseable blob.
+    """
+    text = raw.strip()
+    if not text:
+        raise ValueError("empty response body")
+    if not text.startswith(("event:", "data:", "id:", ":")):
+        return text
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    for frame in normalized.split("\n\n"):
+        data_lines = [line[5:].strip() for line in frame.splitlines() if line.startswith("data:")]
+        if not data_lines:
+            continue
+        candidate = "\n".join(data_lines).strip()
+        if not candidate:
+            continue
+        try:
+            payload = json.loads(candidate)
+        except ValueError:
+            continue
+        if isinstance(payload, dict) and ("result" in payload or "error" in payload):
+            return candidate
+    raise ValueError("sse stream carries no final rpc response")
+
+
 def _rpc_result(raw: str) -> dict:
-    payload = json.loads(raw)
+    payload = json.loads(_sse_payload(raw))
     if not isinstance(payload, dict):
         raise ValueError("rpc payload is not an object")
     if "error" in payload:
@@ -127,30 +187,6 @@ def _rpc_result(raw: str) -> dict:
 
 def _mcp_search(url: str, peer_id: str, query: str, messages: int,
                 conclusions: int, timeout: float, json_budget: int | None = None) -> dict:
-    status, headers, body = _post(url, {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": "2025-06-18",
-            "capabilities": {},
-            "clientInfo": {"name": "hermes-pre-llm-call", "version": "1"},
-        },
-    }, timeout)
-    if status != 200:
-        raise ValueError("initialize returned %s" % status)
-
-    session_id = None
-    for key, value in headers.items():
-        if key.lower() == "mcp-session-id":
-            session_id = value
-            break
-    if not session_id:
-        raise ValueError("server did not return a session id")
-    _rpc_result(body)
-
-    _post(url, {"jsonrpc": "2.0", "method": "notifications/initialized"}, timeout, session_id)
-
     arguments = {
         "query": query,
         "peer_id": peer_id,
@@ -166,10 +202,14 @@ def _mcp_search(url: str, peer_id: str, query: str, messages: int,
 
     status, _headers, body = _post(url, {
         "jsonrpc": "2.0",
-        "id": 2,
+        "id": 1,
         "method": "tools/call",
-        "params": {"name": "search", "arguments": arguments},
-    }, timeout, session_id)
+        "params": {
+            "name": "search",
+            "arguments": arguments,
+            "_meta": _envelope(),
+        },
+    }, timeout, method="tools/call", tool="search")
     if status != 200:
         raise ValueError("tools/call returned %s" % status)
 
