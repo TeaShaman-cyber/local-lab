@@ -57,7 +57,10 @@
 gh workflow run mutation -f max_survivors=0
 
 # локально, один шард, на копии (монтирование только для чтения)
-docker run --rm -v "$PWD:/repo:ro" -w /tmp python:3.12-slim bash -lc '
+# git доступен на хосте; slim-контейнер не содержит git.
+export SOURCE_COMMIT="$(git rev-parse HEAD)"
+export SOURCE_TREE="$(git rev-parse 'HEAD^{tree}')"
+docker run --rm -e SOURCE_COMMIT -e SOURCE_TREE -v "$PWD:/repo:ro" -w /tmp python:3.12-slim bash -lc '
   pip install -q "cosmic-ray==8.8.0" "pytest==9.2.0"
   cp -r /repo /tmp/work && cd /tmp/work
   python -m pytest tools/honcho/test_recall_mcp_hook.py -q
@@ -65,8 +68,8 @@ docker run --rm -v "$PWD:/repo:ro" -w /tmp python:3.12-slim bash -lc '
   python mutation/shard.py session.sqlite 0 16
   cosmic-ray exec mutation/cr.toml session.sqlite
   python mutation/report.py session.sqlite \
-    --source-commit "$(git rev-parse HEAD)" \
-    --source-tree "$(git rev-parse HEAD^{tree})" \
+    --source-commit "$SOURCE_COMMIT" \
+    --source-tree "$SOURCE_TREE" \
     --run-url "https://github.com/TeaShaman-cyber/local-lab/actions/runs/0"'
 ```
 
