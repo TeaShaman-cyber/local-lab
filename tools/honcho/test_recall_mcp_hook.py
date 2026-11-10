@@ -202,6 +202,24 @@ class FakeMCP:
         return f"http://{host}:{port}/mcp"
 
 
+def _bounded_inner(*, format_marker: str = "honcho_search_bounded_v1",
+                   messages: list | None = None, conclusions: list | None = None,
+                   total_matches_status: str = "UNKNOWN_UPSTREAM", **coverage) -> dict:
+    """A bounded search reply, with the parts each test cares about overridable."""
+    base = {
+        "retrieved_messages": 3, "returned_messages": 0, "omitted_messages": 0,
+        "retrieved_conclusions": 4, "returned_conclusions": 0, "omitted_conclusions": 0,
+        "total_matches": None, "total_matches_status": total_matches_status,
+    }
+    base.update(coverage)
+    return {
+        "format": format_marker,
+        "messages": [] if messages is None else messages,
+        "conclusions": [] if conclusions is None else conclusions,
+        "coverage": base,
+    }
+
+
 class HookTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -318,6 +336,22 @@ class TestDelivers(HookTestCase):
         self.assertEqual(len(sent), 400, f"query length {len(sent)} is not the ceiling")
         self.assertEqual(sent, long_message[:400])
 
+    def test_unbounded_projection_drops_bounded_only_fields(self):
+        # The two field projections are not interchangeable: the bounded one
+        # carries metadata_omitted and the extra conclusion provenance. Swapping
+        # them would silently change what the model is shown.
+        inner = {"messages": [{"id": "m1", "content": "x", "metadata_omitted": True}],
+                 "conclusions": [{"id": "c1", "content": "y", "source_ids": ["c0"],
+                                  "level": "deductive"}]}
+        with FakeMCP(inner=inner) as server:
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
+
+        block = self.decode(proc)
+        self.assertIsNotNone(block)
+        self.assertNotIn("metadata_omitted", block["messages"][0])
+        self.assertNotIn("source_ids", block["conclusions"][0])
+        self.assertNotIn("level", block["conclusions"][0])
+
     def test_omits_empty_workspace_header(self):
         inner = {"messages": [], "conclusions": []}
         with FakeMCP(inner=inner) as server:
@@ -424,6 +458,65 @@ class TestBoundedServerContract(HookTestCase):
         self.assertEqual(block["conclusions"][0]["times_derived"], 2)
         self.assertEqual(block["conclusions"][0]["observer_id"], "agent")
         self.assertEqual(block["conclusions"][0]["level"], "deductive")
+
+    def test_single_omitted_record_is_still_reported(self):
+        # Nothing came back, but the server says one record was dropped. The
+        # hook must report incomplete retrieval instead of going silent, which
+        # would read as "no matches".
+        inner = _bounded_inner(omitted_messages=1, retrieved_messages=1)
+        with FakeMCP(inner=inner) as server:
+            proc = self.run_hook(
+                self.payload("расскажи про динамическую шпаргалку"),
+                server.url, HONCHO_RECALL_MAX_JSON_BYTES="2048",
+            )
+
+        block = self.decode(proc)
+        self.assertIsNotNone(block, "a single omission was reported as no matches")
+        self.assertEqual(block["messages"], [])
+        self.assertEqual(block["coverage"]["omitted_messages"], 1)
+
+    def test_zero_omissions_with_nothing_retrieved_stays_silent(self):
+        # The mirror case: nothing retrieved and nothing omitted is genuinely
+        # no matches, and inventing an empty envelope would be noise.
+        inner = _bounded_inner()
+        with FakeMCP(inner=inner) as server:
+            proc = self.run_hook(
+                self.payload("расскажи про динамическую шпаргалку"),
+                server.url, HONCHO_RECALL_MAX_JSON_BYTES="2048",
+            )
+
+        self.assertIsNone(self.decode(proc), "empty result was dressed up as coverage")
+        self.assertEqual(proc.stdout.strip(), "")
+
+    def test_wrong_bounded_format_marker_is_rejected(self):
+        # A server that ignored the budget answers in the legacy shape; that
+        # must fail open rather than be projected as if it were bounded.
+        # Both markers are tried: one sorts before the contract string and one
+        # after, so an ordering comparison cannot masquerade as inequality.
+        for marker in ("aaa_not_the_contract", "zzz_not_the_contract"):
+            with self.subTest(marker=marker):
+                inner = _bounded_inner(format_marker=marker,
+                                       messages=[{"id": "m1", "content": "x"}])
+                with FakeMCP(inner=inner) as server:
+                    proc = self.run_hook(
+                        self.payload("расскажи про динамическую шпаргалку"),
+                        server.url, HONCHO_RECALL_MAX_JSON_BYTES="2048",
+                    )
+
+                self.assertIsNone(self.decode(proc), "an unrecognised format was accepted")
+
+    def test_unexpected_total_matches_status_is_rejected(self):
+        for status in ("AAA_NOT_THE_CONTRACT", "ZZZ_NOT_THE_CONTRACT"):
+            with self.subTest(status=status):
+                inner = _bounded_inner(total_matches_status=status,
+                                       messages=[{"id": "m1", "content": "x"}])
+                with FakeMCP(inner=inner) as server:
+                    proc = self.run_hook(
+                        self.payload("расскажи про динамическую шпаргалку"),
+                        server.url, HONCHO_RECALL_MAX_JSON_BYTES="2048",
+                    )
+
+                self.assertIsNone(self.decode(proc), "an unrecognised coverage status was trusted")
 
     def test_invalid_budget_is_rejected_before_network_not_silently_ignored(self):
         for value in ("511", "65537", "invalid", "0"):
