@@ -439,11 +439,12 @@ services:
     criticality: P2
     role: >-
       MCP-поверхность над Honcho для recall — форк официального сервера с ограничением
-      размера сообщения в выдаче, пригодный для автоматической доставки в контекст
+      отдельных сообщений и opt-in бюджетом всего search JSON с явным учётом потерь
     status: active
     kind: docker-container
     location:
-      image: local/honcho-mcp:dad6848
+      image: local/honcho-mcp:a4c3680
+      image_id: sha256:0c355f008a135d96225ae30ccbfe1ff3de0d86c0b621e982cde09249d2c12dcb
       container: honcho-mcp-probe
       endpoint: "http://127.0.0.1:3000/mcp"
       published_port: "127.0.0.1:3000 -> 3000/tcp"
@@ -452,7 +453,9 @@ services:
       fork: https://github.com/TeaShaman-cyber/honcho
       checkout: E:/honcho-upstream
       base_commit: 3326373c35f6538fb3b7af97803abe328c5aafb4
-      merge_commit: dad684849021d4f7c24d73b0cac48a7dd9b5b1c7
+      previous_merge_commit: dad684849021d4f7c24d73b0cac48a7dd9b5b1c7
+      merge_commit: a4c3680c7b60541f274d49ec208696dc3089b64f
+      rollback_container: honcho-mcp-probe-rollback-dad6848 (stopped)
       qa:
         image: local/honcho-mcp-qa:dev
         build: docker build --target qa -t local/honcho-mcp-qa:dev E:/honcho-upstream/mcp
@@ -465,25 +468,28 @@ services:
       (job=docker, host=theseus-laptop). Отдельного правила на «процесс умер»
       пока нет — это долг, а не отсутствие наблюдения; зафиксировано в local-lab#231.
     check: >-
-      curl -fsS http://127.0.0.1:3000/health (ожидается 200);
-      затем read-only tools/call search с message_limit=2 — в ответе у длинного
-      сообщения должны стоять content_chars и content_truncated=true.
+      GET http://127.0.0.1:3000/health должен вернуть 200; legacy read-only search без
+      max_result_json_bytes сохраняет старый {messages, conclusions}; opt-in search с
+      max_result_json_bytes=2000 должен вернуть format=honcho_search_bounded_v1,
+      сериализоваться ровно в 2000 UTF-8 bytes, не иметь unaccounted records и сохранить
+      source_ids/observer_id/session_id у возвращённых conclusions.
     notes: >-
-      Зачем форк: официальный MCP ограничивал только число записей (message_limit),
-      а content отдавал целиком — одно сообщение со статьёй пришло на 15738 символов
-      и делало автоматическую доставку в контекст небезопасной. Патч переносит
-      ограничение в форматтер: MCP_MAX_MESSAGE_CONTENT_CHARS (default 2000,
-      допустимо 1..100000 Unicode code points, невалидное значение откатывается
-      к дефолту), поля content_chars и content_truncated, многоточие входит в лимит,
-      surrogate pair не разрывается. Настройка проведена в Worker, HTTP и stdio.
-      Наблюдаемая проверка на живом стенде с лимитом 2000:
-      returned [365, 2000, 317] при original [365, 15738, 317], truncated [false, true, false];
-      тот же результат через вызов Hermes mcp__honcho_mcp_local__search.
-      В Hermes подключён как MCP honcho-mcp-local, include-filter разрешает только
-      search; плагин Honcho, хуки и MemoryProvider не менялись.
-      Общий бюджет ответа и усечение conclusions в этот этап не входят.
-      Устаревшие теги образов (bounded-dev, honcho-mcp-qa:test) — те же digest'ы,
-      удалены, чтобы не путать с действующим dad6848. Контур — local-lab#231.
+      Первый патч (dad6848) ограничил MCP_MAX_MESSAGE_CONTENT_CHARS на запись: default
+      2000, диапазон 1..100000 Unicode code points, content_chars/content_truncated,
+      Unicode-safe prefix. Второй патч (a4c3680, fork PR #5) добавил opt-in
+      max_result_json_bytes=512..65536 на весь JSON search payload; legacy path без
+      параметра не меняется. Bounded envelope сообщает retrieved/returned/omitted
+      отдельно для messages и conclusions, total_matches=null + UNKNOWN_UPSTREAM и
+      сохраняет conclusion provenance. Бюджет не покрывает enclosing JSON-RPC frame.
+      Живой readback через mcporter: legacy 8463 bytes; bounded 512 и 2000 дали ровно
+      заданный размер, при 2000 вернулись 2 messages + 2 conclusions с provenance;
+      511 отвергнут. Native Hermes legacy call прошёл; schema текущей сессии была
+      закэширована до обновления и увидит opt-in параметр после reload/new session.
+      GHCR ghcr.io/teashaman-cyber/honcho:latest@sha256:7161a0a4... собирается из
+      корневого Python/FastAPI Dockerfile (порт 8000), это не MCP image. Поэтому runtime
+      собран локально из mcp/Dockerfile exact merge a4c3680. Hermes include-filter всё
+      ещё разрешает только search; hook, Honcho plugin и MemoryProvider не менялись.
+      Контуры: local-lab#231 и TeaShaman-cyber/honcho#4.
 
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
 # Признак продового/тестового — RULE-009 в infrastructure.md.
