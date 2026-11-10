@@ -446,8 +446,16 @@ services:
     status: active
     kind: docker-container
     location:
-      image: local/honcho-mcp:a4c3680
-      image_id: sha256:0c355f008a135d96225ae30ccbfe1ff3de0d86c0b621e982cde09249d2c12dcb
+      image: ghcr.io/teashaman-cyber/honcho-mcp:sha-d04090ec7fe9d191d94c616fe6341f4402b8ce38
+      image_digest: ghcr.io/teashaman-cyber/honcho-mcp@sha256:544c5d46b83d90b36306716a99fc64e47be62d9045483a37a1c88545e9889b55
+      image_index_media_type: application/vnd.oci.image.index.v1+json
+      image_manifest_amd64: sha256:78b5317a5d79c1f22397fb5fcfe0dc88fcca7564abf5f2fef696302958daac19
+      image_config_amd64: sha256:74880f82549c984136b1245c24e086c69bda3eefdf182c36333062684e5fbece
+      image_id_note: >-
+        отдельного image_id нет намеренно: это разные объекты. Docker на этом хосте
+        (containerd image store) отдаёт в `docker inspect .Id` digest индекса, то есть
+        совпадение .Id == image_digest — наблюдённый факт, а не определение; config
+        digest linux/amd64 записан отдельно как image_config_amd64
       container: honcho-mcp-probe
       endpoint: "http://127.0.0.1:3000/mcp"
       published_port: "127.0.0.1:3000 -> 3000/tcp"
@@ -456,9 +464,20 @@ services:
       fork: https://github.com/TeaShaman-cyber/honcho
       checkout: E:/honcho-upstream
       base_commit: 3326373c35f6538fb3b7af97803abe328c5aafb4
-      previous_merge_commit: dad684849021d4f7c24d73b0cac48a7dd9b5b1c7
-      merge_commit: a4c3680c7b60541f274d49ec208696dc3089b64f
-      rollback_container: honcho-mcp-probe-rollback-dad6848 (stopped)
+      fork_main: d04090ec7fe9d191d94c616fe6341f4402b8ce38
+      merge_commit: d04090ec7fe9d191d94c616fe6341f4402b8ce38
+      source_pr: TeaShaman-cyber/honcho#11 merged 2026-11-10
+      published_by: .github/workflows/docker-build-mcp.yml (push to main, path mcp/**)
+      tag_rule: >-
+        ровно один тег на коммит — sha-<полный SHA>; latest и плавающие алиасы
+        запрещены шагом "Verify only the source-commit tag is published"
+      local_builds: none — локальная сборка допускается только как явно помеченное
+        временное отклонение с записью причины
+      protocol: "MCP 2026-07-28 stateless — no initialize, no Mcp-Session-Id"
+      sdk: "@modelcontextprotocol/server 2.4.0"
+      previous_merge_commit: a4c3680c7b60541f274d49ec208696dc3089b64f
+      rollback_container: honcho-mcp-rollback-f67c4d6 (stopped, локальная сборка);
+        honcho-mcp-rollback-a4c3680 (stopped, legacy wire)
       qa:
         image: local/honcho-mcp-qa:dev
         build: docker build --target qa -t local/honcho-mcp-qa:dev E:/honcho-upstream/mcp
@@ -471,28 +490,32 @@ services:
       (job=docker, host=theseus-laptop). Отдельного правила на «процесс умер»
       пока нет — это долг, а не отсутствие наблюдения; зафиксировано в local-lab#231.
     check: >-
-      GET http://127.0.0.1:3000/health должен вернуть 200; legacy read-only search без
-      max_result_json_bytes сохраняет старый {messages, conclusions}; opt-in search с
-      max_result_json_bytes=2000 должен вернуть format=honcho_search_bounded_v1,
-      сериализоваться ровно в 2000 UTF-8 bytes, не иметь unaccounted records и сохранить
-      source_ids/observer_id/session_id у возвращённых conclusions.
+      GET http://127.0.0.1:3000/health должен вернуть 200. Клиент обязан говорить на
+      2026-07-28 — заголовки MCP-Protocol-Version, Mcp-Method и (для tools/call)
+      Mcp-Name, плюс params._meta с io.modelcontextprotocol/protocolVersion и
+      .../clientCapabilities; иначе сервер отвечает 400/-32020. Ответ приходит как
+      text/event-stream, поэтому тело разбирается по кадрам, а не json.loads целиком.
+      Read-only search без max_result_json_bytes возвращает {messages, conclusions};
+      opt-in с max_result_json_bytes=2000 — format=honcho_search_bounded_v1 с coverage
+      и сохранённым provenance возвращённых conclusions. Бюджет покрывает search
+      payload, а не обрамляющий JSON-RPC кадр и не обёртку хука.
     notes: >-
-      Первый патч (dad6848) ограничил MCP_MAX_MESSAGE_CONTENT_CHARS на запись: default
-      2000, диапазон 1..100000 Unicode code points, content_chars/content_truncated,
-      Unicode-safe prefix. Второй патч (a4c3680, fork PR #5) добавил opt-in
-      max_result_json_bytes=512..65536 на весь JSON search payload; legacy path без
-      параметра не меняется. Bounded envelope сообщает retrieved/returned/omitted
-      отдельно для messages и conclusions, total_matches=null + UNKNOWN_UPSTREAM и
-      сохраняет conclusion provenance. Бюджет не покрывает enclosing JSON-RPC frame.
-      Живой readback через mcporter: legacy 8463 bytes; bounded 512 и 2000 дали ровно
-      заданный размер, при 2000 вернулись 2 messages + 2 conclusions с provenance;
-      511 отвергнут. Native Hermes legacy call прошёл; schema текущей сессии была
-      закэширована до обновления и увидит opt-in параметр после reload/new session.
-      GHCR ghcr.io/teashaman-cyber/honcho:latest@sha256:7161a0a4... собирается из
-      корневого Python/FastAPI Dockerfile (порт 8000), это не MCP image. Поэтому runtime
-      собран локально из mcp/Dockerfile exact merge a4c3680. Hermes include-filter всё
-      ещё разрешает только search; hook, Honcho plugin и MemoryProvider не менялись.
-      Контуры: local-lab#231 и TeaShaman-cyber/honcho#4.
+      История: dad6848 ограничил MCP_MAX_MESSAGE_CONTENT_CHARS на запись; a4c3680
+      добавил opt-in max_result_json_bytes (512..65536) на весь search payload.
+      Merge d04090e (PR #11) перевёл MCP на stateless 2026-07-28: сессии и initialize
+      больше нет, ответ фреймится как SSE, legacy-клиент без новой обвязки молча
+      получает отказ. Хук переведён на этот протокол в local-lab PR #247; legacy-режим
+      намеренно не поддерживается (TeaShaman-cyber/honcho#10). Артефакт приходит из
+      пайплайна: push в main по пути mcp/** публикует ghcr.io/teashaman-cyber/honcho-mcp
+      с единственным тегом sha-<commit>; контейнер запущен по digest, а не по локально
+      собранному тегу. Корневой ghcr.io/teashaman-cyber/honcho:latest — по-прежнему
+      FastAPI (порт 8000), это другой пакет. Проверено 2026-11-10 на живом порту уже
+      после переключения: хук отдаёт 3 messages + 3 conclusions, bounded — 1+2 с
+      coverage; нативный клиент Hermes (mcp==2.3.0, streamable_http_client +
+      ClientSession) делает initialize, видит 40 инструментов и получает search на
+      2534 символа. Rollback — остановленные honcho-mcp-rollback-f67c4d6 (локальная
+      сборка) и honcho-mcp-rollback-a4c3680 (legacy wire). Контуры: local-lab#231,
+      #247 и honcho#11.
 
   - id: INFRA-023
     name: posthog
