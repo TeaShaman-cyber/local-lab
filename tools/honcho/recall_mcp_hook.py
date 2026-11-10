@@ -142,22 +142,35 @@ def _sse_payload(raw: str) -> str:
     """Return the JSON body of a reply that may be framed as server-sent events.
 
     The modern server answers `text/event-stream` even for a single message, so a
-    bare `json.loads` on the raw body fails. Only `data:` frames carry the RPC
-    message; `event:`/`id:`/comment lines are ignored.
+    bare `json.loads` on the raw body fails. Only `data:` frames carry RPC
+    messages; `event:`/`id:`/comment lines are ignored.
+
+    A stream may legally carry notifications before the response, so the first
+    frame is not necessarily ours. Only a frame holding `result` or `error` is a
+    response; everything else is skipped. Framing is newline-normalised first,
+    because CRLF separators are permitted and splitting on `\\n\\n` alone would
+    merge two events into one unparseable blob.
     """
     text = raw.strip()
     if not text:
         raise ValueError("empty response body")
     if not text.startswith(("event:", "data:", "id:", ":")):
         return text
-    for frame in text.split("\n\n"):
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    for frame in normalized.split("\n\n"):
         data_lines = [line[5:].strip() for line in frame.splitlines() if line.startswith("data:")]
         if not data_lines:
             continue
         candidate = "\n".join(data_lines).strip()
-        if candidate:
+        if not candidate:
+            continue
+        try:
+            payload = json.loads(candidate)
+        except ValueError:
+            continue
+        if isinstance(payload, dict) and ("result" in payload or "error" in payload):
             return candidate
-    raise ValueError("sse response carries no data frame")
+    raise ValueError("sse stream carries no final rpc response")
 
 
 def _rpc_result(raw: str) -> dict:

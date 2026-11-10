@@ -41,13 +41,16 @@ class FakeMCP:
 
     def __init__(self, inner: dict | None = None, broken_inner: bool = False,
                  fail_status: int = 200, require_auth: bool = True,
-                 sse: bool = True, legacy_server: bool = False):
+                 sse: bool = True, legacy_server: bool = False,
+                 notify_first: bool = False, crlf: bool = False):
         self.inner = inner
         self.broken_inner = broken_inner
         self.fail_status = fail_status
         self.require_auth = require_auth
         self.sse = sse
         self.legacy_server = legacy_server
+        self.notify_first = notify_first
+        self.crlf = crlf
         self.tool_calls: list[dict] = []
         self.auth_headers: list[str] = []
         self.workspace_headers: list[str | None] = []
@@ -153,7 +156,15 @@ class FakeMCP:
     def _send(self, handler, payload: dict) -> None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         if self.sse:
-            framed = b"event: message\ndata: " + data + b"\n\n"
+            # A stream may legally interleave notifications before the response.
+            separator = b"\r\n" if self.crlf else b"\n"
+            frames = []
+            if self.notify_first:
+                note = json.dumps({"jsonrpc": "2.0", "method": "notifications/message",
+                                   "params": {"level": "info"}}).encode("utf-8")
+                frames.append(b"event: message" + separator + b"data: " + note + separator + separator)
+            frames.append(b"event: message" + separator + b"data: " + data + separator + separator)
+            framed = b"".join(frames)
             handler.send_response(200)
             handler.send_header("Content-Type", "text/event-stream")
             handler.send_header("Content-Length", str(len(framed)))
@@ -464,6 +475,27 @@ class TestModernTransport(HookTestCase):
             proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
 
         self.assertIsNotNone(self.decode(proc))
+
+    def test_ignores_notifications_before_the_response(self):
+        # Legal per the transport spec: a notification frame may precede the
+        # response. Returning the first frame would drop valid recall.
+        with FakeMCP(inner=self.INNER, sse=True, notify_first=True) as server:
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        block = self.decode(proc)
+        self.assertIsNotNone(block, "notification was mistaken for the response")
+        self.assertEqual(block["messages"][0]["id"], "m1")
+
+    def test_parses_crlf_framed_event_stream(self):
+        # CRLF separators are permitted; splitting on "\n\n" alone merges events.
+        with FakeMCP(inner=self.INNER, sse=True, notify_first=True, crlf=True) as server:
+            proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        block = self.decode(proc)
+        self.assertIsNotNone(block, "CRLF framing was not normalised")
+        self.assertEqual(block["messages"][0]["id"], "m1")
 
     def test_session_based_server_gets_no_silent_fallback(self):
         # honcho#10: legacy framing is not supported. An old server must produce
