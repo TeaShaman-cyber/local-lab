@@ -43,6 +43,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # pull_request checks out a synthetic merge ref, not necessarily PR head.
+      - name: Capture clean checkout source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain)"
+          echo "SOURCE_COMMIT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "SOURCE_TREE_SHA=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_ENV"
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -67,7 +76,11 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python mutation/report.py session.sqlite | tee -a "$GITHUB_STEP_SUMMARY"
+          python mutation/report.py session.sqlite \
+            --source-commit "$SOURCE_COMMIT_SHA" \
+            --source-tree "$SOURCE_TREE_SHA" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Upload shard result
         if: always()

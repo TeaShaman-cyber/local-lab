@@ -13,7 +13,7 @@
 
 ## Как это устроено
 
-266 мутантов на текущий файл. Один поток — около 40 минут, поэтому прогон
+Количество мутаций зависит от проверяемого дерева (266 — исторический baseline, в другом merge-ref их может быть больше). Один поток — около 40 минут, поэтому прогон
 режется на 16 шардов: каждый job делает `init`, удаляет чужие work items
 (`(rowid - 1) % 16` переводит однобазовый SQLite `rowid` в номер шарда 0–15),
 исполняет свои и публикует `shard-result.json`.
@@ -64,8 +64,28 @@ docker run --rm -v "$PWD:/repo:ro" -w /tmp python:3.12-slim bash -lc '
   cosmic-ray init mutation/cr.toml session.sqlite
   python mutation/shard.py session.sqlite 0 16
   cosmic-ray exec mutation/cr.toml session.sqlite
-  python mutation/report.py session.sqlite'
+  python mutation/report.py session.sqlite \
+    --source-commit "$(git rev-parse HEAD)" \
+    --source-tree "$(git rev-parse HEAD^{tree})" \
+    --run-url "https://github.com/TeaShaman-cyber/local-lab/actions/runs/0"'
 ```
+
+
+## Доказательства для PostHog Scout
+
+Поле source_commit_sha — точный commit, который проверял runner, а
+source_tree_sha — его Git tree. Их сохраняют **до** запуска Cosmic Ray.
+Для pull_request это обычно синтетический merge-ref, а не PR head SHA.
+Агрегатор запрещает объединять разные commits, tree SHA или workflow run URL.
+
+Каждый surviving mutant теперь имеет каноническую полную spec (без случайного
+job_id), stable mutation_id, untruncated diff и исход теста/воркера.
+Эти данные пригодны для последующей проверки контракта Scout; одни лишь
+цифры GitHub CI и фрагменты идентификаторов такой проверки не заменяют.
+
+Артефакты GitHub остаются источником; их наличие не доказывает, что
+PostHog Scout может их прочесть. Scout пока выключен. Локальные
+измерения не становятся CI-evidence от подстановки чужого workflow URL.
 
 ## Границы
 

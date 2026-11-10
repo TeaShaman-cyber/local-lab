@@ -20,6 +20,7 @@ import glob
 import hashlib
 import json
 import os
+import re
 import sys
 
 
@@ -56,6 +57,9 @@ def main() -> int:
     session_totals = {item.get("session_total") for item in results}
     manifest_totals = {item.get("manifest_total") for item in results}
     manifests = {item.get("manifest_sha256") for item in results}
+    source_commits = {item.get("source_commit_sha") for item in results}
+    source_trees = {item.get("source_tree_sha") for item in results}
+    run_urls = {item.get("run_url") for item in results}
     all_mutation_ids = [
         mutation_id
         for item in results
@@ -100,6 +104,9 @@ def main() -> int:
     print(f"| unmeasured | {total_unmeasured} |")
     print(f"| distinct mutation specs seen | {len(distinct_mutation_ids)} |")
     print(f"| duplicated across shards | {duplicates} |")
+    print(f"| source commit sha | {next(iter(source_commits)) if len(source_commits) == 1 else 'MISMATCH'} |")
+    print(f"| source tree sha | {next(iter(source_trees)) if len(source_trees) == 1 else 'MISMATCH'} |")
+    print(f"| run url | {next(iter(run_urls)) if len(run_urls) == 1 else 'MISMATCH'} |")
     print(f"| manifest sha256 | {expected_manifest or 'MISMATCH'} |")
     print(f"| measured union sha256 | {measured_manifest} |")
     print()
@@ -133,6 +140,23 @@ def main() -> int:
         failures.append(
             f"shards do not share one mutation manifest: {sorted(map(str, manifests))}"
         )
+    # A PR-head manifest is not interchangeable with the synthetic merge tree.
+    if len(source_commits) != 1 or any(
+        not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{40}", value)
+        for value in source_commits
+    ):
+        failures.append("shards do not share one valid source commit SHA")
+    if len(source_trees) != 1 or any(
+        not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{40}", value)
+        for value in source_trees
+    ):
+        failures.append("shards do not share one valid source tree SHA")
+    if len(run_urls) != 1 or any(
+        not isinstance(value, str)
+        or not re.fullmatch(r"https://github\.com/[^/]+/[^/]+/actions/runs/[0-9]+", value)
+        for value in run_urls
+    ):
+        failures.append("shards do not share one valid run URL")
     if expected_total is not None and manifest_total is not None:
         if expected_total != manifest_total:
             failures.append(

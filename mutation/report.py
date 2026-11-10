@@ -17,11 +17,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sqlite3
 import sys
 from collections import Counter
-
-DIFF_LIMIT = 600
 
 
 def _canonical_operator_args(raw):
@@ -72,7 +71,16 @@ def main() -> int:
     parser.add_argument("session", help="path to session.sqlite")
     parser.add_argument("--meta", default="shard-meta.json")
     parser.add_argument("--out", default="shard-result.json")
+    parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--source-tree", required=True)
+    parser.add_argument("--run-url", required=True)
     args = parser.parse_args()
+
+    for label, value in (("source commit", args.source_commit), ("source tree", args.source_tree)):
+        if not re.fullmatch(r"[0-9a-f]{40}", value):
+            parser.error(f"{label} must be a full 40-hex Git SHA")
+    if not re.fullmatch(r"https://github\.com/[^/]+/[^/]+/actions/runs/[0-9]+", args.run_url):
+        parser.error("run URL must be a GitHub Actions run URL")
 
     with open(args.meta, encoding="utf-8") as handle:
         meta = json.load(handle)
@@ -91,6 +99,7 @@ def main() -> int:
             stable = _stable_spec(spec_row)
             specs[spec_row[0]] = {
                 **stable,
+                "spec": stable,
                 "mutation_id": _fingerprint(stable),
                 "operator": stable["operator_name"],
                 "function": stable["definition_name"],
@@ -125,13 +134,19 @@ def main() -> int:
         survivors.append({
             "job_id": job_id,
             "mutation_id": spec["mutation_id"],
+            "spec": spec["spec"],
+            "worker_outcome": "NORMAL",
+            "test_outcome": test_outcome,
             "operator": spec["operator"],
             "function": spec["function"],
             "location": spec["location"],
-            "diff": (diff or "")[:DIFF_LIMIT],
+            "diff": diff or "",
         })
 
     result = {
+        "source_commit_sha": args.source_commit,
+        "source_tree_sha": args.source_tree,
+        "run_url": args.run_url,
         "shard": meta["shard"],
         "shards": meta["shards"],
         "session_total": meta["total"],
