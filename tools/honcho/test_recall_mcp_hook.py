@@ -336,6 +336,21 @@ class TestDelivers(HookTestCase):
         self.assertEqual(len(sent), 400, f"query length {len(sent)} is not the ceiling")
         self.assertEqual(sent, long_message[:400])
 
+    def test_non_decimal_digit_env_falls_back_to_the_default(self):
+        # isdigit() accepts characters such as "²" that int() then refuses. The
+        # guard must reject the value, not abort the whole hook on it.
+        inner = {"messages": [{"id": "m1", "content": "x", "content_chars": 1,
+                               "content_truncated": False}], "conclusions": []}
+        with FakeMCP(inner=inner) as server:
+            proc = self.run_hook(
+                self.payload("расскажи про динамическую шпаргалку"),
+                server.url, HONCHO_RECALL_MIN_QUERY="\u00b2",
+            )
+
+        self.assertEqual(proc.returncode, 0)
+        self.assertIsNotNone(self.decode(proc), "a non-decimal digit disabled recall")
+        self.assertEqual(server.request_count(), 1)
+
     def test_unbounded_projection_drops_bounded_only_fields(self):
         # The two field projections are not interchangeable: the bounded one
         # carries metadata_omitted and the extra conclusion provenance. Swapping
@@ -785,6 +800,27 @@ class TestStaysSilent(HookTestCase):
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(proc.stdout.strip(), "")
 
+    def test_failure_reason_reaches_stderr(self):
+        # Fail-open must not mean fail-silent: with no context on stdout, stderr
+        # is the only place an operator can learn why recall disappeared.
+        proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"),
+                             "http://127.0.0.1:1/mcp")
+
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(proc.stdout.strip(), "")
+        self.assertIn("honcho-recall: failed open:", proc.stderr)
+        # The class name is what makes the line diagnosable at a glance.
+        self.assertRegex(proc.stderr, r"failed open: \w*Error: ")
+        self.assertTrue(proc.stderr.strip(), "the failure left no trace at all")
+
+    def test_failure_report_never_carries_the_token(self):
+        proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"),
+                             "http://127.0.0.1:1/mcp",
+                             HONCHO_RECALL_TOKEN="custom-secret-token")
+
+        self.assertEqual(proc.returncode, 0)
+        self.assertNotIn("custom-secret-token", proc.stderr)
+
     def test_server_error_fails_open(self):
         with FakeMCP(inner={"messages": []}, fail_status=500) as server:
             proc = self.run_hook(self.payload("расскажи про динамическую шпаргалку"), server.url)
@@ -832,6 +868,31 @@ class TestStaysSilent(HookTestCase):
                               timeout=60)
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(proc.stdout.strip(), "")
+
+
+class TestFailureRedaction(unittest.TestCase):
+    """The diagnostic line must never become a credential leak."""
+
+    def _hook_module(self):
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("hook_under_test", HOOK)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_redact_removes_the_token_and_any_bearer_credential(self):
+        module = self._hook_module()
+        os.environ["HONCHO_RECALL_TOKEN"] = "custom-secret-token"
+        try:
+            cleaned = module._redact(
+                "failed for custom-secret-token with header Bearer abc123def")
+        finally:
+            del os.environ["HONCHO_RECALL_TOKEN"]
+
+        self.assertNotIn("custom-secret-token", cleaned)
+        self.assertNotIn("abc123def", cleaned)
+        self.assertIn("[REDACTED]", cleaned)
 
 
 if __name__ == "__main__":
