@@ -266,6 +266,47 @@ class HookTestCase(unittest.TestCase):
         return json.loads(body)
 
 
+class TestConfiguredCommand(HookTestCase):
+    def test_cli_arguments_make_the_shell_hook_self_contained(self):
+        inner = _bounded_inner(
+            messages=[{"id": "m1", "content": "bounded result"}],
+            retrieved_messages=1,
+            returned_messages=1,
+        )
+        with FakeMCP(inner=inner) as server:
+            env = {**os.environ, "HERMES_HONCHO_RECALL_STATE": self.state}
+            for name in (
+                "HONCHO_RECALL_MCP_URL", "HONCHO_RECALL_PEER_ID",
+                "HONCHO_RECALL_WORKSPACE", "HONCHO_RECALL_MAX_JSON_BYTES",
+                "HONCHO_RECALL_TIMEOUT",
+            ):
+                env.pop(name, None)
+            proc = subprocess.run(
+                [
+                    sys.executable, str(HOOK),
+                    "--mcp-url", server.url,
+                    "--peer-id", "semyon",
+                    "--workspace", "hermes",
+                    "--max-json-bytes", "2000",
+                    "--timeout", "5",
+                ],
+                input=json.dumps(self.payload("архитектурный формат bounded recall")),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                env=env,
+                timeout=60,
+            )
+
+        block = self.decode(proc)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIsNotNone(block)
+        self.assertEqual(block["format"], "honcho_search_bounded_v1")
+        call = server.tool_calls[0]["arguments"]
+        self.assertEqual(call["workspace_id"], "hermes")
+        self.assertEqual(call["max_result_json_bytes"], 2000)
+
+
 class TestDelivers(HookTestCase):
     def test_first_turn_delivers_projected_strict_json(self):
         inner = {
