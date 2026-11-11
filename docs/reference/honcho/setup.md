@@ -375,6 +375,13 @@ Schema MCP tools кэшируется на старте сессии, поэто
 - MCP-шлюз требует **непустой** `Authorization: Bearer …`; без него `tools/call`
   отдаёт `401`, и fail-open клиент молча ничего не вставляет. Локальный API
   значение не проверяет, удалённый — проверяет.
+- Числовые env (`HONCHO_RECALL_MIN_QUERY`, `HONCHO_RECALL_TIMEOUT`) разбираются
+  через `isdecimal()`, а не `isdigit()`: `isdigit()` пропускает `²`, на котором
+  `int()` падает. Невалидное значение откатывается к default и больше не
+  отключает recall целиком.
+- Fail-open — это пустой stdout и код 0, но не молчание: причина уходит строкой
+  `honcho-recall: failed open: <Type>: <detail>` в stderr, с редакцией токена и
+  `Bearer`-заголовка. Харнесс эту строку не читает, человек — читает.
 - `workspace_id` надёжнее передавать аргументом `tools/call`, а не только
   заголовком `X-Honcho-Workspace-ID`: заголовок задаёт лишь дефолт.
 - `mutmut` на нативном Windows не работает («please use the WSL»); мутационные

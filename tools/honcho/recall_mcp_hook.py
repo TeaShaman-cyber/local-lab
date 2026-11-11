@@ -43,6 +43,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sys
 import tempfile
 import urllib.error
@@ -86,7 +87,9 @@ PREAMBLE = (
 
 def _env_int(name: str, default: int) -> int:
     raw = os.environ.get(name, "").strip()
-    if not raw.isdigit():
+    # isdecimal(), not isdigit(): isdigit() also accepts characters like "²"
+    # that int() then refuses, which used to abort the whole hook.
+    if not raw.isdecimal():
         return default
     value = int(raw)
     return value if value > 0 else default
@@ -297,6 +300,25 @@ def _build_block(query: str) -> dict | None:
     return envelope
 
 
+def _redact(text: str) -> str:
+    """Remove credentials that could travel inside an exception message."""
+    token = os.environ.get("HONCHO_RECALL_TOKEN", "").strip()
+    if token:
+        text = text.replace(token, "[REDACTED]")
+    return re.sub(r"(?i)(bearer\s+)\S+", r"\1[REDACTED]", text)
+
+
+def _report_failure(error: BaseException) -> None:
+    """Say why recall was dropped, without breaking fail-open silence.
+
+    The contract with the harness is exit 0 and no context on stdout. That
+    leaves stderr as the only channel where a failure can be diagnosed at all;
+    without it every transport error looks identical to "nothing to recall".
+    """
+    detail = _redact(" ".join(str(error).split()))[:200]
+    print(f"honcho-recall: failed open: {type(error).__name__}: {detail}", file=sys.stderr)
+
+
 def _load_state() -> dict:
     try:
         with open(STATE_PATH, encoding="utf-8") as handle:
@@ -359,5 +381,7 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except SystemExit:
         raise
-    except Exception:
+    except Exception as error:
+        # Fail open, but never silently: stderr carries the reason.
+        _report_failure(error)
         raise SystemExit(0)
