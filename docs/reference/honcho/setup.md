@@ -289,8 +289,13 @@ opt-in бюджет всего search JSON. Действующий сервер 
 - enclosing JSON-RPC frame в этот бюджет не входит.
 
 Интеграция с Hermes hook остаётся опциональной: переменная
-HONCHO_RECALL_MAX_JSON_BYTES (512..65536) задаёт размер JSON для запроса
-MCP search. Без неё запрос не меняется. При явно заданном лимите hook
+HONCHO_RECALL_MAX_JSON_BYTES (512..65536) или эквивалентный аргумент
+`--max-json-bytes` задаёт размер JSON для запроса MCP search. Несекретные
+параметры развёртывания (`--mcp-url`, `--peer-id`, `--workspace`, `--timeout`)
+можно задавать аргументами команды shell hook; это нужно, потому что Hermes
+запускает `command` через `shell=False`, а inline `VAR=value` там не является
+переменной окружения. Секретный `HONCHO_RECALL_TOKEN` остаётся только в env.
+Без budget запрос не меняется. При явно заданном лимите hook
 требует формат honcho_search_bounded_v1, иначе отказывается от recall
 без блокировки turn, чтобы старый сервер не смог молча обойти ограничение.
 В контекст переносятся source_ids, source_message_ids, уровень, наблюдатели,
@@ -372,8 +377,8 @@ Schema MCP tools кэшируется на старте сессии, поэто
 
 ### Ловушки
 
-- MCP-шлюз требует **непустой** `Authorization: Bearer …`; без него `tools/call`
-  отдаёт `401`, и fail-open клиент молча ничего не вставляет. Локальный API
+- MCP-шлюз требует **непустой** `Authorization: Bearer local-only`; без него `tools/call`
+  отдаёт `401`, и fail-open клиент ничего не вставляет. Локальный API
   значение не проверяет, удалённый — проверяет.
 - Числовые env (`HONCHO_RECALL_MIN_QUERY`, `HONCHO_RECALL_TIMEOUT`) разбираются
   через `isdecimal()`, а не `isdigit()`: `isdigit()` пропускает `²`, на котором
@@ -415,10 +420,22 @@ search JSON и явно учитывает пропущенные records. Чи�
 не режет и не выбрасывает записи: иначе ограничение расползлось бы по каждому
 harness, а контракт перестал бы быть переносимым.
 
+Включение live hook — отдельный cutover после merge исходников. Команда должна
+быть самодостаточной и bounded, например:
+
+```text
+E:/local-lab/tools/honcho/recall_mcp_hook.py --mcp-url http://127.0.0.1:3000/mcp --peer-id semyon --workspace hermes --max-json-bytes 2000 --timeout 4
+```
+
+Сначала `hermes hooks list/doctor/test pre_llm_call` и реальная новая сессия при
+`recallMode=hybrid`; только после наблюдаемой автоматической вставки plugin
+переводится в `recallMode=tools`, сохраняя `saveMessages=true` и
+`writeFrequency=turn`. Plugin целиком не отключается: он остаётся владельцем
+записи. Откат — удалить shell hook и вернуть `recallMode=hybrid`.
+
 Не входит и намеренно не сделано: включение whole-response budget по умолчанию,
-ограничение enclosing JSON-RPC frame или других search-like tools, включение hook'а
-в Hermes, изменения Honcho plugin и MemoryProvider. Recall пока вызывается вручную;
-автоматическая доставка — отдельный шаг.
+ограничение enclosing JSON-RPC frame или других search-like tools. Изменения
+Honcho plugin и MemoryProvider вне cutover не делаются.
 
 ## История решений
 
