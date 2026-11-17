@@ -457,6 +457,8 @@ services:
         совпадение .Id == image_digest — наблюдённый факт, а не определение; config
         digest linux/amd64 записан отдельно как image_config_amd64
       container: honcho-mcp-probe
+      restart_policy: unless-stopped (verified after cutover; previous `no` left the
+        container stopped after Docker restart)
       endpoint: "http://127.0.0.1:3000/mcp"
       published_port: "127.0.0.1:3000 -> 3000/tcp"
       network: local-test_default (external, принадлежит INFRA-017)
@@ -474,6 +476,19 @@ services:
       local_builds: none — локальная сборка допускается только как явно помеченное
         временное отклонение с записью причины
       protocol: "MCP 2026-07-28 stateless — no initialize, no Mcp-Session-Id"
+      autorecall:
+        hook_event: pre_llm_call
+        command: >-
+          E:/local-lab/tools/honcho/recall_mcp_hook.py --mcp-url
+          http://127.0.0.1:3000/mcp --peer-id semyon --workspace hermes
+          --max-json-bytes 2000 --timeout 4
+        hook_timeout_seconds: 10
+        plugin_recall_mode: tools
+        plugin_init_on_session_start: true
+        plugin_save_messages: true
+        plugin_write_frequency: turn
+        scope: first turn of each Hermes session; later turns remain available through
+          explicit Honcho tools
       sdk: "@modelcontextprotocol/server 2.4.0"
       previous_merge_commit: a4c3680c7b60541f274d49ec208696dc3089b64f
       rollback_container: honcho-mcp-rollback-f67c4d6 (stopped, локальная сборка);
@@ -498,7 +513,9 @@ services:
       Read-only search без max_result_json_bytes возвращает {messages, conclusions};
       opt-in с max_result_json_bytes=2000 — format=honcho_search_bounded_v1 с coverage
       и сохранённым provenance возвращённых conclusions. Бюджет покрывает search
-      payload, а не обрамляющий JSON-RPC кадр и не обёртку хука.
+      payload, а не обрамляющий JSON-RPC кадр и не обёртку хука. `hermes hooks doctor`
+      должен видеть allowlisted unchanged `pre_llm_call`; Honcho config должен сохранять
+      recallMode=tools, initOnSessionStart=true, saveMessages=true и writeFrequency=turn.
     notes: >-
       История: dad6848 ограничил MCP_MAX_MESSAGE_CONTENT_CHARS на запись; a4c3680
       добавил opt-in max_result_json_bytes (512..65536) на весь search payload.

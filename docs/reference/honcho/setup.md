@@ -420,18 +420,31 @@ search JSON и явно учитывает пропущенные records. Чи�
 не режет и не выбрасывает записи: иначе ограничение расползлось бы по каждому
 harness, а контракт перестал бы быть переносимым.
 
-Включение live hook — отдельный cutover после merge исходников. Команда должна
-быть самодостаточной и bounded, например:
+Live cutover завершён. Bounded hook зарегистрирован как allowlisted
+`pre_llm_call` с командой:
 
 ```text
 E:/local-lab/tools/honcho/recall_mcp_hook.py --mcp-url http://127.0.0.1:3000/mcp --peer-id semyon --workspace hermes --max-json-bytes 2000 --timeout 4
 ```
 
-Сначала `hermes hooks list/doctor/test pre_llm_call` и реальная новая сессия при
-`recallMode=hybrid`; только после наблюдаемой автоматической вставки plugin
-переводится в `recallMode=tools`, сохраняя `saveMessages=true` и
-`writeFrequency=turn`. Plugin целиком не отключается: он остаётся владельцем
-записи. Откат — удалить shell hook и вернуть `recallMode=hybrid`.
+Plugin работает в `recallMode=tools`, но остаётся включённым как владелец записи:
+`saveMessages=true`, `writeFrequency=turn`. Для этого обязателен
+`initOnSessionStart=true`. При дефолтном `false` tools-mode откладывает session init
+до первого явного memory tool; `sync_turn()` до этого молча не пишет сообщения.
+Именно это поймал первый canary, после которого mode был возвращён в `hybrid` до
+нахождения причины.
+
+Повторный fresh-session canary с eager init доказал все три postcondition:
+
+- injection audit: `recall_mode=tools`, `reason=cron-or-tools-mode`, `bytes=0`;
+- fingerprint shell hook совпал с SHA-1 `(session_id NUL user_query)`;
+- marker-turn появился в Honcho session `local-lab` с обеими сторонами разговора.
+
+Второй turn той же Hermes-сессии тоже записался, а fingerprint не изменился: hook
+намеренно работает только на первом turn; углубление памяти позже остаётся за явными
+Honcho tools. Откат: удалить shell hook, вернуть `recallMode=hybrid`; при сохранении
+`tools` нельзя выключать `initOnSessionStart`, иначе запись до первого tool call
+теряется.
 
 Не входит и намеренно не сделано: включение whole-response budget по умолчанию,
 ограничение enclosing JSON-RPC frame или других search-like tools. Изменения
