@@ -40,6 +40,7 @@ Environment:
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
@@ -376,8 +377,30 @@ def main() -> int:
     return 0
 
 
+def _apply_cli_args() -> None:
+    """Map non-secret deployment arguments onto the existing env contract."""
+    parser = argparse.ArgumentParser(description="Bounded Honcho MCP recall hook")
+    parser.add_argument("--mcp-url")
+    parser.add_argument("--peer-id")
+    parser.add_argument("--workspace")
+    parser.add_argument("--max-json-bytes")
+    parser.add_argument("--timeout")
+    args = parser.parse_args()
+    values = {
+        "HONCHO_RECALL_MCP_URL": args.mcp_url,
+        "HONCHO_RECALL_PEER_ID": args.peer_id,
+        "HONCHO_RECALL_WORKSPACE": args.workspace,
+        "HONCHO_RECALL_MAX_JSON_BYTES": args.max_json_bytes,
+        "HONCHO_RECALL_TIMEOUT": args.timeout,
+    }
+    for name, value in values.items():
+        if value is not None:
+            os.environ[name] = value
+
+
 if __name__ == "__main__":
     try:
+        _apply_cli_args()
         raise SystemExit(main())
     except SystemExit:
         raise
