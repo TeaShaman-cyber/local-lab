@@ -607,6 +607,35 @@ services:
       Контуры: local-lab#234 и TeaShaman-cyber/theseus-cloud-shell#16;
       процедура: docs/reference/posthog.md.
 
+  - id: INFRA-024
+    name: hermes-otel-plugin
+    criticality: P2
+    role: >-
+      телеметрия локального Hermes: трейсы, метрики и логи сессий в Grafana Cloud
+      (Tempo/Mimir/Loki) через плагин hermes_otel с полным захватом содержимого
+    status: active
+    kind: hermes-plugin
+    location:
+      plugin_dir: $HERMES_HOME/plugins/hermes_otel
+      config: $HERMES_HOME/hermes_otel.yaml
+      source_repo: https://github.com/briancaffey/hermes-otel
+      source_sha: 32554cf76c8dbeb8d382eaff9007112abf3f7b2c
+      local_patch: release_live_store + ctx.on_unload (upstream issue #671, PR #672)
+      doc: docs/reference/observability/grafana-observability/hermes-otel-plugin.md
+    monitoring: >-
+      Сам является источником телеметрии. Живость — строки `hermes gateway status`
+      (версия, 34 хука, content_capture=full, Logs → 1 backend) плюс свежие спаны
+      в Tempo с resource.service.version и input.value/output.value.
+    check: >-
+      hermes gateway status | grep -E 'content_capture|hooks|Logs'; затем в Tempo
+      найти спаны с resource.process.pid равным текущему PID gateway и убедиться,
+      что есть input.value и tool-атрибуты. Признак старой версии — 15 hooks.
+    notes: >-
+      Readback 2026-11-18: 1.33.0 + локальный lifecycle-патч, content_capture=full,
+      capture_logs=true, tool commands/targets/errors включены. Известный остаток —
+      `plugins doctor --ci` падает с WinError 32 (второй LiveStore в logs-пайплайне),
+      на live-экспорт не влияет. Backup и процедура отката — в doc выше.
+
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
 # Признак продового/тестового — RULE-009 в infrastructure.md.
 test_stands:
