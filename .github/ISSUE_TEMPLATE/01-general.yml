@@ -1,0 +1,34 @@
+name: "Задача / исследование"
+description: "Одна форма для задач и исследований с указанием происхождения записи."
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Указывайте фактическую модель и среду этой записи, не угадывайте неизвестное.
+        Для новых содержательных комментариев используйте короткую строку
+        `Model: ... · Environment: ...` (особенно при смене модели или среды).
+        GitHub не проверяет поля обычных комментариев.
+  - type: textarea
+    id: task
+    attributes:
+      label: "Суть"
+      description: "Что хотим выяснить, изменить или проверить?"
+      placeholder: "Коротко о задаче и ожидаемом результате."
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: "Model"
+      description: "Точный ID, если известен; human для записи без LLM, unknown если неизвестен."
+      placeholder: "GPT-6 или deepseek-flash"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: "Environment"
+      description: "Клиент/рантайм и провайдер, если известен; unknown если неизвестен."
+      placeholder: "ChatGPT / OpenAI или Hermes / DeepInfra"
+    validations:
+      required: true
