@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS context_snapshots (
     snapshot_id BIGSERIAL PRIMARY KEY,
     source_id TEXT NOT NULL,
     snapshot_sha256 TEXT NOT NULL,
+    verification_receipt_sha256 TEXT,
     source_schema_version INTEGER NOT NULL,
     format_version TEXT NOT NULL,
     snapshot_name TEXT NOT NULL,
@@ -14,6 +15,9 @@ CREATE TABLE IF NOT EXISTS context_snapshots (
     message_count INTEGER NOT NULL,
     UNIQUE (source_id, snapshot_sha256)
 );
+
+ALTER TABLE context_snapshots
+    ADD COLUMN IF NOT EXISTS verification_receipt_sha256 TEXT;
 
 CREATE TABLE IF NOT EXISTS context_snapshot_heads (
     source_id TEXT PRIMARY KEY,

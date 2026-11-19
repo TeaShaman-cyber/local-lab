@@ -15,11 +15,15 @@ import shutil
 import sqlite3
 import tempfile
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, Iterator
 
-from tools.context_backend import FORMAT_VERSION, SUPPORTED_SOURCE_SCHEMA_VERSIONS
+from tools.context_backend import (
+    FORMAT_VERSION,
+    SUPPORTED_SOURCE_SCHEMA_VERSIONS,
+    VERIFICATION_RECEIPT_VERSION,
+)
 
 
 class SourceContractError(RuntimeError):
@@ -54,8 +58,13 @@ class SnapshotDescriptor:
     sessions: int
     messages: int
     newest_message_timestamp: float | None
+    verification_receipt_sha256: str | None = None
+    verification_receipt_version: str | None = None
+    verified_at: str | None = None
 
     def manifest(self) -> dict[str, Any]:
+        if not self.verification_receipt_sha256 or not self.verification_receipt_version or not self.verified_at:
+            raise SourceContractError("a verification receipt is required for a canonical manifest")
         return {
             "format_version": FORMAT_VERSION,
             "source": {
@@ -68,6 +77,11 @@ class SnapshotDescriptor:
             "counts": {"sessions": self.sessions, "messages": self.messages},
             "newest_message_timestamp": self.newest_message_timestamp,
             "created_at": datetime.now(UTC).isoformat(),
+            "verification": {
+                "receipt_version": self.verification_receipt_version,
+                "receipt_sha256": self.verification_receipt_sha256,
+                "verified_at": self.verified_at,
+            },
             "files": {"sessions": "sessions.jsonl", "messages": "messages.jsonl"},
         }
 
@@ -146,7 +160,65 @@ def _sha256_file(path: pathlib.Path) -> str:
     return digest.hexdigest()
 
 
-def describe_snapshot(path: pathlib.Path, source_id: str) -> SnapshotDescriptor:
+def _read_receipt(receipt_path: pathlib.Path) -> tuple[dict[str, Any], str]:
+    if not receipt_path.is_file():
+        raise SourceContractError(f"receipt not found: {receipt_path}")
+    try:
+        raw = receipt_path.read_bytes()
+        receipt = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise SourceContractError(f"cannot read verification receipt: {receipt_path}") from exc
+    if not isinstance(receipt, dict):
+        raise SourceContractError("verification receipt must be a JSON object")
+    if receipt.get("receipt_version") != VERIFICATION_RECEIPT_VERSION:
+        raise SourceContractError("unsupported verification receipt version")
+    return receipt, hashlib.sha256(raw).hexdigest()
+
+
+def _attach_verification_receipt(
+    descriptor: SnapshotDescriptor, receipt_path: pathlib.Path
+) -> SnapshotDescriptor:
+    receipt, receipt_sha256 = _read_receipt(receipt_path)
+    source = receipt.get("source")
+    verdict = receipt.get("verification")
+    if not isinstance(source, dict) or not isinstance(verdict, dict):
+        raise SourceContractError("verification receipt is missing source or verification")
+    if source.get("snapshot_sha256") != descriptor.snapshot_sha256:
+        raise SourceContractError("snapshot_sha256 mismatch between snapshot and receipt")
+    if source.get("snapshot_name") != descriptor.path.name:
+        raise SourceContractError("snapshot_name mismatch between snapshot and receipt")
+    try:
+        receipt_size = int(source["size_bytes"])
+        receipt_sessions = int(verdict["sessions"])
+        receipt_messages = int(verdict["messages"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise SourceContractError("verification receipt has invalid size or counts") from exc
+    if receipt_size != descriptor.path.stat().st_size:
+        raise SourceContractError("size_bytes mismatch between snapshot and receipt")
+    if verdict.get("ok") is not True or verdict.get("integrity") != "ok":
+        raise SourceContractError("verification failed: receipt verdict is not usable")
+    if receipt_sessions != descriptor.sessions:
+        raise SourceContractError("session count mismatch between snapshot and receipt")
+    if receipt_messages != descriptor.messages:
+        raise SourceContractError("message count mismatch between snapshot and receipt")
+    verified_at = verdict.get("checked")
+    if not isinstance(verified_at, str):
+        raise SourceContractError("verification receipt is missing checked timestamp")
+    try:
+        datetime.fromisoformat(verified_at)
+    except ValueError as exc:
+        raise SourceContractError("verification receipt checked timestamp is invalid") from exc
+    return replace(
+        descriptor,
+        verification_receipt_sha256=receipt_sha256,
+        verification_receipt_version=receipt["receipt_version"],
+        verified_at=verified_at,
+    )
+
+
+def describe_snapshot(
+    path: pathlib.Path, source_id: str, receipt_path: pathlib.Path | None = None
+) -> SnapshotDescriptor:
     """Validate the supported source contract and return metadata only."""
     if not source_id.strip():
         raise SourceContractError("source_id must not be empty")
@@ -155,7 +227,7 @@ def describe_snapshot(path: pathlib.Path, source_id: str) -> SnapshotDescriptor:
         sessions = int(conn.execute("SELECT count(*) FROM sessions").fetchone()[0])
         messages = int(conn.execute("SELECT count(*) FROM messages").fetchone()[0])
         newest = conn.execute("SELECT max(timestamp) FROM messages").fetchone()[0]
-    return SnapshotDescriptor(
+    descriptor = SnapshotDescriptor(
         path=path,
         source_id=source_id,
         source_schema_version=schema_version,
@@ -164,6 +236,7 @@ def describe_snapshot(path: pathlib.Path, source_id: str) -> SnapshotDescriptor:
         messages=messages,
         newest_message_timestamp=float(newest) if newest is not None else None,
     )
+    return _attach_verification_receipt(descriptor, receipt_path) if receipt_path else descriptor
 
 
 def _text(value: Any) -> str | None:
@@ -272,9 +345,10 @@ def write_bundle(
     snapshot_path: pathlib.Path,
     output_dir: pathlib.Path,
     source_id: str,
+    receipt_path: pathlib.Path,
 ) -> dict[str, Any]:
     """Write a complete canonical bundle atomically; refuse an existing target."""
-    descriptor = describe_snapshot(snapshot_path, source_id)
+    descriptor = describe_snapshot(snapshot_path, source_id, receipt_path)
     output_dir = output_dir.resolve()
     if output_dir.exists():
         raise BundleContractError(f"output directory already exists: {output_dir}")
@@ -289,6 +363,8 @@ def write_bundle(
                 f"source changed while exporting: expected sessions={descriptor.sessions}, "
                 f"messages={descriptor.messages}; read sessions={sessions}, messages={messages}"
             )
+        if _sha256_file(snapshot_path) != descriptor.snapshot_sha256:
+            raise BundleContractError("source changed while exporting: snapshot hash mismatch")
         manifest = descriptor.manifest()
         (staging / "manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
@@ -316,12 +392,20 @@ def read_manifest(bundle_dir: pathlib.Path) -> dict[str, Any]:
     source = manifest.get("source")
     counts = manifest.get("counts")
     files = manifest.get("files")
-    if not isinstance(source, dict) or not isinstance(counts, dict) or not isinstance(files, dict):
-        raise BundleContractError("manifest is missing source, counts, or files")
+    verification = manifest.get("verification")
+    if (
+        not isinstance(source, dict)
+        or not isinstance(counts, dict)
+        or not isinstance(files, dict)
+        or not isinstance(verification, dict)
+    ):
+        raise BundleContractError("manifest is missing source, counts, verification, or files")
     if not source.get("source_id") or not source.get("snapshot_sha256") or not source.get("snapshot_name"):
         raise BundleContractError("manifest source is missing source_id, snapshot_name, or snapshot_sha256")
     if not isinstance(manifest.get("created_at"), str):
         raise BundleContractError("manifest is missing created_at")
+    if not verification.get("receipt_sha256") or verification.get("receipt_version") != VERIFICATION_RECEIPT_VERSION:
+        raise BundleContractError("manifest has invalid verification receipt provenance")
     try:
         datetime.fromisoformat(manifest["created_at"])
     except ValueError as exc:

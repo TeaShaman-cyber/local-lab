@@ -15,21 +15,27 @@ verified Hermes snapshot
 Use a verified offline snapshot produced by the existing local snapshot path:
 
 ```bash
-python tools/state_db_backup/verify.py --json
+python tools/state_db_backup/verify.py --json \
+  --receipt E:/theseus-backups/state-db/receipts/state-YYYYmmdd-HHMMSS.receipt.json
 python tools/context_backend/export_snapshot.py \
   E:/theseus-backups/state-db/snapshots/state-YYYYmmdd-HHMMSS.db \
+  --receipt E:/theseus-backups/state-db/receipts/state-YYYYmmdd-HHMMSS.receipt.json \
   --validate-only
 ```
 
 The exporter uses `mode=ro&immutable=1`. It never opens the live database and
-never modifies the source. The first decoder supports only the observed Hermes
-schema version `33`; an unknown version fails closed before any PostgreSQL write.
+never modifies the source. It requires the independent verifier receipt and matches
+the receipt's snapshot name, byte size, SHA-256, integrity verdict, freshness verdict,
+and session/message counts. The first decoder supports only the observed Hermes
+schema version `33`; an unknown version or receipt fails closed before any bundle or
+PostgreSQL write.
 
 The exported bundle contains message content and is private data. Keep it outside
 the repository and do not send it to Neon automatically:
 
 ```bash
 python tools/context_backend/export_snapshot.py SNAPSHOT \
+  --receipt SNAPSHOT.receipt.json \
   --output-dir C:/Users/s.poklad/AppData/Local/hermes/cache/scratch/context-bundle
 ```
 

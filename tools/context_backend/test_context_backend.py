@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -54,6 +55,38 @@ def make_snapshot(path: Path, schema_version: int = 33) -> None:
     conn.close()
 
 
+def make_receipt(
+    snapshot: Path,
+    *,
+    ok: bool = True,
+    integrity: str = "ok",
+    snapshot_name: str | None = None,
+) -> Path:
+    receipt = snapshot.with_suffix(".receipt.json")
+    payload = {
+        "receipt_version": "theseus.state-db.verification.v1",
+        "source": {
+            "snapshot_name": snapshot_name or snapshot.name,
+            "snapshot_sha256": hashlib.sha256(snapshot.read_bytes()).hexdigest(),
+            "size_bytes": snapshot.stat().st_size,
+        },
+        "verification": {
+            "ok": ok,
+            "integrity": integrity,
+            "sessions": 1,
+            "messages": 1,
+            "newest": 1001.0,
+            "checked": "2026-11-19T20:00:00+00:00",
+            "gap_hours": 0.0,
+            "gap_messages": 0,
+            "detail": "snapshot is usable" if ok else "snapshot is not usable",
+        },
+        "tool": "tools/state_db_backup/verify.py",
+    }
+    receipt.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    return receipt
+
+
 class ContextBackendSourceTests(unittest.TestCase):
     def test_snapshot_is_read_only_and_schema_is_checked(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -81,9 +114,11 @@ class ContextBackendSourceTests(unittest.TestCase):
             root = Path(tmp)
             snapshot = root / "state.db"
             make_snapshot(snapshot)
+            receipt = make_receipt(snapshot)
             bundle = root / "bundle"
-            manifest = write_bundle(snapshot, bundle, "test-source")
+            manifest = write_bundle(snapshot, bundle, "test-source", receipt)
             self.assertEqual(manifest["counts"], {"sessions": 1, "messages": 1})
+            self.assertIn("verification", manifest)
             self.assertEqual(read_manifest(bundle)["format_version"], "theseus.context.export.v1")
             session = next(iter_bundle_records(bundle, "sessions"))
             message = next(iter_bundle_records(bundle, "messages"))
@@ -97,21 +132,59 @@ class ContextBackendSourceTests(unittest.TestCase):
             root = Path(tmp)
             snapshot = root / "state.db"
             make_snapshot(snapshot)
+            receipt = make_receipt(snapshot)
             bundle = root / "bundle"
             bundle.mkdir()
             with self.assertRaisesRegex(BundleContractError, "already exists"):
-                write_bundle(snapshot, bundle, "test-source")
+                write_bundle(snapshot, bundle, "test-source", receipt)
 
     def test_bundle_is_fully_validated_before_target_connect(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             snapshot = root / "state.db"
             make_snapshot(snapshot)
+            receipt = make_receipt(snapshot)
             bundle = root / "bundle"
-            write_bundle(snapshot, bundle, "test-source")
+            write_bundle(snapshot, bundle, "test-source", receipt)
             (bundle / "messages.jsonl").write_text("{not-json}\n", encoding="utf-8")
             with self.assertRaisesRegex(BundleContractError, "invalid messages JSONL"):
                 validate_bundle(bundle)
+
+    def test_verified_snapshot_requires_matching_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            snapshot = root / "state.db"
+            make_snapshot(snapshot)
+            receipt = make_receipt(snapshot)
+            descriptor = describe_snapshot(snapshot, "test-source", receipt)
+            self.assertEqual(descriptor.verification_receipt_sha256, hashlib.sha256(receipt.read_bytes()).hexdigest())
+
+            with self.assertRaisesRegex(SourceContractError, "receipt not found"):
+                describe_snapshot(snapshot, "test-source", root / "missing.receipt.json")
+
+    def test_receipt_rejects_changed_snapshot_and_failed_verdict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            snapshot = root / "state.db"
+            make_snapshot(snapshot)
+            receipt = make_receipt(snapshot)
+            other_dir = root / "other"
+            other_dir.mkdir()
+            other = other_dir / "state.db"
+            make_snapshot(other)
+            conn = sqlite3.connect(other)
+            conn.execute(
+                "INSERT INTO messages VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (2, "session-1", "assistant", "changed", None, None, None, 1002, 1, None, 1, 0, "text"),
+            )
+            conn.commit()
+            conn.close()
+            with self.assertRaisesRegex(SourceContractError, "snapshot_sha256 mismatch"):
+                describe_snapshot(other, "test-source", receipt)
+
+            failed = make_receipt(snapshot, ok=False, integrity="database disk image is malformed")
+            with self.assertRaisesRegex(SourceContractError, "verification failed"):
+                describe_snapshot(snapshot, "test-source", failed)
 
 
 if __name__ == "__main__":

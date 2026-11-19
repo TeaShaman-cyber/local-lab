@@ -124,15 +124,17 @@ def load_bundle(bundle_dir: pathlib.Path, dsn: str) -> dict[str, int | str]:
             snapshot = conn.execute(
                 """
                 INSERT INTO context_snapshots (
-                    source_id, snapshot_sha256, source_schema_version, format_version,
-                    snapshot_name, captured_at, session_count, message_count
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    source_id, snapshot_sha256, verification_receipt_sha256,
+                    source_schema_version, format_version, snapshot_name, captured_at,
+                    session_count, message_count
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (source_id, snapshot_sha256) DO UPDATE SET imported_at = now()
                 RETURNING snapshot_id
                 """,
                 (
                     source["source_id"],
                     source["snapshot_sha256"],
+                    manifest["verification"]["receipt_sha256"],
                     int(source["source_schema_version"]),
                     manifest["format_version"],
                     source["snapshot_name"],

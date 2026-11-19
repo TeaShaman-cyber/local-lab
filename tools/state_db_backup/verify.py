@@ -18,6 +18,7 @@ Exit codes: 0 = snapshot is usable, 1 = not usable, 2 = no snapshot found.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import pathlib
@@ -35,6 +36,7 @@ MAX_GAP_HOURS = 26.0
 # The live database grows by roughly a few rows per minute. Anything larger than
 # this means the snapshot predates the last several runs.
 MAX_GAP_MESSAGES = 5000
+RECEIPT_VERSION = "theseus.state-db.verification.v1"
 
 
 def newest_snapshot() -> pathlib.Path | None:
@@ -53,6 +55,43 @@ def read(path: pathlib.Path) -> dict:
                 "sessions": sessions, "newest": newest}
     finally:
         con.close()
+
+
+def build_receipt(snapshot_path: pathlib.Path, result: dict) -> dict:
+    """Create a portable receipt from the verifier's observed result."""
+    digest = hashlib.sha256()
+    with snapshot_path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    verification = {
+        key: result[key]
+        for key in (
+            "ok", "integrity", "messages", "sessions", "newest", "checked",
+            "gap_messages", "gap_hours", "detail",
+        )
+        if key in result
+    }
+    return {
+        "receipt_version": RECEIPT_VERSION,
+        "source": {
+            "snapshot_name": snapshot_path.name,
+            "snapshot_sha256": digest.hexdigest(),
+            "size_bytes": snapshot_path.stat().st_size,
+        },
+        "verification": verification,
+        "tool": "tools/state_db_backup/verify.py",
+    }
+
+
+def write_receipt(path: pathlib.Path, receipt: dict) -> None:
+    """Write a receipt atomically so consumers never see partial JSON."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(
+        json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, path)
 
 
 def live() -> dict | None:
@@ -122,6 +161,7 @@ def main() -> int:
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--log", type=str, default="E:/theseus-backups/state-db/drill.log")
+    ap.add_argument("--receipt", type=pathlib.Path, help="write a versioned machine-readable receipt")
     args = ap.parse_args()
 
     if args.self_test:
@@ -151,6 +191,17 @@ def main() -> int:
         result["detail"] = "; ".join(problems) if problems else "snapshot is usable"
 
     result["elapsed_s"] = round(time.time() - t0, 1)
+
+    if args.receipt:
+        try:
+            if args.receipt.resolve() == snap_path.resolve():
+                raise OSError("receipt path must not replace the snapshot")
+            write_receipt(args.receipt, build_receipt(snap_path, result))
+            result["receipt"] = str(args.receipt)
+        except OSError as exc:
+            result["ok"] = False
+            result["receipt_error"] = f"{type(exc).__name__}: {exc}"
+            result["detail"] = f"{result.get('detail', 'snapshot check failed')}; receipt write failed"
 
     if args.log:
         log_path = pathlib.Path(args.log)

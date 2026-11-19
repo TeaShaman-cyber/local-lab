@@ -21,6 +21,7 @@ from tools.context_backend.core import SourceContractError, describe_snapshot, w
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("snapshot", type=pathlib.Path, help="verified offline state.db snapshot")
+    parser.add_argument("--receipt", required=True, type=pathlib.Path, help="matching verify.py receipt JSON")
     parser.add_argument("--source-id", default="hermes-local", help="stable identity of this source")
     parser.add_argument("--output-dir", type=pathlib.Path, help="new directory for the private canonical bundle")
     parser.add_argument("--validate-only", action="store_true", help="validate and print metadata without exporting content")
@@ -30,11 +31,11 @@ def main() -> int:
         parser.error("--output-dir is required unless --validate-only is used")
     try:
         if args.validate_only:
-            descriptor = describe_snapshot(args.snapshot, args.source_id)
+            descriptor = describe_snapshot(args.snapshot, args.source_id, args.receipt)
             result = descriptor.manifest()
             result["validation"] = "structural-read-only"
         else:
-            result = write_bundle(args.snapshot, args.output_dir, args.source_id)
+            result = write_bundle(args.snapshot, args.output_dir, args.source_id, args.receipt)
             result["validation"] = "structural-read-only"
     except (SourceContractError, RuntimeError, OSError) as exc:
         print(f"BLOCKED: {exc}", file=sys.stderr)
