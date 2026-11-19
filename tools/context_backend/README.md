@@ -65,13 +65,36 @@ both record types in one transaction, then promotes `context_snapshot_heads` onl
 after every row succeeds. Replaying the same bundle is idempotent. A failed import
 leaves the previous head unchanged.
 
+## Canonical reconciliation (phase 3A)
+
+`reconcile.py` contains the first source-independent reconciliation seam. It compares
+two canonical record iterables by `(source_id, record_type, source_record_id)` and a
+versioned deterministic fingerprint. The `source_id` is a stable configured identity
+for one Hermes profile/source authority, not a snapshot path; changing it starts a
+new source lineage and requires an explicit empty-base rebuild. Identity fields and
+the documented snapshot/receipt provenance fields are excluded from the fingerprint,
+while logical content changes produce a `changed` record.
+
+The pure function reports `added`, `changed`, `deleted`, and `unchanged` counts and
+returns deterministic per-record changes. It never writes to `state.db` or
+PostgreSQL. The PostgreSQL loader does not yet persist reconciliation runs or diff
+rows; that is the next integration slice, so this module must not be described as a
+live CDC implementation.
+
 ## Tests
 
-The source boundary is covered without PostgreSQL or real transcript contents:
+The source boundary and phase-3A reconciliation seam are covered without PostgreSQL
+or real transcript contents:
 
 ```bash
-python -m unittest tools/context_backend/test_context_backend.py -v
+uv run --no-project --with pytest python -m pytest tools/context_backend -q
 ```
+
+The canonical repository gate runs the same directory together with the backup and
+mutation tests: `uv run --no-project --with pytest,ruff,pyyaml bash tools/dev/check.sh`.
+
+The external research and phase plan are recorded in
+`docs/research/context-backend-reconciliation.md`.
 
 For a real database, use a private snapshot and inspect only row counts and the
 returned load summary. Do not print bundle records or DSNs.
