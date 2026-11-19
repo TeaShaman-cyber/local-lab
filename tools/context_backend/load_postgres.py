@@ -28,7 +28,7 @@ if __package__ in {None, ""}:
 from tools.context_backend.core import (
     BundleContractError,
     iter_bundle_records,
-    read_manifest,
+    validate_bundle,
 )
 
 SCHEMA_PATH = pathlib.Path(__file__).with_name("schema.sql")
@@ -105,9 +105,9 @@ def _batches(rows: Iterable[dict[str, Any]], size: int = 1000):
 
 def load_bundle(bundle_dir: pathlib.Path, dsn: str) -> dict[str, int | str]:
     """Load a validated bundle and promote its head only after all rows succeed."""
-    manifest = read_manifest(bundle_dir)
+    manifest = validate_bundle(bundle_dir)
     source = manifest["source"]
-    # Force a complete source-side validation before opening the target connection.
+    # Re-open validated JSONL streams for the transactional load.
     session_rows = iter_bundle_records(bundle_dir, "sessions")
     message_rows = iter_bundle_records(bundle_dir, "messages")
 
@@ -154,9 +154,21 @@ def load_bundle(bundle_dir: pathlib.Path, dsn: str) -> dict[str, int | str]:
                           %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (snapshot_id, source_id, source_session_id) DO UPDATE SET
                     parent_session_id = EXCLUDED.parent_session_id,
-                    title = EXCLUDED.title,
+                    source = EXCLUDED.source,
+                    user_id = EXCLUDED.user_id,
+                    session_key = EXCLUDED.session_key,
+                    chat_id = EXCLUDED.chat_id,
+                    chat_type = EXCLUDED.chat_type,
+                    thread_id = EXCLUDED.thread_id,
+                    display_name = EXCLUDED.display_name,
+                    started_at = EXCLUDED.started_at,
                     ended_at = EXCLUDED.ended_at,
+                    end_reason = EXCLUDED.end_reason,
+                    title = EXCLUDED.title,
+                    profile_name = EXCLUDED.profile_name,
+                    archived = EXCLUDED.archived,
                     hidden = EXCLUDED.hidden,
+                    last_activity_at = EXCLUDED.last_activity_at,
                     metadata = EXCLUDED.metadata
             """
             for batch in _batches(session_rows):
@@ -174,9 +186,18 @@ def load_bundle(bundle_dir: pathlib.Path, dsn: str) -> dict[str, int | str]:
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                           %s, %s, %s, %s)
                 ON CONFLICT (snapshot_id, source_id, source_message_id) DO UPDATE SET
+                    source_session_id = EXCLUDED.source_session_id,
+                    role = EXCLUDED.role,
                     content = EXCLUDED.content,
+                    tool_call_id = EXCLUDED.tool_call_id,
+                    tool_name = EXCLUDED.tool_name,
+                    effect_disposition = EXCLUDED.effect_disposition,
+                    message_timestamp = EXCLUDED.message_timestamp,
+                    token_count = EXCLUDED.token_count,
+                    finish_reason = EXCLUDED.finish_reason,
                     active = EXCLUDED.active,
                     compacted = EXCLUDED.compacted,
+                    display_kind = EXCLUDED.display_kind,
                     metadata = EXCLUDED.metadata
             """
             for batch in _batches(message_rows):

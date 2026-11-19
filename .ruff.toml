@@ -35,4 +35,5 @@ ignore = ["E501"]
 "tools/**/push_*.py" = ["E402"]
 # The context backend scripts are also executable from the repository root. They
 # bootstrap the repository path before importing their sibling package.
-"tools/context_backend/*.py" = ["E402"]
+"tools/context_backend/export_snapshot.py" = ["E402"]
+"tools/context_backend/load_postgres.py" = ["E402"]

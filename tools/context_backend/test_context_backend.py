@@ -13,6 +13,7 @@ from tools.context_backend.core import (
     iter_bundle_records,
     open_snapshot,
     read_manifest,
+    validate_bundle,
     write_bundle,
 )
 
@@ -100,6 +101,17 @@ class ContextBackendSourceTests(unittest.TestCase):
             bundle.mkdir()
             with self.assertRaisesRegex(BundleContractError, "already exists"):
                 write_bundle(snapshot, bundle, "test-source")
+
+    def test_bundle_is_fully_validated_before_target_connect(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            snapshot = root / "state.db"
+            make_snapshot(snapshot)
+            bundle = root / "bundle"
+            write_bundle(snapshot, bundle, "test-source")
+            (bundle / "messages.jsonl").write_text("{not-json}\n", encoding="utf-8")
+            with self.assertRaisesRegex(BundleContractError, "invalid messages JSONL"):
+                validate_bundle(bundle)
 
 
 if __name__ == "__main__":

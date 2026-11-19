@@ -1,6 +1,6 @@
-revision: 2026-11-10-infra-v2
+revision: 2026-11-19-infra-v3
 migrated_from: legacy infrastructure-registry.yaml (schema_version 2, last_verified 2026-10-28)
-last_verified: 2026-11-10
+last_verified: 2026-11-19
 
 services:
   - id: INFRA-001
@@ -635,6 +635,24 @@ services:
       capture_logs=true, tool commands/targets/errors включены. Известный остаток —
       `plugins doctor --ci` падает с WinError 32 (второй LiveStore в logs-пайплайне),
       на live-экспорт не влияет. Backup и процедура отката — в doc выше.
+
+  - id: INFRA-025
+    name: context-backend-postgres
+    criticality: T
+    role: локальная disposable projection для первого backend-среза контекстного драйвера
+    status: available
+    kind: docker-compose
+    location:
+      compose: E:/local-lab/infra/compose/context-backend/docker-compose.yml
+      bind: 127.0.0.1:55432
+      volume: context-backend-postgres
+    monitoring: общие container_* метрики через docker-exporter (INFRA-004), отдельной панели нет у тестового стенда
+    check: docker compose -f E:/local-lab/infra/compose/context-backend/docker-compose.yml config
+    notes: >-
+      Тестовый стенд, не продовый memory backend: пароль только через окружение,
+      сервис слушает loopback, raw Hermes snapshot и cloud export не включены.
+      Source boundary, rebuild и rollback описаны в local-lab#230 и
+      docs/adr/0001-context-backend-source-boundary.md.
 
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
 # Признак продового/тестового — RULE-009 в infrastructure.md.

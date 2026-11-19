@@ -318,8 +318,14 @@ def read_manifest(bundle_dir: pathlib.Path) -> dict[str, Any]:
     files = manifest.get("files")
     if not isinstance(source, dict) or not isinstance(counts, dict) or not isinstance(files, dict):
         raise BundleContractError("manifest is missing source, counts, or files")
-    if not source.get("source_id") or not source.get("snapshot_sha256"):
-        raise BundleContractError("manifest source is missing source_id or snapshot_sha256")
+    if not source.get("source_id") or not source.get("snapshot_sha256") or not source.get("snapshot_name"):
+        raise BundleContractError("manifest source is missing source_id, snapshot_name, or snapshot_sha256")
+    if not isinstance(manifest.get("created_at"), str):
+        raise BundleContractError("manifest is missing created_at")
+    try:
+        datetime.fromisoformat(manifest["created_at"])
+    except ValueError as exc:
+        raise BundleContractError("manifest created_at is not an ISO timestamp") from exc
     try:
         schema_version = int(source["source_schema_version"])
         expected_sessions = int(counts["sessions"])
@@ -359,3 +365,18 @@ def iter_bundle_records(bundle_dir: pathlib.Path, kind: str) -> Iterator[dict[st
                 yield record
     except OSError as exc:
         raise BundleContractError(f"cannot read {kind} bundle: {path}") from exc
+
+
+def validate_bundle(bundle_dir: pathlib.Path) -> dict[str, Any]:
+    """Parse and count every record before a target connection is opened."""
+    manifest = read_manifest(bundle_dir)
+    expected = manifest["counts"]
+    actual = {
+        "sessions": sum(1 for _ in iter_bundle_records(bundle_dir, "sessions")),
+        "messages": sum(1 for _ in iter_bundle_records(bundle_dir, "messages")),
+    }
+    if actual != {"sessions": int(expected["sessions"]), "messages": int(expected["messages"])}:
+        raise BundleContractError(
+            f"bundle counts do not match manifest: expected {expected}, actual {actual}"
+        )
+    return manifest
