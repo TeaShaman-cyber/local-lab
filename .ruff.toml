@@ -33,3 +33,6 @@ ignore = ["E501"]
 # Moving the import to the top would break it.
 # Matched with ** because ruff compares against native separators on Windows.
 "tools/**/push_*.py" = ["E402"]
+# The context backend scripts are also executable from the repository root. They
+# bootstrap the repository path before importing their sibling package.
+"tools/context_backend/*.py" = ["E402"]

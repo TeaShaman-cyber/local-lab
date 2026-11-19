@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${CONTEXT_POSTGRES_DB:-context_backend}
+      POSTGRES_USER: ${CONTEXT_POSTGRES_USER:-context_backend}
+      POSTGRES_PASSWORD: ${CONTEXT_POSTGRES_PASSWORD:?set CONTEXT_POSTGRES_PASSWORD outside git}
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - context-backend-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  context-backend-postgres:
