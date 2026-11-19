@@ -37,3 +37,4 @@ ignore = ["E501"]
 # bootstrap the repository path before importing their sibling package.
 "tools/context_backend/export_snapshot.py" = ["E402"]
 "tools/context_backend/load_postgres.py" = ["E402"]
+"tools/state_db_backup/verify.py" = ["E402"]

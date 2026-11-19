@@ -37,6 +37,12 @@ existing `VACUUM INTO` snapshot path is the acquisition mechanism for now. A fut
 adapter may consume an upstream logical export if Hermes provides one, but it must
 prove the artifact's versioning, consistency, and secret boundary first.
 
+Verification is a separate source boundary: `tools/state_db_backup/verify.py` emits a
+versioned machine-readable receipt binding the snapshot name, size, SHA-256, counts,
+integrity result, freshness verdict, and verification time. The context exporter must
+reject a missing, failed, stale, or mismatched receipt before producing a canonical
+bundle.
+
 The decoder is the only component allowed to know Hermes source table names. The
 canonical record model, PostgreSQL schema, query service, and future Neon adapter do
 not depend on those table names.
@@ -65,11 +71,13 @@ fallback. It is not the canonical route.
 
 ## First implementation slice
 
-1. Validate a read-only SQLite snapshot and its source schema version.
+1. Validate a read-only SQLite snapshot, its source schema version, and an independent
+   verification receipt.
 2. Export supported `sessions` and `messages` into a private canonical bundle with
-   source IDs and provenance.
+   source IDs and provenance, including receipt provenance.
 3. Load the bundle transactionally into local PostgreSQL with idempotent keys and an
    atomic snapshot head.
-4. Prove replay, source immutability, failure rollback, and rebuild from empty.
+4. Prove replay, source immutability, receipt mismatch rejection, failure rollback,
+   and rebuild from empty.
 
 This slice does not change Hermes hooks, Honcho, Hindsight, Neon, or cloud sharing.
