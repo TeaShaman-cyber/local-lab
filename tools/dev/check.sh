@@ -80,7 +80,7 @@ lint_fail=0
 
 echo "=== mutation helper tests ==="
 if python -c 'import pytest' >/dev/null 2>&1; then
-    python -m pytest mutation/test_mutation_tools.py -q
+    python -m pytest mutation/test_mutation_tools.py tools/context_backend tools/state_db_backup -q
 else
     if [ "$STRICT" -eq 1 ]; then
         echo "FAIL pytest not installed (STRICT=1)" >&2

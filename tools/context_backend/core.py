@@ -22,7 +22,12 @@ from typing import Any, Iterator
 from tools.context_backend import (
     FORMAT_VERSION,
     SUPPORTED_SOURCE_SCHEMA_VERSIONS,
-    VERIFICATION_RECEIPT_VERSION,
+)
+from tools.state_db_backup.receipt_contract import (
+    MAX_GAP_HOURS,
+    MAX_GAP_MESSAGES,
+    RECEIPT_VERSION,
+    VERIFIER_VERSION,
 )
 
 
@@ -82,7 +87,11 @@ class SnapshotDescriptor:
                 "receipt_sha256": self.verification_receipt_sha256,
                 "verified_at": self.verified_at,
             },
-            "files": {"sessions": "sessions.jsonl", "messages": "messages.jsonl"},
+            "files": {
+                "sessions": "sessions.jsonl",
+                "messages": "messages.jsonl",
+                "verification_receipt": "verification_receipt.json",
+            },
         }
 
 
@@ -170,7 +179,7 @@ def _read_receipt(receipt_path: pathlib.Path) -> tuple[dict[str, Any], str]:
         raise SourceContractError(f"cannot read verification receipt: {receipt_path}") from exc
     if not isinstance(receipt, dict):
         raise SourceContractError("verification receipt must be a JSON object")
-    if receipt.get("receipt_version") != VERIFICATION_RECEIPT_VERSION:
+    if receipt.get("receipt_version") != RECEIPT_VERSION:
         raise SourceContractError("unsupported verification receipt version")
     return receipt, hashlib.sha256(raw).hexdigest()
 
@@ -197,6 +206,39 @@ def _attach_verification_receipt(
         raise SourceContractError("size_bytes mismatch between snapshot and receipt")
     if verdict.get("ok") is not True or verdict.get("integrity") != "ok":
         raise SourceContractError("verification failed: receipt verdict is not usable")
+    limits = receipt.get("limits")
+    if not isinstance(limits, dict):
+        raise SourceContractError("verification receipt is missing freshness limits")
+    try:
+        gap_hours = float(verdict["gap_hours"])
+        gap_messages = int(verdict["gap_messages"])
+        max_gap_hours = float(limits["max_gap_hours"])
+        max_gap_messages = int(limits["max_gap_messages"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise SourceContractError("verification receipt has invalid freshness values") from exc
+    if (
+        gap_hours < 0
+        or gap_messages < 0
+        or gap_hours > max_gap_hours
+        or gap_messages > max_gap_messages
+        or max_gap_hours != MAX_GAP_HOURS
+        or max_gap_messages != MAX_GAP_MESSAGES
+    ):
+        raise SourceContractError("verification failed: snapshot freshness is outside limits")
+    if receipt.get("verifier_version") != VERIFIER_VERSION:
+        raise SourceContractError("unsupported verifier version")
+    try:
+        receipt_schema_version = int(verdict["schema_version"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise SourceContractError("verification receipt is missing schema version") from exc
+    if receipt_schema_version != descriptor.source_schema_version:
+        raise SourceContractError("schema version mismatch between snapshot and receipt")
+    receipt_newest = verdict.get("newest")
+    if descriptor.newest_message_timestamp is None:
+        if receipt_newest is not None:
+            raise SourceContractError("newest timestamp mismatch between snapshot and receipt")
+    elif receipt_newest is None or float(receipt_newest) != descriptor.newest_message_timestamp:
+        raise SourceContractError("newest timestamp mismatch between snapshot and receipt")
     if receipt_sessions != descriptor.sessions:
         raise SourceContractError("session count mismatch between snapshot and receipt")
     if receipt_messages != descriptor.messages:
@@ -365,6 +407,7 @@ def write_bundle(
             )
         if _sha256_file(snapshot_path) != descriptor.snapshot_sha256:
             raise BundleContractError("source changed while exporting: snapshot hash mismatch")
+        shutil.copyfile(receipt_path, staging / "verification_receipt.json")
         manifest = descriptor.manifest()
         (staging / "manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
@@ -404,7 +447,7 @@ def read_manifest(bundle_dir: pathlib.Path) -> dict[str, Any]:
         raise BundleContractError("manifest source is missing source_id, snapshot_name, or snapshot_sha256")
     if not isinstance(manifest.get("created_at"), str):
         raise BundleContractError("manifest is missing created_at")
-    if not verification.get("receipt_sha256") or verification.get("receipt_version") != VERIFICATION_RECEIPT_VERSION:
+    if not verification.get("receipt_sha256") or verification.get("receipt_version") != RECEIPT_VERSION:
         raise BundleContractError("manifest has invalid verification receipt provenance")
     try:
         datetime.fromisoformat(manifest["created_at"])
@@ -418,6 +461,14 @@ def read_manifest(bundle_dir: pathlib.Path) -> dict[str, Any]:
         raise BundleContractError("manifest has invalid source schema version or counts") from exc
     if schema_version not in SUPPORTED_SOURCE_SCHEMA_VERSIONS:
         raise BundleContractError(f"unsupported source schema version {schema_version}")
+    receipt_filename = files.get("verification_receipt")
+    if not isinstance(receipt_filename, str) or pathlib.PurePath(receipt_filename).name != receipt_filename:
+        raise BundleContractError("invalid verification receipt filename")
+    receipt_file = bundle_dir / receipt_filename
+    if not receipt_file.is_file():
+        raise BundleContractError("missing verification receipt file")
+    if _sha256_file(receipt_file) != verification["receipt_sha256"]:
+        raise BundleContractError("verification receipt hash mismatch in bundle")
     for kind in ("sessions", "messages"):
         filename = files.get(kind)
         if not isinstance(filename, str) or pathlib.PurePath(filename).name != filename:

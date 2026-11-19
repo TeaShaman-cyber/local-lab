@@ -17,6 +17,12 @@ from tools.context_backend.core import (
     validate_bundle,
     write_bundle,
 )
+from tools.state_db_backup.receipt_contract import (
+    MAX_GAP_HOURS,
+    MAX_GAP_MESSAGES,
+    RECEIPT_VERSION,
+    VERIFIER_VERSION,
+)
 
 SESSION_COLUMNS = [
     "id", "source", "user_id", "session_key", "chat_id", "chat_type", "thread_id",
@@ -64,7 +70,7 @@ def make_receipt(
 ) -> Path:
     receipt = snapshot.with_suffix(".receipt.json")
     payload = {
-        "receipt_version": "theseus.state-db.verification.v1",
+        "receipt_version": RECEIPT_VERSION,
         "source": {
             "snapshot_name": snapshot_name or snapshot.name,
             "snapshot_sha256": hashlib.sha256(snapshot.read_bytes()).hexdigest(),
@@ -76,12 +82,17 @@ def make_receipt(
             "sessions": 1,
             "messages": 1,
             "newest": 1001.0,
+            "schema_version": 33,
             "checked": "2026-11-19T20:00:00+00:00",
             "gap_hours": 0.0,
             "gap_messages": 0,
             "detail": "snapshot is usable" if ok else "snapshot is not usable",
         },
-        "tool": "tools/state_db_backup/verify.py",
+        "limits": {
+            "max_gap_hours": MAX_GAP_HOURS,
+            "max_gap_messages": MAX_GAP_MESSAGES,
+        },
+        "verifier_version": VERIFIER_VERSION,
     }
     receipt.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
     return receipt
@@ -185,6 +196,28 @@ class ContextBackendSourceTests(unittest.TestCase):
             failed = make_receipt(snapshot, ok=False, integrity="database disk image is malformed")
             with self.assertRaisesRegex(SourceContractError, "verification failed"):
                 describe_snapshot(snapshot, "test-source", failed)
+
+            stale = make_receipt(snapshot)
+            stale_payload = json.loads(stale.read_text(encoding="utf-8"))
+            stale_payload["verification"]["gap_hours"] = 999.0
+            stale.write_text(json.dumps(stale_payload, sort_keys=True) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(SourceContractError, "freshness"):
+                describe_snapshot(snapshot, "test-source", stale)
+
+    def test_bundle_verification_receipt_hash_is_checked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            snapshot = root / "state.db"
+            make_snapshot(snapshot)
+            receipt = make_receipt(snapshot)
+            bundle = root / "bundle"
+            write_bundle(snapshot, bundle, "test-source", receipt)
+            manifest_path = bundle / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["verification"]["receipt_sha256"] = "0" * 64
+            manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(BundleContractError, "receipt hash mismatch"):
+                validate_bundle(bundle)
 
 
 if __name__ == "__main__":

@@ -24,6 +24,7 @@ class VerificationReceiptTests(unittest.TestCase):
                 "integrity": "ok",
                 "messages": 2,
                 "sessions": 1,
+                "schema_version": 33,
                 "newest": 1001.0,
                 "gap_messages": 0,
                 "gap_hours": 0.0,
@@ -36,6 +37,9 @@ class VerificationReceiptTests(unittest.TestCase):
                 receipt["source"]["snapshot_sha256"], hashlib.sha256(snapshot.read_bytes()).hexdigest()
             )
             self.assertEqual(receipt["verification"]["messages"], 2)
+            self.assertEqual(receipt["verification"]["schema_version"], 33)
+            self.assertEqual(receipt["limits"]["max_gap_messages"], 5000)
+            self.assertEqual(receipt["verifier_version"], "state-db-verifier.v1")
             self.assertTrue(receipt["verification"]["ok"])
 
             path = Path(tmp) / "state.db.receipt.json"

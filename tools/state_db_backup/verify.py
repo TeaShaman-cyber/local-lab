@@ -25,6 +25,17 @@ import pathlib
 import sqlite3
 import sys
 import time
+from datetime import UTC, datetime
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
+
+from tools.state_db_backup.receipt_contract import (
+    MAX_GAP_HOURS,
+    MAX_GAP_MESSAGES,
+    RECEIPT_VERSION,
+    VERIFIER_VERSION,
+)
 
 LIVE_DB = pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "hermes" / "state.db"
 SNAPSHOT_DIR = pathlib.Path("E:/theseus-backups/state-db/snapshots")
@@ -32,11 +43,6 @@ SNAPSHOT_DIR = pathlib.Path("E:/theseus-backups/state-db/snapshots")
 # A snapshot every 12 hours plus margin. Beyond this the replica has stopped
 # following the live database — that is a failure of the backup, not a number to
 # admire in a report.
-MAX_GAP_HOURS = 26.0
-# The live database grows by roughly a few rows per minute. Anything larger than
-# this means the snapshot predates the last several runs.
-MAX_GAP_MESSAGES = 5000
-RECEIPT_VERSION = "theseus.state-db.verification.v1"
 
 
 def newest_snapshot() -> pathlib.Path | None:
@@ -51,8 +57,16 @@ def read(path: pathlib.Path) -> dict:
         messages = con.execute("SELECT count(*) FROM messages").fetchone()[0]
         sessions = con.execute("SELECT count(*) FROM sessions").fetchone()[0]
         newest = con.execute("SELECT max(timestamp) FROM messages").fetchone()[0]
-        return {"integrity": integrity, "messages": messages,
-                "sessions": sessions, "newest": newest}
+        schema_version = con.execute(
+            "SELECT version FROM schema_version ORDER BY rowid DESC LIMIT 1"
+        ).fetchone()[0]
+        return {
+            "integrity": integrity,
+            "messages": messages,
+            "sessions": sessions,
+            "newest": newest,
+            "schema_version": int(schema_version),
+        }
     finally:
         con.close()
 
@@ -67,7 +81,7 @@ def build_receipt(snapshot_path: pathlib.Path, result: dict) -> dict:
         key: result[key]
         for key in (
             "ok", "integrity", "messages", "sessions", "newest", "checked",
-            "gap_messages", "gap_hours", "detail",
+            "gap_messages", "gap_hours", "detail", "schema_version",
         )
         if key in result
     }
@@ -79,19 +93,27 @@ def build_receipt(snapshot_path: pathlib.Path, result: dict) -> dict:
             "size_bytes": snapshot_path.stat().st_size,
         },
         "verification": verification,
-        "tool": "tools/state_db_backup/verify.py",
+        "limits": {
+            "max_gap_hours": MAX_GAP_HOURS,
+            "max_gap_messages": MAX_GAP_MESSAGES,
+        },
+        "verifier_version": VERIFIER_VERSION,
     }
 
 
 def write_receipt(path: pathlib.Path, receipt: dict) -> None:
     """Write a receipt atomically so consumers never see partial JSON."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(
-        json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    os.replace(temporary, path)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    try:
+        with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write(json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True))
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def live() -> dict | None:
@@ -173,7 +195,7 @@ def main() -> int:
         return 2
 
     t0 = time.time()
-    result: dict = {"snapshot": str(snap_path), "checked": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    result: dict = {"snapshot": str(snap_path), "checked": datetime.now(UTC).isoformat()}
     try:
         snap = read(snap_path)
     except sqlite3.Error as exc:

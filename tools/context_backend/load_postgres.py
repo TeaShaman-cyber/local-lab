@@ -128,7 +128,9 @@ def load_bundle(bundle_dir: pathlib.Path, dsn: str) -> dict[str, int | str]:
                     source_schema_version, format_version, snapshot_name, captured_at,
                     session_count, message_count
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (source_id, snapshot_sha256) DO UPDATE SET imported_at = now()
+                ON CONFLICT (source_id, snapshot_sha256) DO UPDATE SET
+                    verification_receipt_sha256 = EXCLUDED.verification_receipt_sha256,
+                    imported_at = now()
                 RETURNING snapshot_id
                 """,
                 (
