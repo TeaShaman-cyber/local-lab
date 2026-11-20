@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WindowsPerformanceRecorder Version="1.0" Author="Local Lab">
+  <Profiles>
+    <SystemCollector Id="DiskCollector" Name="NT Kernel Logger">
+      <BufferSize Value="128"/>
+      <Buffers Value="256"/>
+    </SystemCollector>
+    <SystemProvider Id="DiskProvider">
+      <Keywords>
+        <Keyword Value="ProcessThread"/>
+        <Keyword Value="Loader"/>
+        <Keyword Value="DiskIO"/>
+        <Keyword Value="DiskIOInit"/>
+        <Keyword Value="Filename"/>
+        <Keyword Value="FileIO"/>
+        <Keyword Value="FileIOInit"/>
+        <Keyword Value="HardFaults"/>
+      </Keywords>
+      <Stacks>
+        <Stack Value="DiskReadInit"/>
+        <Stack Value="DiskWriteInit"/>
+        <Stack Value="DiskFlushInit"/>
+      </Stacks>
+    </SystemProvider>
+    <Profile Id="NvmeDisk.Verbose.Memory" Name="NvmeDisk" DetailLevel="Verbose" LoggingMode="Memory" Description="Bounded NVMe I/O attribution, no ETL file during capture">
+      <Collectors><SystemCollectorId Value="DiskCollector"><SystemProviderId Value="DiskProvider"/></SystemCollectorId></Collectors>
+    </Profile>
+  </Profiles>
+</WindowsPerformanceRecorder>
