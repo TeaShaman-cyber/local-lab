@@ -1,0 +1,3592 @@
+{
+  "indexes": [
+    {
+      "name": "idx_async_delegations_delivery",
+      "sql_sha256": "2fc20b645c1c935156dfbcfe60281fa0da5198b76679e4bfc4a7bada43e2155a",
+      "table": "async_delegations"
+    },
+    {
+      "name": "idx_compression_locks_expires",
+      "sql_sha256": "695eaee315e1661f251a6673ddd620507a5d730c48925b86acda64469f3e281c",
+      "table": "compression_locks"
+    },
+    {
+      "name": "idx_hosted_room_events_cursor",
+      "sql_sha256": "742abaede06b8bcf9f3a3d6f9c9f30d1f577900d4419b87929212c56e86d1ae8",
+      "table": "hosted_room_events"
+    },
+    {
+      "name": "idx_hosted_room_events_kind",
+      "sql_sha256": "246990a4be12cd1334c4d967e2adc40646d63589b805c8c7cbb2ab83a7056c59",
+      "table": "hosted_room_events"
+    },
+    {
+      "name": "idx_hosted_room_policy_events_active",
+      "sql_sha256": "0e8ec1cfe02ec74edf1826dd1ff2b28e9395099a76f7ac453471880f3301c17a",
+      "table": "hosted_room_policy_events"
+    },
+    {
+      "name": "idx_hosted_room_policy_pending",
+      "sql_sha256": "714fe3fb8440abe86aad3b14ba67221cc29d2f9fd0e4fa921a53f6cd7bf48e2c",
+      "table": "hosted_room_policy_threads"
+    },
+    {
+      "name": "idx_hosted_room_user_thread",
+      "sql_sha256": "354f7f7c3e778549b7b74641e14065b58348a5768cfd918594be0151948fa8d6",
+      "table": "hosted_room_events"
+    },
+    {
+      "name": "idx_messages_active_null",
+      "sql_sha256": "370df6e39e1d03a6570d0c05894336dbd00daf99f2bdd1552773c390fc309e09",
+      "table": "messages"
+    },
+    {
+      "name": "idx_messages_assistant_calls_by_session",
+      "sql_sha256": "7a6bcae049b0fd0061d51621bb47b3b1184a0375cdc1dfb96b11f0209850256d",
+      "table": "messages"
+    },
+    {
+      "name": "idx_messages_display_backfill",
+      "sql_sha256": "f900aa6b2b1fdd1af22ba55930de3798dd95b33c3c824708188f11757e6a8966",
+      "table": "messages"
+    },
+    {
+      "name": "idx_messages_display_identity",
+      "sql_sha256": "46cbd5dbb1f3b56ba8e8132518fc7bf701f5aedb27e34b3bae170e7250d0ea29",
+      "table": "messages"
+    },
+    {
+      "name": "idx_messages_display_page",
+      "sql_sha256": "dc63a054c37d9ac6b58b8bcccd811569c3e0d17eb6753077be9fe8f94e10d201",
+      "table": "messages"
+    },
+    {
+      "name": "idx_messages_platform_msg_id",
+      "sql_sha256": "fb010ac58133ae81d9a30e0e7ebdc2075a90b14339abe775a0bb422d11ab7b0a",
+      "table": "messages"
+    },
+    {
+      "name": "idx_messages_session",
+      "sql_sha256": "c0c549078b6009a2529475ffa212f72a7b0198267b6f7edd1b6772531e15a738",
+      "table": "messages"
+    },
+    {
+      "name": "idx_messages_session_active",
+      "sql_sha256": "10fd5ff7d34a817c4b7869dd4cb0548a3e058fc81f08710d906b855fa1afdad6",
+      "table": "messages"
+    },
+    {
+      "name": "idx_messages_session_id",
+      "sql_sha256": "a0aeed5100fb384447cf64259d5f2e3876736e5dfaf82b9894fc57212e04ec2d",
+      "table": "messages"
+    },
+    {
+      "name": "idx_messages_session_uid",
+      "sql_sha256": "d6ed82a53f1c4570a8b1a1f393a96ea20336ea4b01ff0952cd008d3abd9fac1c",
+      "table": "messages"
+    },
+    {
+      "name": "idx_session_admissions_cron_request",
+      "sql_sha256": "928f74cb6bd794b531484c3c00b940f9a57d1138898dcb10014588e697ba562a",
+      "table": "session_admissions"
+    },
+    {
+      "name": "idx_session_model_usage_model",
+      "sql_sha256": "7e528c9d32eefa8f7859a205ef2e8f0d9ea42f25decfb5a535d91af4f386b3a1",
+      "table": "session_model_usage"
+    },
+    {
+      "name": "idx_session_model_usage_session",
+      "sql_sha256": "371b485c5f08427b1d99c93f307f3a52e91d097e1bca8702816a55455482ca60",
+      "table": "session_model_usage"
+    },
+    {
+      "name": "idx_session_turn_leases_expires",
+      "sql_sha256": "a4498a9af594f47705078e245e7be179ce9d5dc25ec3694a3dcbfb277f09ba1a",
+      "table": "session_turn_leases"
+    },
+    {
+      "name": "idx_sessions_effective_activity",
+      "sql_sha256": "693f94a8961efdfa2b5aa33e1d71f89443c854ca3be7f091899fddbf1b9f6e19",
+      "table": "sessions"
+    },
+    {
+      "name": "idx_sessions_gateway_peer",
+      "sql_sha256": "eed77850d2d878b58b351dc31a8e6432a2e6e5e7dcb946ac20aa59517689267e",
+      "table": "sessions"
+    },
+    {
+      "name": "idx_sessions_handoff_state",
+      "sql_sha256": "39b49982efb110b551418c6dd88524f371b74de6109e225f35d29b33c4b7c6d3",
+      "table": "sessions"
+    },
+    {
+      "name": "idx_sessions_local_created_started",
+      "sql_sha256": "b9a231082ea0a9d1da492748a18f4dda68ad9ac44ee835a1ca33f4fdef300481",
+      "table": "sessions"
+    },
+    {
+      "name": "idx_sessions_parent",
+      "sql_sha256": "1f40e4e583323594fa5ef2541684e6a67d3a2733ebc577b40d1a434017d6dcf3",
+      "table": "sessions"
+    },
+    {
+      "name": "idx_sessions_session_key",
+      "sql_sha256": "38fb7154bcf33d32f70ae97d7da11f4002fb75dec034af7fc502fb6b35ed5974",
+      "table": "sessions"
+    },
+    {
+      "name": "idx_sessions_source",
+      "sql_sha256": "b4de3d62588e9d4a4a9a3bdcc75a33c9ed9fdc6606fa6e26d01e9f48b540d956",
+      "table": "sessions"
+    },
+    {
+      "name": "idx_sessions_source_id",
+      "sql_sha256": "a3e3d60733351cc824a4546ca257a05b30d2b345e68aca7faaa728cb7768d319",
+      "table": "sessions"
+    },
+    {
+      "name": "idx_sessions_started",
+      "sql_sha256": "f360c4a7f743586c85a7571b634a30d4e1d3c8fd4da93eb54d9f67fe0ab2f30c",
+      "table": "sessions"
+    },
+    {
+      "name": "idx_sessions_system_prompt_hash",
+      "sql_sha256": "f2c163874dfb4801978d1c2e4bd7f29dc2952aa11d71ce64d1ebe4b78e2ad573",
+      "table": "sessions"
+    },
+    {
+      "name": "idx_sessions_title_unique",
+      "sql_sha256": "d75d8780be7e382a2192c87b35b2783c22fc74d887378ea540956b79b06a846a",
+      "table": "sessions"
+    },
+    {
+      "name": "idx_sessions_tool_names",
+      "sql_sha256": "502b5594197d771f27fc63ab288efe11d3b3699630c0ecb497b43b35a2183a40",
+      "table": "sessions"
+    },
+    {
+      "name": "idx_worker_executions_session_status",
+      "sql_sha256": "6e9c650da83e018729f6b8ba1da73b686154d2f6e9cffea18bd8033a4c44a707",
+      "table": "worker_executions"
+    },
+    {
+      "name": "session_admissions_pending",
+      "sql_sha256": "bbdf297c1d2f6633cbad5b48cac5159eed39f38664f122372335e21e208ba0b9",
+      "table": "session_admissions"
+    },
+    {
+      "name": "sqlite_autoindex_async_delegations_1",
+      "sql_sha256": null,
+      "table": "async_delegations"
+    },
+    {
+      "name": "sqlite_autoindex_compression_locks_1",
+      "sql_sha256": null,
+      "table": "compression_locks"
+    },
+    {
+      "name": "sqlite_autoindex_conversation_generations_1",
+      "sql_sha256": null,
+      "table": "conversation_generations"
+    },
+    {
+      "name": "sqlite_autoindex_delivery_obligations_1",
+      "sql_sha256": null,
+      "table": "delivery_obligations"
+    },
+    {
+      "name": "sqlite_autoindex_gateway_heartbeats_1",
+      "sql_sha256": null,
+      "table": "gateway_heartbeats"
+    },
+    {
+      "name": "sqlite_autoindex_gateway_hygiene_state_1",
+      "sql_sha256": null,
+      "table": "gateway_hygiene_state"
+    },
+    {
+      "name": "sqlite_autoindex_gateway_routing_1",
+      "sql_sha256": null,
+      "table": "gateway_routing"
+    },
+    {
+      "name": "sqlite_autoindex_hosted_room_events_1",
+      "sql_sha256": null,
+      "table": "hosted_room_events"
+    },
+    {
+      "name": "sqlite_autoindex_hosted_room_events_2",
+      "sql_sha256": null,
+      "table": "hosted_room_events"
+    },
+    {
+      "name": "sqlite_autoindex_hosted_room_links_1",
+      "sql_sha256": null,
+      "table": "hosted_room_links"
+    },
+    {
+      "name": "sqlite_autoindex_hosted_room_owed_revokes_1",
+      "sql_sha256": null,
+      "table": "hosted_room_owed_revokes"
+    },
+    {
+      "name": "sqlite_autoindex_hosted_room_peer_reservations_1",
+      "sql_sha256": null,
+      "table": "hosted_room_peer_reservations"
+    },
+    {
+      "name": "sqlite_autoindex_hosted_room_policy_cursors_1",
+      "sql_sha256": null,
+      "table": "hosted_room_policy_cursors"
+    },
+    {
+      "name": "sqlite_autoindex_hosted_room_policy_events_1",
+      "sql_sha256": null,
+      "table": "hosted_room_policy_events"
+    },
+    {
+      "name": "sqlite_autoindex_hosted_room_policy_publications_1",
+      "sql_sha256": null,
+      "table": "hosted_room_policy_publications"
+    },
+    {
+      "name": "sqlite_autoindex_hosted_room_policy_threads_1",
+      "sql_sha256": null,
+      "table": "hosted_room_policy_threads"
+    },
+    {
+      "name": "sqlite_autoindex_hosted_room_policy_transcript_1",
+      "sql_sha256": null,
+      "table": "hosted_room_policy_transcript"
+    },
+    {
+      "name": "sqlite_autoindex_hosted_room_policy_transcript_state_1",
+      "sql_sha256": null,
+      "table": "hosted_room_policy_transcript_state"
+    },
+    {
+      "name": "sqlite_autoindex_hosted_room_policy_watermarks_1",
+      "sql_sha256": null,
+      "table": "hosted_room_policy_watermarks"
+    },
+    {
+      "name": "sqlite_autoindex_hosted_room_remote_runs_1",
+      "sql_sha256": null,
+      "table": "hosted_room_remote_runs"
+    },
+    {
+      "name": "sqlite_autoindex_hosted_room_retired_ids_1",
+      "sql_sha256": null,
+      "table": "hosted_room_retired_ids"
+    },
+    {
+      "name": "sqlite_autoindex_hosted_room_revoked_grants_1",
+      "sql_sha256": null,
+      "table": "hosted_room_revoked_grants"
+    },
+    {
+      "name": "sqlite_autoindex_hosted_rooms_1",
+      "sql_sha256": null,
+      "table": "hosted_rooms"
+    },
+    {
+      "name": "sqlite_autoindex_resumable_subagents_1",
+      "sql_sha256": null,
+      "table": "resumable_subagents"
+    },
+    {
+      "name": "sqlite_autoindex_session_admissions_1",
+      "sql_sha256": null,
+      "table": "session_admissions"
+    },
+    {
+      "name": "sqlite_autoindex_session_admissions_2",
+      "sql_sha256": null,
+      "table": "session_admissions"
+    },
+    {
+      "name": "sqlite_autoindex_session_model_usage_1",
+      "sql_sha256": null,
+      "table": "session_model_usage"
+    },
+    {
+      "name": "sqlite_autoindex_session_turn_leases_1",
+      "sql_sha256": null,
+      "table": "session_turn_leases"
+    },
+    {
+      "name": "sqlite_autoindex_sessions_1",
+      "sql_sha256": null,
+      "table": "sessions"
+    },
+    {
+      "name": "sqlite_autoindex_state_meta_1",
+      "sql_sha256": null,
+      "table": "state_meta"
+    },
+    {
+      "name": "sqlite_autoindex_system_prompts_1",
+      "sql_sha256": null,
+      "table": "system_prompts"
+    },
+    {
+      "name": "sqlite_autoindex_worker_executions_1",
+      "sql_sha256": null,
+      "table": "worker_executions"
+    },
+    {
+      "name": "sqlite_autoindex_worker_receipts_1",
+      "sql_sha256": null,
+      "table": "worker_receipts"
+    }
+  ],
+  "manifest_version": "theseus.context.source-schema-manifest.v2",
+  "source_kind": "hermes-state-snapshot",
+  "source_schema_version": 33,
+  "tables": [
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "id",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "_litestream_lock",
+      "sql_sha256": "9a31e3dbb8b029c1359db0191b51b2b2a6a824fa9951420d56d5f04596f304a1"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "id",
+          "notnull": false,
+          "pk": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "seq",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "_litestream_seq",
+      "sql_sha256": "33de46424eacfa3f35eda45b1752cf641ff9d435a0a1082986d882f4eddc591e"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "delegation_id",
+          "notnull": false,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "origin_session",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "''",
+          "hidden": 0,
+          "name": "origin_ui_session_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "parent_session_id",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "state",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "dispatched_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "completed_at",
+          "notnull": false,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "updated_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "event_json",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "result_json",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "'pending'",
+          "hidden": 0,
+          "name": "delivery_state",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "delivery_attempts",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "delivered_at",
+          "notnull": false,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "owner_pid",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "owner_started_at",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "task_json",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "delivery_claim",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "delivery_claimed_at",
+          "notnull": false,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": "''",
+          "hidden": 0,
+          "name": "origin_session_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "owner_execution_id",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "async_delegations",
+      "sql_sha256": "1bdbb2854460eded5e5e1f5a952ae8392cbc027b825a0c775568cb7e3845e20a"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "session_id",
+          "notnull": false,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "holder",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "acquired_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "expires_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "compression_locks",
+      "sql_sha256": "6802d8cfc1ea0ae77b50f336bf27798f548bb7887d4b31ed11722fc9522b9f99"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "source",
+          "notnull": true,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "session_key",
+          "notnull": true,
+          "pk": 2,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "generation",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "conversation_generations",
+      "sql_sha256": "e1c68e85e8380478bac04833a3bae33c77d1730074f9c0ebcf0c1dd83166be16"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "obligation_id",
+          "notnull": false,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "session_key",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "platform",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "chat_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "thread_id",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "content",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "state",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "attempts",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "created_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "updated_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "owner_pid",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "owner_started_at",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "last_error",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "adapter_profile",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "delivery_obligations",
+      "sql_sha256": "54a93f253770f10ed8ae2035f81c6503c1723dfa75080377e9d94c4433e2e8d3"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "backend_id",
+          "notnull": false,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "pid",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "started_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "last_heartbeat",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": "''",
+          "hidden": 0,
+          "name": "profile",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "''",
+          "hidden": 0,
+          "name": "host",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "gateway_heartbeats",
+      "sql_sha256": "195982befc3eb404a82a2a776b7384f775baa0685ef1dff0902f0f29b912d334"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "session_key",
+          "notnull": false,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "failure_streak",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "gateway_hygiene_state",
+      "sql_sha256": "7c848a4ef29936b88bb9c80b8c3261bdf382b0970c489a3202e54d5e6e4bc3e4"
+    },
+    {
+      "columns": [
+        {
+          "default": "''",
+          "hidden": 0,
+          "name": "scope",
+          "notnull": true,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "session_key",
+          "notnull": true,
+          "pk": 2,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "entry_json",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "updated_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "gateway_routing",
+      "sql_sha256": "b828dee3886b25938ef25c7bc79ceadc42c586fc441a00d200f92fbb109263be"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "room_id",
+          "notnull": true,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "seq",
+          "notnull": true,
+          "pk": 2,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "event_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "kind",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "actor_json",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "authority_epoch",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "payload_json",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "created_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "room_id",
+          "match": "NONE",
+          "on_delete": "NO ACTION",
+          "on_update": "NO ACTION",
+          "to_column": "room_id",
+          "to_table": "hosted_rooms"
+        }
+      ],
+      "name": "hosted_room_events",
+      "sql_sha256": "8b64d42c6cc5f7686a91434142d4890c6bcc4121992005db2547e507afbe2e02"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "room_id",
+          "notnull": true,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "member_id",
+          "notnull": true,
+          "pk": 2,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "target_url",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "target_profile",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "grant",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "catalog_json",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "cancellation_scope_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "trace_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "transport_security",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "'ready'",
+          "hidden": 0,
+          "name": "status",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "updated_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "hosted_room_links",
+      "sql_sha256": "8dd7043f00b6d7da7e3d79fd91f39e89b223704929668d75d1710a8eaa1c600c"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "room_id",
+          "notnull": true,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "member_id",
+          "notnull": true,
+          "pk": 2,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "grant_digest",
+          "notnull": true,
+          "pk": 3,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "target_url",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "grant",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "expires_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "attempts",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "next_attempt_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "created_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "held",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "hosted_room_owed_revokes",
+      "sql_sha256": "0db75914c500f2c18a718ddf9a9c41ac2697b15385264d79a784d56683f0e691"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "room_id",
+          "notnull": true,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "member_id",
+          "notnull": true,
+          "pk": 2,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "target_profile",
+          "notnull": true,
+          "pk": 3,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "authority_gateway_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "authority_epoch",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "expires_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "revoked_at",
+          "notnull": false,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "created_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "updated_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "hosted_room_peer_reservations",
+      "sql_sha256": "c7fd2cbd6288080dcd0cb31267aa09819b03c11c5d3bd3d60b7f1fdf874f6904"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "singleton",
+          "notnull": false,
+          "pk": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "max_active_events",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "hosted_room_policy_capacity",
+      "sql_sha256": "69db617e27a374a81353b6926ee58be1440fa1c6e46371e989a4f4243a7a5a2a"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "room_id",
+          "notnull": false,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "through_seq",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "stopped_through_seq",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "updated_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "hosted_room_policy_cursors",
+      "sql_sha256": "d6cdf202b49e90fdcee825edebebc3bdf991ef1229079722c99d3e1b32187c58"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "room_id",
+          "notnull": true,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "thread_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "discussion_event_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "seq",
+          "notnull": true,
+          "pk": 2,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "event_json",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "hosted_room_policy_events",
+      "sql_sha256": "acaf6890114240618d6fb130ba1c992f3d2db7bbecd2e5feaaf7363201b1dd5f"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "room_id",
+          "notnull": true,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "task_id",
+          "notnull": true,
+          "pk": 2,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "kind",
+          "notnull": true,
+          "pk": 3,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "execution_generation",
+          "notnull": true,
+          "pk": 4,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "seq",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "hosted_room_policy_publications",
+      "sql_sha256": "b5223e36610b729d9a14b9d333870943271b28176cd41d1b2edb79c9f781d89d"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "room_id",
+          "notnull": true,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "thread_id",
+          "notnull": true,
+          "pk": 2,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "discussion_event_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "latest_user_seq",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "completed",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "hosted_room_policy_threads",
+      "sql_sha256": "b6f0235420e8c4e15de1f51a3f652327513a77370fef70fb27931d02f6f9d3b8"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "room_id",
+          "notnull": true,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "thread_id",
+          "notnull": true,
+          "pk": 2,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "seq",
+          "notnull": true,
+          "pk": 3,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "kind",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "settled_seq",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "hosted_room_policy_transcript",
+      "sql_sha256": "4d7dd165d446f33b3fe6d460bc5060d158428d27b3b707fe67d55becb5187f64"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "room_id",
+          "notnull": false,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "schema_version",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "hosted_room_policy_transcript_state",
+      "sql_sha256": "17016caa5cb2e0b4006ba236740e971c8342de317d783d1bdd03367fc8d5f712"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "room_id",
+          "notnull": true,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "thread_id",
+          "notnull": true,
+          "pk": 2,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "member_id",
+          "notnull": true,
+          "pk": 3,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "seen_through_seq",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "hosted_room_policy_watermarks",
+      "sql_sha256": "cdee40fc3c90dc5d50d4cfd12bdf726454ae0cc9bbd73e3852c18a4104abe1dd"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "room_id",
+          "notnull": true,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "home_install_id",
+          "notnull": true,
+          "pk": 2,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "authority_gateway_id",
+          "notnull": true,
+          "pk": 3,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "authority_epoch",
+          "notnull": true,
+          "pk": 4,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "member_id",
+          "notnull": true,
+          "pk": 5,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "task_id",
+          "notnull": true,
+          "pk": 8,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "execution_generation",
+          "notnull": true,
+          "pk": 9,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "target_install_id",
+          "notnull": true,
+          "pk": 6,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "target_profile",
+          "notnull": true,
+          "pk": 7,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "run_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "session_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "created_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "updated_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "hosted_room_remote_runs",
+      "sql_sha256": "49ca2e1e8c4952fe6a5451bf25e800abb2f30fdec47b6e68c717bd8cac4a02c8"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "room_id",
+          "notnull": false,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "retired_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "hosted_room_retired_ids",
+      "sql_sha256": "727f6d35c20d4a07d4537267e4a89764dd8916388130bc0d90b53fb884562e7e"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "scope_key",
+          "notnull": false,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "expires_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "revoked_before",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "hosted_room_revoked_grants",
+      "sql_sha256": "2b48bf7180818d2433caeffe318fa6c58ba79cb818052009b1a8d19e8fbfb050"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "room_id",
+          "notnull": false,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "name",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "members_json",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "authority_gateway_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "1",
+          "hidden": 0,
+          "name": "authority_epoch",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "1",
+          "hidden": 0,
+          "name": "next_seq",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "event_bytes",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "1",
+          "hidden": 0,
+          "name": "revision",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "created_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "updated_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "disbanded_at",
+          "notnull": false,
+          "pk": 0,
+          "type": "REAL"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "hosted_rooms",
+      "sql_sha256": "340693eae687617cb889bb764364b159e54e91c6f3d5fe24c318c713e4c5f2dd"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "id",
+          "notnull": false,
+          "pk": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "session_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "role",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "content",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "tool_call_id",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "tool_calls",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "tool_name",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "effect_disposition",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "timestamp",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "token_count",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "finish_reason",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "reasoning",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "reasoning_content",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "reasoning_details",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "codex_reasoning_items",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "codex_message_items",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "platform_message_id",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "observed",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "1",
+          "hidden": 0,
+          "name": "active",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "compacted",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "api_content",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "display_kind",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "display_metadata",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "_compressed_summary",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "display_identity",
+          "notnull": false,
+          "pk": 0,
+          "type": "BLOB"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "display_order",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "message_uid",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "absorbed_message_uids",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "tool_call_uids",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "tool_call_uid",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "session_id",
+          "match": "NONE",
+          "on_delete": "NO ACTION",
+          "on_update": "NO ACTION",
+          "to_column": "id",
+          "to_table": "sessions"
+        }
+      ],
+      "name": "messages",
+      "sql_sha256": "63f153f714b2d3f74c9dbf6986bafa42913358675cedc2160a2d937fcad4db86"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "content",
+          "notnull": false,
+          "pk": 0,
+          "type": ""
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "tool_name",
+          "notnull": false,
+          "pk": 0,
+          "type": ""
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "tool_calls",
+          "notnull": false,
+          "pk": 0,
+          "type": ""
+        },
+        {
+          "default": null,
+          "hidden": 1,
+          "name": "messages_fts",
+          "notnull": false,
+          "pk": 0,
+          "type": ""
+        },
+        {
+          "default": null,
+          "hidden": 1,
+          "name": "rank",
+          "notnull": false,
+          "pk": 0,
+          "type": ""
+        }
+      ],
+      "foreign_keys": [],
+      "name": "messages_fts",
+      "sql_sha256": "4f69bf6cca6aded936f733253e22f827196c99f6f1edb48c806b50a4e20cc846"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "k",
+          "notnull": true,
+          "pk": 1,
+          "type": ""
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "v",
+          "notnull": false,
+          "pk": 0,
+          "type": ""
+        }
+      ],
+      "foreign_keys": [],
+      "name": "messages_fts_config",
+      "sql_sha256": "3cc4ead7fb49f1f702aa4216d7ca04f44fae1d5e55016b160224d59dca10baa0"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "id",
+          "notnull": false,
+          "pk": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "block",
+          "notnull": false,
+          "pk": 0,
+          "type": "BLOB"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "messages_fts_data",
+      "sql_sha256": "ba1aeecddfed1e829bb0a2d3f6a3502d92880cf4f6578c51a28168ca553d3080"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "id",
+          "notnull": false,
+          "pk": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "sz",
+          "notnull": false,
+          "pk": 0,
+          "type": "BLOB"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "messages_fts_docsize",
+      "sql_sha256": "656e7cc830cf2fd20b43ff1a24da88d9ef49b918d662b6245630850fd3b59aa3"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "segid",
+          "notnull": true,
+          "pk": 1,
+          "type": ""
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "term",
+          "notnull": true,
+          "pk": 2,
+          "type": ""
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "pgno",
+          "notnull": false,
+          "pk": 0,
+          "type": ""
+        }
+      ],
+      "foreign_keys": [],
+      "name": "messages_fts_idx",
+      "sql_sha256": "833b422acd8ec56b59932fb71427adabab9a99b92b51ffb438778876661282c9"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "content",
+          "notnull": false,
+          "pk": 0,
+          "type": ""
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "tool_name",
+          "notnull": false,
+          "pk": 0,
+          "type": ""
+        },
+        {
+          "default": null,
+          "hidden": 1,
+          "name": "messages_fts_trigram",
+          "notnull": false,
+          "pk": 0,
+          "type": ""
+        },
+        {
+          "default": null,
+          "hidden": 1,
+          "name": "rank",
+          "notnull": false,
+          "pk": 0,
+          "type": ""
+        }
+      ],
+      "foreign_keys": [],
+      "name": "messages_fts_trigram",
+      "sql_sha256": "441b2ca0737021d1fe463f1a3d115fa5716e6bf80bef75d919f83323aa8b88f1"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "k",
+          "notnull": true,
+          "pk": 1,
+          "type": ""
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "v",
+          "notnull": false,
+          "pk": 0,
+          "type": ""
+        }
+      ],
+      "foreign_keys": [],
+      "name": "messages_fts_trigram_config",
+      "sql_sha256": "8951ea02a0cc92214e975e93ada53bb387c09212867058534e5324ebe6190f50"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "id",
+          "notnull": false,
+          "pk": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "block",
+          "notnull": false,
+          "pk": 0,
+          "type": "BLOB"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "messages_fts_trigram_data",
+      "sql_sha256": "4dad8b58fd8dd38a8f42fd0992aedc1b508e612d7f1186a3b588a1d041fa5640"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "id",
+          "notnull": false,
+          "pk": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "sz",
+          "notnull": false,
+          "pk": 0,
+          "type": "BLOB"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "messages_fts_trigram_docsize",
+      "sql_sha256": "ebd01179364f026740e1f04a234a247b89f59711e1c2371e913d01659944c0af"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "segid",
+          "notnull": true,
+          "pk": 1,
+          "type": ""
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "term",
+          "notnull": true,
+          "pk": 2,
+          "type": ""
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "pgno",
+          "notnull": false,
+          "pk": 0,
+          "type": ""
+        }
+      ],
+      "foreign_keys": [],
+      "name": "messages_fts_trigram_idx",
+      "sql_sha256": "83e75826bde8d72fdd37b7a33410a40bafc2a8039173fd3fcc4d2fb8e715dc56"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "subagent_id",
+          "notnull": false,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "state",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "pinned",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "stop_cause",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "owner_pid",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "owner_started_at",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "record_json",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "created_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "updated_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "expires_at",
+          "notnull": false,
+          "pk": 0,
+          "type": "REAL"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "resumable_subagents",
+      "sql_sha256": "1f8a1dfa252e610eecd3fe7aae0e99920a052fdbdb1f28a85664b91918bbf64b"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "singleton",
+          "notnull": false,
+          "pk": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "epoch",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "instance_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "runtime_epoch",
+      "sql_sha256": "6709f2cb8462775797b016fa10cd435f927c8febb215b2b541303fa065e02bc7"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "version",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "schema_version",
+      "sql_sha256": "df18bab70f910e36ede5114a58b8c02ae41e67fc8e559e7837aa4685a43245fb"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "seq",
+          "notnull": false,
+          "pk": 1,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "admission_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "request_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "principal_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "target_session_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "lineage_json",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "payload_json",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "payload_digest",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "intent",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "status",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "outcome",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "owner_epoch",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "generation",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "target_session_id",
+          "match": "NONE",
+          "on_delete": "RESTRICT",
+          "on_update": "NO ACTION",
+          "to_column": "id",
+          "to_table": "sessions"
+        }
+      ],
+      "name": "session_admissions",
+      "sql_sha256": "b2c27ab3cacfb84a610f2dbc03f43a2613faec4aef0243a8fb63639f8c8ec420"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "session_id",
+          "notnull": true,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "model",
+          "notnull": true,
+          "pk": 2,
+          "type": "TEXT"
+        },
+        {
+          "default": "''",
+          "hidden": 0,
+          "name": "billing_provider",
+          "notnull": true,
+          "pk": 3,
+          "type": "TEXT"
+        },
+        {
+          "default": "''",
+          "hidden": 0,
+          "name": "billing_base_url",
+          "notnull": true,
+          "pk": 4,
+          "type": "TEXT"
+        },
+        {
+          "default": "''",
+          "hidden": 0,
+          "name": "billing_mode",
+          "notnull": true,
+          "pk": 5,
+          "type": "TEXT"
+        },
+        {
+          "default": "''",
+          "hidden": 0,
+          "name": "task",
+          "notnull": true,
+          "pk": 6,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "api_call_count",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "input_tokens",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "output_tokens",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "cache_read_tokens",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "cache_write_tokens",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "reasoning_tokens",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "estimated_cost_usd",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "actual_cost_usd",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "cost_status",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "cost_source",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "first_seen",
+          "notnull": false,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "last_seen",
+          "notnull": false,
+          "pk": 0,
+          "type": "REAL"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "session_id",
+          "match": "NONE",
+          "on_delete": "CASCADE",
+          "on_update": "NO ACTION",
+          "to_column": "id",
+          "to_table": "sessions"
+        }
+      ],
+      "name": "session_model_usage",
+      "sql_sha256": "fce53b854861325404a9e082f659515698740186ce29df077a5ebacbaf9fcb04"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "conversation_id",
+          "notnull": false,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "holder",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "acquired_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "expires_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "session_turn_leases",
+      "sql_sha256": "21b9214186f3a2d815183991939ca05b80a5c4ed09d4144d406c51c52311f1b6"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "id",
+          "notnull": false,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "source",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "user_id",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "session_key",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "chat_id",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "chat_type",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "thread_id",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "display_name",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "origin_json",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "expiry_finalized",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "model",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "model_config",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "system_prompt",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "parent_session_id",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "started_at",
+          "notnull": true,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "ended_at",
+          "notnull": false,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "end_reason",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "message_count",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "tool_call_count",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "input_tokens",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "output_tokens",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "cache_read_tokens",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "cache_write_tokens",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "reasoning_tokens",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "cwd",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "git_branch",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "git_repo_root",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "billing_provider",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "billing_base_url",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "billing_mode",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "estimated_cost_usd",
+          "notnull": false,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "actual_cost_usd",
+          "notnull": false,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "cost_status",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "cost_source",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "pricing_version",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "title",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "api_call_count",
+          "notnull": false,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "handoff_state",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "handoff_platform",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "handoff_error",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "compression_failure_cooldown_until",
+          "notnull": false,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "compression_failure_error",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "compression_fallback_streak",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "compression_ineffective_count",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "profile_name",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "rewind_count",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "archived",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "system_prompt_hash",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "title_source",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "last_activity_at",
+          "notnull": false,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "last_activity_description",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "last_activity_provenance",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "pinned",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "last_read_at",
+          "notnull": false,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "git_metadata_generation",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "hidden",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "compression_recovery_deadline",
+          "notnull": false,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "tool_names",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "created_source",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "compression_overload_streak",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "transport_profile",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "auto_archived",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "runtime_revision",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "runtime_generation",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "transcript_revision",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "prompt_cache_clock",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "parent_session_id",
+          "match": "NONE",
+          "on_delete": "NO ACTION",
+          "on_update": "NO ACTION",
+          "to_column": "id",
+          "to_table": "sessions"
+        }
+      ],
+      "name": "sessions",
+      "sql_sha256": "387f2cb6e91307e3c0fdfbc2106caaf8cad8a165ca19a68c2382a61142cf5588"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "name",
+          "notnull": false,
+          "pk": 0,
+          "type": ""
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "seq",
+          "notnull": false,
+          "pk": 0,
+          "type": ""
+        }
+      ],
+      "foreign_keys": [],
+      "name": "sqlite_sequence",
+      "sql_sha256": "4cb1eaf14467f226196148cb5688569660cb290d414bae4c1c450b149b62befd"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "key",
+          "notnull": false,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "value",
+          "notnull": false,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "state_meta",
+      "sql_sha256": "1ca0f7b7df9cd216aaa2fa2b2dbacae343c5614905a446966bb233576ed51e08"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "hash",
+          "notnull": false,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "prompt",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ],
+      "foreign_keys": [],
+      "name": "system_prompts",
+      "sql_sha256": "34e384406b43329464be816acc1e767e85ecd344489f3ee3bd58ad495717d435"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "execution_id",
+          "notnull": false,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "session_id",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "kind",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "owner_epoch",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "generation",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "status",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "adoption_digest",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": "0",
+          "hidden": 0,
+          "name": "last_sequence",
+          "notnull": true,
+          "pk": 0,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "session_id",
+          "match": "NONE",
+          "on_delete": "RESTRICT",
+          "on_update": "NO ACTION",
+          "to_column": "id",
+          "to_table": "sessions"
+        }
+      ],
+      "name": "worker_executions",
+      "sql_sha256": "95ce1be59a26c1075e9edf365e4b193bcff96f98044fed72f3f4bd534b8ce39d"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "execution_id",
+          "notnull": true,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "sequence",
+          "notnull": true,
+          "pk": 2,
+          "type": "INTEGER"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "payload_digest",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "default": null,
+          "hidden": 0,
+          "name": "result_json",
+          "notnull": true,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "execution_id",
+          "match": "NONE",
+          "on_delete": "RESTRICT",
+          "on_update": "NO ACTION",
+          "to_column": "execution_id",
+          "to_table": "worker_executions"
+        }
+      ],
+      "name": "worker_receipts",
+      "sql_sha256": "f0b4a19bdb2cced58f217174b14f82ff613c0a2ffcae4f3c00ff81eeb2120f5e"
+    }
+  ],
+  "triggers": [
+    {
+      "name": "messages_display_identity_delete",
+      "sql_sha256": "1aaacb06477872f0872e24f1c11791a5a66d935fdfcec6f8f172a829710cb768",
+      "table": "messages"
+    },
+    {
+      "name": "messages_display_identity_update",
+      "sql_sha256": "f24bfe8c18568d6ec7c3aa97b156e7dcaff3c56d9ac543ae3172b960f3739014",
+      "table": "messages"
+    },
+    {
+      "name": "messages_display_order_insert",
+      "sql_sha256": "3e335718872dc436cef9d0d0622eb72a6f04476198cdce6a4dda20dafab51075",
+      "table": "messages"
+    },
+    {
+      "name": "messages_display_revision_update",
+      "sql_sha256": "07334df4878b35d38fa98165a55715f066257416f863a2b4c9480abb50445cf7",
+      "table": "messages"
+    },
+    {
+      "name": "messages_display_visibility_update",
+      "sql_sha256": "dd3d5f963fce772c2a8c0170d77189e092e1cfeb3d1fe275b4a63268d4af28f7",
+      "table": "messages"
+    },
+    {
+      "name": "messages_fts_delete",
+      "sql_sha256": "ac493b545afc9fce32b14143e6611fd518ede3bb00482e72f22101b9c1f0f113",
+      "table": "messages"
+    },
+    {
+      "name": "messages_fts_insert",
+      "sql_sha256": "a05a164ca55fd3d325052e310ba288a10298e6716cf85cf95afd84e8dff4fd57",
+      "table": "messages"
+    },
+    {
+      "name": "messages_fts_trigram_delete",
+      "sql_sha256": "faedec0834f08ecbc00e7e5b12c0bfa57af9a220d2e0904e83fae03b9cd42e06",
+      "table": "messages"
+    },
+    {
+      "name": "messages_fts_trigram_insert",
+      "sql_sha256": "cff330430682eaa1427a5b8f263244585305a485629fc42ddb4fa6a57b7e1c0e",
+      "table": "messages"
+    },
+    {
+      "name": "messages_fts_trigram_update",
+      "sql_sha256": "d2af69e120aac1db1d2a46833e322831412c1f0a224924f4a663ce343c7eb1f3",
+      "table": "messages"
+    },
+    {
+      "name": "messages_fts_update",
+      "sql_sha256": "39b31c6e2e51c3d517074fea66d9bea17302311576f053112958f521523ad1aa",
+      "table": "messages"
+    },
+    {
+      "name": "messages_message_uid_insert",
+      "sql_sha256": "d6c504bde12f5ed9bdda83fa156de0a5fd87b1f030eaf4269d3dd839f99b0a03",
+      "table": "messages"
+    },
+    {
+      "name": "messages_transcript_revision_update",
+      "sql_sha256": "81d4c4e9c19acc6a8a93e365018ae6590e60e56e1d0bae8d2d73ee4a4b05debe",
+      "table": "messages"
+    },
+    {
+      "name": "sessions_runtime_ledger_delete_guard",
+      "sql_sha256": "47385fda669448e67a49ff5532947946b5470b9bb03bf2cb1a07db45d60834e8",
+      "table": "sessions"
+    }
+  ],
+  "views": [
+    {
+      "name": "messages_fts_src",
+      "sql_sha256": "7f7f45bb86b125079d573e20b0726932a394d2a2a4725067e4659a903eb64e05",
+      "table": "messages_fts_src"
+    },
+    {
+      "name": "messages_fts_trigram_src",
+      "sql_sha256": "d1a2680aa14b634e8a64abb0241fb03ce2bffd4cb0c721baf0871b00e96522fb",
+      "table": "messages_fts_trigram_src"
+    }
+  ]
+}

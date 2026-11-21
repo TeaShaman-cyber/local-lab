@@ -1,0 +1,547 @@
+matrix_version: theseus.context.coverage-matrix.v1
+source_kind: hermes-state-snapshot
+source_schema_version: 33
+scope: observed profile state.db shape from the inspected v0.23.3 schema-33 snapshot
+authority_scope: profile snapshot evidence only; install shared-state.db requires a separate manifest
+unknown_schema_policy: validator exits nonzero; observed validation remains a required manual gate until exporter integration
+mirror_contract: include_full_row preserves every declared column verbatim in private local evidence
+canonical_contract: canonical decisions never authorize replay of operational source state
+hosted_room_contract: canonicalization is deferred until shared-state discovery and decoder contracts exist
+known_lazy_or_shared_tables_absent_from_fixture:
+- hosted_room_driver_executions
+- hosted_room_replicas
+- hosted_room_driver_results
+- hosted_room_attachments
+- hosted_room_router_claims
+- hosted_room_gateway_handoffs
+- hosted_room_legacy_imports
+- telegram_dm_topic_roots
+schema_objects:
+  views:
+  - messages_fts_src
+  - messages_fts_trigram_src
+  triggers:
+  - messages_display_identity_delete
+  - messages_display_identity_update
+  - messages_display_order_insert
+  - messages_display_revision_update
+  - messages_display_visibility_update
+  - messages_fts_delete
+  - messages_fts_insert
+  - messages_fts_trigram_delete
+  - messages_fts_trigram_insert
+  - messages_fts_trigram_update
+  - messages_fts_update
+  - messages_message_uid_insert
+  - messages_transcript_revision_update
+  - sessions_runtime_ledger_delete_guard
+  indexes: derive_physical_and_constraints
+tables:
+  _litestream_lock:
+    family: storage_mechanic
+    authority: external_replication_mechanic
+    mirror: exclude_mechanic
+    canonical: exclude_mechanic
+    replay: forbidden
+    sensitivity: none
+    primary_key: []
+    rationale: Foreign Litestream bookkeeping is not Hermes logical state.
+  _litestream_seq:
+    family: storage_mechanic
+    authority: external_replication_mechanic
+    mirror: exclude_mechanic
+    canonical: exclude_mechanic
+    replay: forbidden
+    sensitivity: none
+    primary_key:
+    - id
+    rationale: Foreign Litestream bookkeeping is not Hermes logical state.
+  async_delegations:
+    family: delegation
+    authority: durable_delegation_ledger
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - delegation_id
+    rationale: Delegation lifecycle, ownership and result evidence; opaque payloads remain local.
+  compression_locks:
+    family: runtime_coordination
+    authority: transient_operational_state
+    mirror: include_full_row
+    canonical: exclude_transient
+    replay: forbidden
+    sensitivity: local_internal
+    primary_key:
+    - session_id
+    rationale: Snapshot evidence only; PID, lease, heartbeat, retry or queue state must never be replayed.
+  conversation_generations:
+    family: conversation
+    authority: operational_identity_ledger
+    mirror: include_full_row
+    canonical: include
+    replay: forbidden
+    sensitivity: local_internal
+    primary_key:
+    - source
+    - session_key
+    rationale: Never-pruned generation fence prevents ABA and must survive history reconstruction.
+  delivery_obligations:
+    family: runtime_coordination
+    authority: sensitive_transient_operational_state
+    mirror: include_full_row
+    canonical: exclude_transient
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - obligation_id
+    rationale: Snapshot evidence only; content and errors are sensitive, while queue state must never be replayed.
+  gateway_heartbeats:
+    family: runtime_coordination
+    authority: transient_operational_state
+    mirror: include_full_row
+    canonical: exclude_transient
+    replay: forbidden
+    sensitivity: local_internal
+    primary_key:
+    - backend_id
+    rationale: Snapshot evidence only; PID, lease, heartbeat, retry or queue state must never be replayed.
+  gateway_hygiene_state:
+    family: runtime_coordination
+    authority: transient_operational_state
+    mirror: include_full_row
+    canonical: exclude_transient
+    replay: forbidden
+    sensitivity: local_internal
+    primary_key:
+    - session_key
+    rationale: Snapshot evidence only; PID, lease, heartbeat, retry or queue state must never be replayed.
+  gateway_routing:
+    family: routing
+    authority: source_specific_operational_state
+    mirror: include_full_row
+    canonical: exclude_source_specific
+    replay: forbidden
+    sensitivity: local_internal
+    primary_key:
+    - scope
+    - session_key
+    rationale: Preserve opaque Hermes routing evidence without treating it as portable runtime state.
+  hosted_room_events:
+    family: hosted_room
+    authority: placement_dependent_observed_state
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - room_id
+    - seq
+    rationale: Room definition and sequenced event history; payloads and members may be sensitive.
+  hosted_room_links:
+    family: hosted_room
+    authority: placement_dependent_observed_state
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - room_id
+    - member_id
+    rationale: Durable member links and grants; transport details remain local.
+  hosted_room_owed_revokes:
+    family: hosted_room
+    authority: placement_dependent_observed_state
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - room_id
+    - member_id
+    - grant_digest
+    rationale: Expiry/retry/cache state is snapshot evidence only and must never be replayed.
+  hosted_room_peer_reservations:
+    family: hosted_room
+    authority: placement_dependent_observed_state
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - room_id
+    - member_id
+    - target_profile
+    rationale: Expiry/retry/cache state is snapshot evidence only and must never be replayed.
+  hosted_room_policy_capacity:
+    family: hosted_room_policy
+    authority: placement_dependent_observed_state
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - singleton
+    rationale: Preserve checkpoint evidence but rebuild canonical state from authoritative room events.
+  hosted_room_policy_cursors:
+    family: hosted_room_policy
+    authority: placement_dependent_observed_state
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - room_id
+    rationale: Preserve checkpoint evidence but rebuild canonical state from authoritative room events.
+  hosted_room_policy_events:
+    family: hosted_room_policy
+    authority: placement_dependent_observed_state
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - room_id
+    - seq
+    rationale: Sequenced policy discussion events are durable history.
+  hosted_room_policy_publications:
+    family: hosted_room_policy
+    authority: placement_dependent_observed_state
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - room_id
+    - task_id
+    - kind
+    - execution_generation
+    rationale: Durable policy publication, thread and transcript semantics.
+  hosted_room_policy_threads:
+    family: hosted_room_policy
+    authority: placement_dependent_observed_state
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - room_id
+    - thread_id
+    rationale: Durable policy publication, thread and transcript semantics.
+  hosted_room_policy_transcript:
+    family: hosted_room_policy
+    authority: placement_dependent_observed_state
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - room_id
+    - thread_id
+    - seq
+    rationale: Durable policy publication, thread and transcript semantics.
+  hosted_room_policy_transcript_state:
+    family: hosted_room_policy
+    authority: placement_dependent_observed_state
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - room_id
+    rationale: Preserve checkpoint evidence but rebuild canonical state from authoritative room events.
+  hosted_room_policy_watermarks:
+    family: hosted_room_policy
+    authority: placement_dependent_observed_state
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - room_id
+    - thread_id
+    - member_id
+    rationale: Preserve checkpoint evidence but rebuild canonical state from authoritative room events.
+  hosted_room_remote_runs:
+    family: hosted_room
+    authority: placement_dependent_observed_state
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - room_id
+    - home_install_id
+    - authority_gateway_id
+    - authority_epoch
+    - member_id
+    - target_install_id
+    - target_profile
+    - task_id
+    - execution_generation
+    rationale: Cross-install room execution identity and session linkage.
+  hosted_room_retired_ids:
+    family: hosted_room
+    authority: placement_dependent_observed_state
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - room_id
+    rationale: Permanent retired-id fence prevents identity reuse.
+  hosted_room_revoked_grants:
+    family: hosted_room
+    authority: placement_dependent_observed_state
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - scope_key
+    rationale: Expiry/retry/cache state is snapshot evidence only and must never be replayed.
+  hosted_rooms:
+    family: hosted_room
+    authority: placement_dependent_observed_state
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - room_id
+    rationale: Room definition and sequenced event history; payloads and members may be sensitive.
+  messages:
+    family: message
+    authority: authoritative_history
+    mirror: include_full_row
+    canonical: include_sensitive
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - id
+    rationale: Transcript, tool, reasoning, compaction and logical-message identity history.
+  messages_fts:
+    family: search
+    authority: derived_index
+    mirror: derive
+    canonical: derive
+    replay: forbidden
+    sensitivity: derived
+    primary_key: []
+    rationale: Rebuild from message projections; virtual-table bytes are not source evidence.
+  messages_fts_config:
+    family: search
+    authority: sqlite_fts_shadow
+    mirror: exclude_mechanic
+    canonical: exclude_mechanic
+    replay: forbidden
+    sensitivity: none
+    primary_key:
+    - k
+    rationale: SQLite FTS shadow storage is engine mechanics and is rebuilt from messages.
+  messages_fts_data:
+    family: search
+    authority: sqlite_fts_shadow
+    mirror: exclude_mechanic
+    canonical: exclude_mechanic
+    replay: forbidden
+    sensitivity: none
+    primary_key:
+    - id
+    rationale: SQLite FTS shadow storage is engine mechanics and is rebuilt from messages.
+  messages_fts_docsize:
+    family: search
+    authority: sqlite_fts_shadow
+    mirror: exclude_mechanic
+    canonical: exclude_mechanic
+    replay: forbidden
+    sensitivity: none
+    primary_key:
+    - id
+    rationale: SQLite FTS shadow storage is engine mechanics and is rebuilt from messages.
+  messages_fts_idx:
+    family: search
+    authority: sqlite_fts_shadow
+    mirror: exclude_mechanic
+    canonical: exclude_mechanic
+    replay: forbidden
+    sensitivity: none
+    primary_key:
+    - segid
+    - term
+    rationale: SQLite FTS shadow storage is engine mechanics and is rebuilt from messages.
+  messages_fts_trigram:
+    family: search
+    authority: derived_index
+    mirror: derive
+    canonical: derive
+    replay: forbidden
+    sensitivity: derived
+    primary_key: []
+    rationale: Rebuild from message projections; virtual-table bytes are not source evidence.
+  messages_fts_trigram_config:
+    family: search
+    authority: sqlite_fts_shadow
+    mirror: exclude_mechanic
+    canonical: exclude_mechanic
+    replay: forbidden
+    sensitivity: none
+    primary_key:
+    - k
+    rationale: SQLite FTS shadow storage is engine mechanics and is rebuilt from messages.
+  messages_fts_trigram_data:
+    family: search
+    authority: sqlite_fts_shadow
+    mirror: exclude_mechanic
+    canonical: exclude_mechanic
+    replay: forbidden
+    sensitivity: none
+    primary_key:
+    - id
+    rationale: SQLite FTS shadow storage is engine mechanics and is rebuilt from messages.
+  messages_fts_trigram_docsize:
+    family: search
+    authority: sqlite_fts_shadow
+    mirror: exclude_mechanic
+    canonical: exclude_mechanic
+    replay: forbidden
+    sensitivity: none
+    primary_key:
+    - id
+    rationale: SQLite FTS shadow storage is engine mechanics and is rebuilt from messages.
+  messages_fts_trigram_idx:
+    family: search
+    authority: sqlite_fts_shadow
+    mirror: exclude_mechanic
+    canonical: exclude_mechanic
+    replay: forbidden
+    sensitivity: none
+    primary_key:
+    - segid
+    - term
+    rationale: SQLite FTS shadow storage is engine mechanics and is rebuilt from messages.
+  resumable_subagents:
+    family: delegation
+    authority: durable_delegation_ledger
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - subagent_id
+    rationale: Delegation lifecycle, ownership and result evidence; opaque payloads remain local.
+  runtime_epoch:
+    family: runtime_coordination
+    authority: transient_operational_state
+    mirror: include_full_row
+    canonical: exclude_transient
+    replay: forbidden
+    sensitivity: local_internal
+    primary_key:
+    - singleton
+    rationale: Snapshot evidence only; PID, lease, heartbeat, retry or queue state must never be replayed.
+  schema_version:
+    family: schema
+    authority: version_marker
+    mirror: descriptor
+    canonical: derive
+    replay: forbidden
+    sensitivity: local_internal
+    primary_key: []
+    rationale: Capture as snapshot descriptor and schema gate, not as a logical row.
+  session_admissions:
+    family: execution
+    authority: sensitive_operational_ledger
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - seq
+    rationale: Durable admission and outcome evidence; payloads remain local and are never replayed.
+  session_model_usage:
+    family: model_usage
+    authority: aggregate_ledger
+    mirror: include_full_row
+    canonical: include
+    replay: forbidden
+    sensitivity: local_internal
+    primary_key:
+    - session_id
+    - model
+    - billing_provider
+    - billing_base_url
+    - billing_mode
+    - task
+    rationale: Stored per-session/model/provider/task accounting is not reproducible from messages alone.
+  session_turn_leases:
+    family: runtime_coordination
+    authority: transient_operational_state
+    mirror: include_full_row
+    canonical: exclude_transient
+    replay: forbidden
+    sensitivity: local_internal
+    primary_key:
+    - conversation_id
+    rationale: Snapshot evidence only; PID, lease, heartbeat, retry or queue state must never be replayed.
+  sessions:
+    family: conversation
+    authority: authoritative_history
+    mirror: include_full_row
+    canonical: include_sensitive
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - id
+    rationale: Session identity, lineage, lifecycle, model, usage, prompt and revision state.
+  sqlite_sequence:
+    family: storage_mechanic
+    authority: sqlite_engine_mechanic
+    mirror: exclude_mechanic
+    canonical: exclude_mechanic
+    replay: forbidden
+    sensitivity: none
+    primary_key: []
+    rationale: SQLite AUTOINCREMENT bookkeeping; source identities are preserved separately.
+  state_meta:
+    family: runtime_metadata
+    authority: mixed_namespace_ledger
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - key
+    rationale: Preserve potentially sensitive receipt/result namespaces; canonicalization waits for an executable key registry.
+  system_prompts:
+    family: prompt
+    authority: authoritative_history
+    mirror: include_full_row
+    canonical: include_sensitive
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - hash
+    rationale: Content-addressed prompt evidence; local-only because prompt bodies may contain secrets.
+  worker_executions:
+    family: execution
+    authority: operational_ledger
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_internal
+    primary_key:
+    - execution_id
+    rationale: Durable worker execution identity, status, generation and sequence head.
+  worker_receipts:
+    family: execution
+    authority: durable_receipt
+    mirror: include_full_row
+    canonical: defer
+    replay: forbidden
+    sensitivity: local_sensitive
+    primary_key:
+    - execution_id
+    - sequence
+    rationale: Sequenced mutation/result receipts; preserve as evidence and never replay side effects.

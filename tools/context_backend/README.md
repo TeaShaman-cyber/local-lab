@@ -1,12 +1,13 @@
-# Context backend — first slice
+# Context backend
 
-This directory contains the first backend layer for the future context driver.
+This directory contains the local, read-only substrate for the future context driver.
 It does **not** install a Hermes hook and does not write to `state.db`.
 
 ```text
 verified Hermes snapshot
-  -> source decoder (schema-gated)
-  -> private canonical bundle
+  -> schema manifest and coverage gate
+  -> private source-specific mirror (deferred)
+  -> runtime-neutral canonical model
   -> transactional PostgreSQL projection
 ```
 
@@ -40,6 +41,56 @@ python tools/context_backend/export_snapshot.py SNAPSHOT \
 ```
 
 The output directory is created atomically and must not already exist.
+
+## High-fidelity coverage contract
+
+The current exporter remains the accepted `sessions`/`messages` substrate. It is not the
+complete subject model. ADR-0002 defines two later layers: a private source-specific
+full-row mirror and a project-owned runtime-neutral canonical model.
+
+`coverage_matrix.yaml` records both decisions independently for every table in the
+inspected v0.23.3 profile snapshot. This is an observed profile shape, not a claim that
+all lazy migration or install-level shared-state objects exist in every schema-33
+database. The checked-in manifest contains schema metadata only; it contains no
+application rows, prompts, messages, tool arguments, credentials or DSNs.
+
+Every table declares `replay: forbidden` and a sensitivity class. The validator rejects
+missing replay/sensitivity declarations and incompatible mirror/canonical decision pairs.
+Operational ledgers, `state_meta`, and hosted-room tables remain available as private
+mirror evidence while canonicalization is deferred until family-specific decoder,
+namespace, and shared-state contracts exist.
+
+The matrix intentionally forbids YAML merge keys and duplicate mapping keys so every
+decision remains explicit at its point of use. The JSON manifest likewise rejects
+duplicate object keys.
+
+Validate the repository contract:
+
+```bash
+uv run --no-project --with pyyaml \
+  python -m tools.context_backend.coverage \
+  --matrix tools/context_backend/coverage_matrix.yaml \
+  --manifest tools/context_backend/fixtures/hermes_schema_v33.json
+```
+
+To compare a verified private snapshot with the checked-in schema, generate an observed
+metadata manifest outside the repository, then pass it as `--observed`:
+
+```bash
+python -m tools.context_backend.schema_manifest SNAPSHOT --output OBSERVED.json
+uv run --no-project --with pyyaml \
+  python -m tools.context_backend.coverage \
+  --matrix tools/context_backend/coverage_matrix.yaml \
+  --manifest tools/context_backend/fixtures/hermes_schema_v33.json \
+  --observed OBSERVED.json
+```
+
+The comparator detects unknown or changed tables, columns, defaults, generated-column
+metadata, full table DDL, foreign keys, views, triggers and indexes. The command exits
+nonzero on drift. The repository gate validates the checked-in fixture and matrix; live
+`--observed` comparison is a required manual gate in this slice and is not yet invoked by
+`export_snapshot.py`. Wiring the comparison into export/promotion is deferred, so this
+document does not claim automatic promotion blocking yet.
 
 ## Local PostgreSQL
 
@@ -98,8 +149,12 @@ linters; hosted CI installs the pinned tools and runs the same gate with `STRICT
 uv run --no-project --with pytest,ruff,pyyaml bash tools/dev/check.sh
 ```
 
-The external research and phase plan are recorded in
-`docs/research/context-backend-reconciliation.md`.
+Architecture and research are recorded in:
+
+- `docs/adr/0001-context-backend-source-boundary.md`;
+- `docs/adr/0002-high-fidelity-runtime-mirror.md`;
+- `docs/research/context-backend-reconciliation.md`;
+- `docs/research/context-backend-coverage-schema33.md`.
 
 For a real database, use a private snapshot and inspect only row counts and the
 returned load summary. Do not print bundle records or DSNs.
