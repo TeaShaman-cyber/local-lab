@@ -6,11 +6,15 @@
 
 ## Context
 
-The future context driver needs a queryable projection of Hermes session history.
+The context driver needs a queryable projection of Hermes agent-runtime history.
 Hermes owns `state.db`, and its internal SQLite schema can change with an upstream
 release. Reading the live tables directly would make the context backend depend on
 an unsupported implementation detail and could also compete with the gateway's
 writer.
+
+ADR-0002 deepens this boundary into a private source-specific mirror plus a
+runtime-neutral canonical model. The first `sessions`/`messages` bundle below remains
+an accepted substrate, not the complete subject model.
 
 Hermes has a maintained backup path, but a whole-home backup is not automatically a
 logical export contract: it can contain configuration, credentials, and other files
@@ -27,8 +31,9 @@ The source boundary is an upstream-safe snapshot or export artifact, not a live
 
 ```text
 upstream-supported acquisition
-  -> versioned source decoder
-  -> project-owned canonical history records
+  -> versioned source decoder and schema manifest
+  -> private source-specific mirror
+  -> project-owned runtime-neutral canonical records
   -> local PostgreSQL projection
 ```
 
