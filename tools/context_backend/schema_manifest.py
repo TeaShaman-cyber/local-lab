@@ -139,11 +139,22 @@ def _write_atomic(path: pathlib.Path, payload: str) -> None:
             temporary.unlink(missing_ok=True)
 
 
+def _reject_source_output_alias(source: pathlib.Path, output: pathlib.Path) -> None:
+    try:
+        aliases_source = source.samefile(output)
+    except FileNotFoundError:
+        aliases_source = source.resolve() == output.resolve()
+    if aliases_source:
+        raise SourceContractError("schema manifest output must not alias the source snapshot")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Inspect SQLite schema metadata only")
     parser.add_argument("snapshot", type=pathlib.Path)
     parser.add_argument("--output", type=pathlib.Path)
     args = parser.parse_args()
+    if args.output is not None:
+        _reject_source_output_alias(args.snapshot, args.output)
     payload = json.dumps(inspect_schema(args.snapshot), indent=2, sort_keys=True) + "\n"
     if args.output:
         _write_atomic(args.output, payload)

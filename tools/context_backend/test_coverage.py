@@ -492,3 +492,29 @@ def test_schema_inspector_quotes_legal_table_identifiers(tmp_path: Path) -> None
     )
 
     assert any(table["name"] == 'odd"name' for table in manifest["tables"])
+
+
+@pytest.mark.parametrize("alias_kind", ["same-path", "hardlink"])
+def test_schema_manifest_cli_rejects_source_output_alias(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, alias_kind: str
+) -> None:
+    from tools.context_backend import schema_manifest
+
+    snapshot = tmp_path / "state.db"
+    _manifest_for_ddl(snapshot, "CREATE TABLE example (id INTEGER PRIMARY KEY)")
+    output = snapshot
+    if alias_kind == "hardlink":
+        output = tmp_path / "manifest.json"
+        output.hardlink_to(snapshot)
+    before = snapshot.read_bytes()
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["schema_manifest.py", str(snapshot), "--output", str(output)],
+    )
+
+    with pytest.raises(SourceContractError, match="must not alias the source snapshot"):
+        schema_manifest.main()
+
+    assert snapshot.read_bytes() == before
+    assert snapshot.read_bytes().startswith(b"SQLite format 3")
