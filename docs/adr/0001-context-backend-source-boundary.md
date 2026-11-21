@@ -44,8 +44,14 @@ reject a missing, failed, stale, or mismatched receipt before producing a canoni
 bundle.
 
 The decoder is the only component allowed to know Hermes source table names. The
-canonical record model, PostgreSQL schema, query service, and future Neon adapter do
-not depend on those table names.
+canonical record model, PostgreSQL schema, query service, and future Neon adapter
+do not depend on those table names.
+
+`source_id` is a stable configured identity for one Hermes profile/source authority;
+it is not derived from a temporary snapshot path or filename. Changing `source_id`
+starts a new source lineage and requires an explicit empty-base rebuild. A snapshot
+hash identifies one exact source image within that lineage, and receipt provenance
+cannot silently change the lineage identity.
 
 A direct live-schema reader may exist later as a diagnostic or compatibility
 fallback. It is not the canonical route.
