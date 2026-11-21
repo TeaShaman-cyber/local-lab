@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 
 from tools.context_backend.reconcile import (
+    FINGERPRINT_PROVENANCE_FIELDS,
+    FINGERPRINT_VERSION,
     ReconciliationContractError,
     reconcile_records,
     record_fingerprint,
@@ -24,6 +26,16 @@ def _session(*, title: str = "First", snapshot: str = "sha-a") -> dict[str, obje
 def test_record_fingerprint_ignores_snapshot_provenance() -> None:
     first = _session(snapshot="sha-a")
     second = _session(snapshot="sha-b")
+
+    assert record_fingerprint(first) == record_fingerprint(second)
+
+
+def test_record_fingerprint_ignores_all_declared_snapshot_provenance() -> None:
+    first = _session(snapshot="sha-a")
+    second = _session(snapshot="sha-b")
+    for field in FINGERPRINT_PROVENANCE_FIELDS:
+        first[field] = f"{field}-a"
+        second[field] = f"{field}-b"
 
     assert record_fingerprint(first) == record_fingerprint(second)
 
@@ -74,6 +86,7 @@ def test_reconcile_reports_add_change_delete_and_unchanged() -> None:
         candidate_snapshot_sha256="sha-b",
     )
 
+    assert result.fingerprint_version == FINGERPRINT_VERSION
     assert result.counts == {
         "added": 1,
         "changed": 1,
@@ -114,6 +127,73 @@ def test_reconcile_is_deterministic_and_replay_is_a_noop() -> None:
     assert first.counts == {"added": 2, "changed": 0, "deleted": 0, "unchanged": 0}
     assert replay.counts == {"added": 0, "changed": 0, "deleted": 0, "unchanged": 2}
     assert replay.changes == ()
+
+
+def test_reconcile_output_is_stable_under_reordered_input() -> None:
+    candidate = [
+        _session(snapshot="sha-b"),
+        {**_session(snapshot="sha-b"), "source_record_id": "session-2"},
+    ]
+
+    first = reconcile_records(
+        [],
+        candidate,
+        source_id="hermes:test",
+        base_snapshot_sha256=None,
+        candidate_snapshot_sha256="sha-b",
+    )
+    reordered = reconcile_records(
+        [],
+        reversed(candidate),
+        source_id="hermes:test",
+        base_snapshot_sha256=None,
+        candidate_snapshot_sha256="sha-b",
+    )
+
+    assert reordered == first
+
+
+def test_reconcile_detects_content_change_when_record_counts_match() -> None:
+    result = reconcile_records(
+        [_session(title="before", snapshot="sha-a")],
+        [_session(title="after", snapshot="sha-b")],
+        source_id="hermes:test",
+        base_snapshot_sha256="sha-a",
+        candidate_snapshot_sha256="sha-b",
+    )
+
+    assert result.counts == {"added": 0, "changed": 1, "deleted": 0, "unchanged": 0}
+
+
+def test_reconcile_requires_base_cursor_for_existing_records() -> None:
+    with pytest.raises(ReconciliationContractError, match="base_snapshot_sha256 is required"):
+        reconcile_records(
+            [_session(snapshot="sha-a")],
+            [_session(snapshot="sha-b")],
+            source_id="hermes:test",
+            base_snapshot_sha256=None,
+            candidate_snapshot_sha256="sha-b",
+        )
+
+
+@pytest.mark.parametrize(
+    ("base_cursor", "candidate_cursor", "field"),
+    [
+        (123, "sha-b", "base_snapshot_sha256"),
+        (None, 123, "candidate_snapshot_sha256"),
+    ],
+)
+def test_reconcile_rejects_non_text_snapshot_cursors(
+    base_cursor: object, candidate_cursor: object, field: str
+) -> None:
+    with pytest.raises(ReconciliationContractError, match=field):
+        reconcile_records(
+            [],
+            [],
+            source_id="hermes:test",
+            base_snapshot_sha256=base_cursor,  # type: ignore[arg-type]
+            candidate_snapshot_sha256=candidate_cursor,  # type: ignore[arg-type]
+        )
 
 
 def test_reconcile_rejects_reusing_cursor_for_different_content() -> None:

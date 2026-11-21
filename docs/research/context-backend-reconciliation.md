@@ -189,10 +189,12 @@ The deterministic test matrix must cover:
 A property-based test would be useful for set-difference invariants, but a small
 executable fixture matrix is the required first gate. [INFERENCE]
 
-## Acceptance trace for #230
+## Acceptance trace for full phase 3 in #230
 
-This phase is complete only when the repository can demonstrate all of the following
-without a real transcript export:
+The full replication/reconciliation phase is complete only when the repository can
+demonstrate all of the following without a real transcript export. Phase 3A in PR
+#273 provides only the source-independent identity, fingerprint, and diff seam; the
+receipt persistence and transactional promotion criteria remain phase 3B/3C work:
 
 - a machine-readable reconciliation receipt identifies source, base head, candidate
   snapshot, counts, diff totals, and verifier/format versions; [INFERENCE]

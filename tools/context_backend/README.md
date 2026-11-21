@@ -91,7 +91,12 @@ uv run --no-project --with pytest python -m pytest tools/context_backend -q
 ```
 
 The canonical repository gate runs the same directory together with the backup and
-mutation tests: `uv run --no-project --with pytest,ruff,pyyaml bash tools/dev/check.sh`.
+mutation tests. This local command may report `SKIP` for unavailable external
+linters; hosted CI installs the pinned tools and runs the same gate with `STRICT=1`:
+
+```bash
+uv run --no-project --with pytest,ruff,pyyaml bash tools/dev/check.sh
+```
 
 The external research and phase plan are recorded in
 `docs/research/context-backend-reconciliation.md`.

@@ -9,7 +9,10 @@ from types import MappingProxyType
 from typing import Any, Iterable, Literal, Mapping
 
 FINGERPRINT_VERSION = "theseus.context.record-fingerprint.v1"
-_PROVENANCE_FIELDS = frozenset(
+# Snapshot-scoped evidence is stored on canonical records but must not make the
+# same logical record look changed on every capture. Adding a new provenance
+# field requires extending this explicit contract and its exhaustive test.
+FINGERPRINT_PROVENANCE_FIELDS = frozenset(
     {
         "snapshot_sha256",
         "source_schema_version",
@@ -41,6 +44,7 @@ class ReconciliationResult:
     """Deterministic diff and summary for one candidate source image."""
 
     source_id: str
+    fingerprint_version: str
     base_snapshot_sha256: str | None
     candidate_snapshot_sha256: str
     counts: Mapping[str, int]
@@ -68,13 +72,17 @@ def _record_key(record: Mapping[str, Any], source_id: str) -> tuple[str, str, st
 
 
 def record_fingerprint(record: Mapping[str, Any]) -> str:
-    """Return a stable hash of logical record data, excluding identity/provenance."""
+    """Hash normalized logical JSON, excluding identity and snapshot provenance.
+
+    Source adapters own canonical number normalization before this boundary; JSON
+    representations such as ``1`` and ``1.0`` intentionally remain distinct here.
+    """
     if not isinstance(record, Mapping):
         raise ReconciliationContractError("record must be a mapping")
     payload = {
         key: value
         for key, value in record.items()
-        if key not in _IDENTITY_FIELDS and key not in _PROVENANCE_FIELDS
+        if key not in _IDENTITY_FIELDS and key not in FINGERPRINT_PROVENANCE_FIELDS
     }
     try:
         encoded = json.dumps(
@@ -182,6 +190,7 @@ def reconcile_records(
 
     return ReconciliationResult(
         source_id=source_id,
+        fingerprint_version=FINGERPRINT_VERSION,
         base_snapshot_sha256=base_cursor,
         candidate_snapshot_sha256=candidate_cursor,
         counts=MappingProxyType(counts),
