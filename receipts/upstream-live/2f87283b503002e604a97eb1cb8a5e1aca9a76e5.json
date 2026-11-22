@@ -1,0 +1,41 @@
+{
+  "schema": "local-lab.upstream-live-acceptance.v1",
+  "status": "VERIFIED",
+  "candidate": {
+    "repo": "TeaShaman-cyber/hermes-otel",
+    "sha": "2f87283b503002e604a97eb1cb8a5e1aca9a76e5",
+    "files": {
+      "hermes_otel/live_store.py": "26cccb99d01c77ed522a139a344d82066495ae0c76d4192f800c1d2249725746",
+      "hermes_otel/live_store_registry.py": "f7cbce6ad84e9f3daa484607236720397ff654c836dcf420a6e8f3bf383a4441",
+      "hermes_otel/pipeline.py": "dae7a3c6c0e59ea2b9ec1a061f063ec5cde4d2ae2ef7ab926631bff3335fb7f2",
+      "hermes_otel/tracer.py": "3279912cd45be90ffb65c8769084b1a203ac1c980b17e5ed270d05be8ac0f09f"
+    }
+  },
+  "runtime": {
+    "gateway_pid": 2612,
+    "plugin_doctor_rc": 0,
+    "plugin_hooks": 34,
+    "tempo_trace_id": "602b965e5fce617bec4187f66fa0e2b0",
+    "tempo_process_pid": 2612,
+    "tempo_service_name": "hermes-agent",
+    "tempo_service_version": "1.33.1",
+    "tempo_api_spans_have_input_output": true,
+    "loki": {
+      "datasource_uid": "grafanacloud-logs",
+      "start": "2026-11-22T20:08:57Z",
+      "end": "2026-11-22T20:23:57Z",
+      "queries": [
+        "{job=\"hermes\"} |~ \"WinError 32|hermes_otel_live.db\""
+      ],
+      "matches": 0
+    }
+  },
+  "verified_at": "2026-11-22T20:26:43Z",
+  "issue_url": "https://github.com/TeaShaman-cyber/local-lab/issues/281",
+  "evidence": {
+    "docker_ci_marker": "DOCKER_UPSTREAM_MAKE_CI_PASS",
+    "tempo_query": "{ resource.process.pid = 2612 && name =~ \"api\\\\..*\" }",
+    "live_hashes_match_candidate": true,
+    "backup_created_before_restart": true
+  }
+}

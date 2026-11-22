@@ -67,7 +67,7 @@ https://github.com/briancaffey/hermes-otel/pull/672:
   reload остаётся закрытый singleton);
 - `hermes_otel/pipeline.py` — shutdown вызывает `release_live_store`.
 
-Текущий follow-up в `local-lab#281` (локальный candidate commit `5c5aef7`) не
+Текущий follow-up в `local-lab#281` (локальный candidate commit `2f87283`) не
 переписывает PR #672 и добавляет более узкую terminal-hardening правку:
 
 - `hermes_otel/live_store.py` — terminal close guard, сериализация `flush()` и
@@ -98,14 +98,19 @@ https://github.com/briancaffey/hermes-otel/pull/672:
   `close()`. Это расхождение сначала показала Lean-модель, затем воспроизвёл
   Python-тест на базе `e23f1d2` (`1` строка) и кандидате до фикса (`0` строк).
 
-Гейт после исправления: focused LiveStore tests `48 passed`; mutation suite
-`M1..M9` — `9/9 killed`, `0 survived`, `0 harness errors`; SHA-256 проверенного
-diff — `b5727820c1729d82f76db3f3b683baaf49ef10001cff4d377e1fc1eb4535e395`.
-Lean negative control теперь называется `preFixAdd`: run
+Исторический gate первоначального candidate `5c5aef7`: focused LiveStore tests
+`48 passed`; mutation suite `M1..M9` — `9/9 killed`, `0 survived`, `0 harness errors`;
+SHA-256 проверенного diff —
+`b5727820c1729d82f76db3f3b683baaf49ef10001cff4d377e1fc1eb4535e395`.
+Для текущего hardening candidate `2f87283` upstream Docker `make ci` завершился
+`DOCKER_UPSTREAM_MAKE_CI_PASS`; live acceptance записана в
+`receipts/upstream-live/2f87283b503002e604a97eb1cb8a5e1aca9a76e5.json`.
+Lean negative control остаётся независимым доказательством сценария: run
 `45002881933`, `LEAN_REJECTED/PASS`, probe SHA-256
 `c80c4cd86906f81c6535e7ab2a4d3563168abd793c5203d505319d2cff94f6b9`.
 
-Следовательно, live сейчас содержит upstream `1.33.1` плюс этот overlay.
+Live сейчас содержит upstream `1.33.1` плюс overlay `2f87283`, но overlay ещё
+не является частью upstream-ветки.
 Проверка базовой lifecycle-правки — `grep -c release_live_store
 hermes_otel/live_store_registry.py` даёт `1`, а `grep on_unload
 hermes_otel/__init__.py` возвращает регистрацию unload callback.
@@ -124,9 +129,12 @@ hermes_otel/__init__.py` возвращает регистрацию unload call
 adapter/dashboard tests переписывают адреса backend’ов и создают ложные массовые
 падения, не связанные с candidate.
 
-Для текущего hardening candidate `2f87283` Docker `make ci` остаётся отдельным
-обязательным gate. Live-install/restart допустим только после `PASS` именно для
-этого SHA; предыдущая live-приёмка `5c5aef7` на новый head не переносится.
+Для текущего hardening candidate `2f87283` upstream Docker `make ci` завершился
+`DOCKER_UPSTREAM_MAKE_CI_PASS`, после чего exact-SHA live acceptance прошла:
+новый gateway PID `2612`, Doctor `rc=0`, Tempo/Loki readback и receipt
+`receipts/upstream-live/2f87283b503002e604a97eb1cb8a5e1aca9a76e5.json`.
+Live-install/restart уже подтверждены, но overlay ещё не является частью
+upstream-ветки.
 
 ## Обновление
 
@@ -177,17 +185,17 @@ scratch/hermes-otel-live-backup-<date>/
 
 Исходный `WinError 32` был связан с unload cleanup и закрыт PR #672. Для
 terminal LiveStore path добавлен follow-up `local-lab#281`. После установки
-candidate `5c5aef7` и controlled restart gateway сменил PID `18880 → 14804`;
-три live production-файла byte-for-byte совпали с кандидатом, а
+candidate `2f87283` и controlled restart gateway сменил PID `11600 → 2612`;
+четыре live production-файла byte-for-byte совпали с кандидатом, а
 `hermes plugins doctor --ci hermes_otel` завершился `rc=0` с 34 hooks.
-Tempo trace `d16c2673f5b5ff002a55637a5b7125eb` содержит свежие спаны PID `14804`,
-service version `1.33.1`, включая `input.value` и `output.value`. Bounded Loki window
-`2026-11-22T08:40:00Z..08:50:00Z` не содержит совпадений по `WinError 32` или
-`hermes_otel_live.db`.
+Tempo trace `602b965e5fce617bec4187f66fa0e2b0` содержит свежие API spans PID
+`2612`, service version `1.33.1`, включая `input.value` и `output.value`.
+Bounded Loki window `2026-11-22T20:08:57Z..20:23:57Z` не содержит совпадений по
+`WinError 32` или `hermes_otel_live.db`.
 
-Это подтверждает текущий rollout, но не является upstream CI и не доказывает
-отсутствие всех будущих race-сценариев. До upstream handoff остаются exact-head
-independent review, fork PR и hosted CI readback.
+Это подтверждает текущий локальный rollout и exact-SHA receipt, но не является
+upstream handoff. До upstream handoff остаются exact-head independent review,
+fork PR и hosted CI readback.
 
 Проверять текущий runtime так:
 
