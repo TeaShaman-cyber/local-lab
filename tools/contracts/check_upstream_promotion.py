@@ -132,7 +132,7 @@ def validate(receipt_path: Path, candidate_repo: Path, expected_sha: str) -> dic
         "runtime.loki.queries: non-empty list of strings required",
     )
     matches = loki.get("matches")
-    require(isinstance(matches, int) and matches >= 0, "runtime.loki.matches: non-negative integer required")
+    require(matches == 0, "runtime.loki.matches must be 0 for VERIFIED acceptance")
 
     verified_at = parse_time(data.get("verified_at"), "verified_at")
     require(verified_at >= end, "verified_at must be at or after the Loki interval")

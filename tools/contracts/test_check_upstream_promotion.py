@@ -135,3 +135,13 @@ def test_loki_queries_cannot_be_empty(tmp_path):
     path.write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(ReceiptError, match="non-empty list"):
         validate(path, repo, sha)
+
+
+def test_loki_error_matches_block_verified_acceptance(tmp_path):
+    repo, sha, digest = candidate(tmp_path)
+    path = receipt(tmp_path, sha, digest)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["runtime"]["loki"]["matches"] = 1
+    path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(ReceiptError, match="matches must be 0"):
+        validate(path, repo, sha)
