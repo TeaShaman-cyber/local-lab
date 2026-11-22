@@ -619,11 +619,11 @@ services:
       plugin_dir: $HERMES_HOME/plugins/hermes_otel
       config: $HERMES_HOME/hermes_otel.yaml
       source_repo: https://github.com/briancaffey/hermes-otel
-      source_sha: e23f1d21d8c4d6898ec2bc295fd4fc63d02378f8
+      source_sha: acef7753628a89878005071de7cfdb3fddee6df1
       local_patch: >-
-        release_live_store + ctx.on_unload (upstream issue #671, PR #672) plus
-        terminal LiveStore close/order follow-up (live-verified local overlay
-        2f87283; upstream main contains this commit via PR #676; local-lab#281)
+        terminal LiveStore close/order follow-up 2f87283, originally tracked in
+        local-lab#281, is now landed upstream via PR #676; current live uses the
+        official upstream head acef775 with no local overlay
       doc: docs/reference/observability/grafana-observability/hermes-otel-plugin.md
       ci_gate:
         image: hermes-otel-ci-base:local
@@ -654,22 +654,20 @@ services:
       найти спаны с resource.process.pid равным текущему PID gateway и убедиться,
       что есть input.value и tool-атрибуты. Признак старой версии — 15 hooks.
     notes: >-
-      Readback 2026-11-22: upstream base 1.33.1 @ e23f1d2 + local candidate
-      2f87283, content_capture=full, capture_logs=true, 34 hooks, Logs -> 1
-      backend. Controlled restart сменил gateway PID 11600 -> 2612; live runtime
-      files byte-for-byte совпали с candidate, `plugins doctor --ci` rc=0. Tempo
-      trace 602b965e5fce617bec4187f66fa0e2b0 содержит свежие API spans PID 2612,
-      service.version 1.33.1, input.value/output.value. Loki window
-      2026-11-22T20:08:57Z..20:23:57Z не содержит `WinError 32` или
+      Readback 2026-11-22: official upstream 1.33.3 @ acef775,
+      content_capture=full, capture_logs=true, 34 hooks, Logs -> 1 backend.
+      Plugin install metadata and manifest match acef775 / 1.33.3. Manual
+      controlled restart сменил gateway PID 2612 -> 23472; live runtime files
+      byte-for-byte совпали с upstream, `plugins doctor --ci` rc=0. Tempo trace
+      e901a8554ad0aac051fac7e5ed5d37e6 contains service.version 1.33.3 and
+      process PID 23472; content trace b8f685eda4baeedc9696fb631d006644 verified
+      input.value/output.value. Loki window
+      2026-11-22T21:25:42Z..21:40:42Z не содержит `WinError 32` или
       `hermes_otel_live.db`. Exact-SHA receipt:
-      receipts/upstream-live/2f87283b503002e604a97eb1cb8a5e1aca9a76e5.json;
-      checker VERIFIED. Mutation gate M1..M9: 9/9 killed; close-window Lean
-      negative control: run 45002881933, PASS. Upstream readback: 2f87283 is an
-      ancestor of current upstream main acef775 via PR #676 (merge 367fbf9),
-      which added follow-up efafbac and later releases. Catalog/install metadata
-      сохраняют local runtime base e23f1d2 + overlay 2f87283; live receipt does
-      not claim the later upstream descendants are installed. Backup и откат —
-      в doc выше.
+      receipts/upstream-live/acef7753628a89878005071de7cfdb3fddee6df1.json;
+      checker VERIFIED. Previous 2f87283 receipt remains the local overlay
+      acceptance record; current live no longer has a local overlay. Backup и
+      откат — в doc выше.
 
   - id: INFRA-025
     name: context-backend-postgres
