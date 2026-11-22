@@ -65,7 +65,7 @@ def git_blob(repo: Path, sha: str, relative_path: str) -> bytes:
     return proc.stdout
 
 
-def validate(receipt_path: Path, candidate_repo: Path, expected_sha: str | None) -> dict[str, Any]:
+def validate(receipt_path: Path, candidate_repo: Path, expected_sha: str) -> dict[str, Any]:
     try:
         data = json.loads(receipt_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -80,8 +80,11 @@ def validate(receipt_path: Path, candidate_repo: Path, expected_sha: str | None)
     require(isinstance(repo_name, str) and "/" in repo_name, "candidate.repo: owner/repo required")
     sha = candidate.get("sha")
     require(isinstance(sha, str) and SHA40.fullmatch(sha) is not None, "candidate.sha: 40 lowercase hex required")
-    if expected_sha is not None:
-        require(sha == expected_sha, f"STALE: receipt sha {sha} != expected {expected_sha}")
+    require(
+        isinstance(expected_sha, str) and SHA40.fullmatch(expected_sha) is not None,
+        "expected SHA: independently supplied 40 lowercase hex required",
+    )
+    require(sha == expected_sha, f"STALE: receipt sha {sha} != expected {expected_sha}")
     require(receipt_path.stem == sha, f"receipt filename must be {sha}.json")
 
     resolved = git("rev-parse", f"{sha}^{{commit}}", repo=candidate_repo)
@@ -122,7 +125,12 @@ def validate(receipt_path: Path, candidate_repo: Path, expected_sha: str | None)
     require(end > start, "runtime.loki: end must be after start")
     require((end - start).total_seconds() <= 3600, "runtime.loki: interval must be bounded to <= 1 hour")
     queries = loki.get("queries")
-    require(isinstance(queries, list) and all(isinstance(q, str) and q for q in queries), "runtime.loki.queries: non-empty strings required")
+    require(
+        isinstance(queries, list)
+        and bool(queries)
+        and all(isinstance(q, str) and q for q in queries),
+        "runtime.loki.queries: non-empty list of strings required",
+    )
     matches = loki.get("matches")
     require(isinstance(matches, int) and matches >= 0, "runtime.loki.matches: non-negative integer required")
 
@@ -151,9 +159,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--receipt", type=Path, required=True)
     parser.add_argument("--candidate-repo", type=Path, required=True)
-    parser.add_argument("--expected-sha")
+    parser.add_argument("--expected-sha", required=True)
     args = parser.parse_args()
-    if args.expected_sha is not None and SHA40.fullmatch(args.expected_sha) is None:
+    if SHA40.fullmatch(args.expected_sha) is None:
         print("BLOCKED: --expected-sha must be 40 lowercase hex", file=sys.stderr)
         return 2
     try:

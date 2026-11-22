@@ -84,6 +84,12 @@ def test_receipt_from_previous_head_fails_closed(tmp_path):
         validate(receipt(tmp_path, sha, digest), repo, "0" * 40)
 
 
+def test_expected_head_cannot_be_omitted(tmp_path):
+    repo, sha, digest = candidate(tmp_path)
+    with pytest.raises(ReceiptError, match="independently supplied"):
+        validate(receipt(tmp_path, sha, digest), repo, None)
+
+
 def test_candidate_file_hash_drift_fails_closed(tmp_path):
     repo, sha, _digest = candidate(tmp_path)
     with pytest.raises(ReceiptError, match="STALE: hermes_otel/live_store.py hash"):
@@ -118,4 +124,14 @@ def test_loki_window_must_be_bounded(tmp_path):
     data["verified_at"] = "2026-11-22T10:51:00Z"
     path.write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(ReceiptError, match="interval must be bounded"):
+        validate(path, repo, sha)
+
+
+def test_loki_queries_cannot_be_empty(tmp_path):
+    repo, sha, digest = candidate(tmp_path)
+    path = receipt(tmp_path, sha, digest)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["runtime"]["loki"]["queries"] = []
+    path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(ReceiptError, match="non-empty list"):
         validate(path, repo, sha)
