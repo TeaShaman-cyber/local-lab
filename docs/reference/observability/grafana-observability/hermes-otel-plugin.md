@@ -7,15 +7,15 @@
 ## Текущее состояние
 
 ```text
-версия     1.33.1
-источник   https://github.com/briancaffey/hermes-otel @ e23f1d21d8c4d6898ec2bc295fd4fc63d02378f8
-патч       upstream PR #672 + локальный terminal LiveStore follow-up (#281)
+версия     1.33.3
+источник   https://github.com/briancaffey/hermes-otel @ acef7753628a89878005071de7cfdb3fddee6df1
+патч       upstream PR #672 + PR #676 (наш terminal LiveStore follow-up и maintainer follow-up)
 хуки       34
 ```
 
-Состояние выше относится к live gateway после controlled restart 2026-11-22.
-Upstream PR #672 уже слит; follow-up из `#281` пока является локальным overlay
-и не должен считаться частью upstream `1.33.1`.
+Состояние выше относится к live gateway после ручного controlled restart
+2026-11-22. Текущий live использует официальный upstream `1.33.3`; локального
+overlay больше нет.
 
 Проверенный признак живого маршрута — строка в `hermes gateway status`:
 
@@ -67,8 +67,9 @@ https://github.com/briancaffey/hermes-otel/pull/672:
   reload остаётся закрытый singleton);
 - `hermes_otel/pipeline.py` — shutdown вызывает `release_live_store`.
 
-Текущий follow-up в `local-lab#281` (локальный candidate commit `2f87283`) не
-переписывает PR #672 и добавляет более узкую terminal-hardening правку:
+Follow-up из `local-lab#281` (candidate `2f87283`) теперь вошёл в upstream PR #676
+вместе с дополнительной maintainer-правкой `efafbac`; ниже зафиксировано, что
+именно проверялось в этом классе shutdown-проблем:
 
 - `hermes_otel/live_store.py` — terminal close guard, сериализация `flush()` и
   `close()`, запрет повторного открытия SQLite после terminal close; строка,
@@ -129,14 +130,17 @@ hermes_otel/__init__.py` возвращает регистрацию unload call
 adapter/dashboard tests переписывают адреса backend’ов и создают ложные массовые
 падения, не связанные с candidate.
 
-Для текущего hardening candidate `2f87283` upstream Docker `make ci` завершился
-`DOCKER_UPSTREAM_MAKE_CI_PASS`, после чего exact-SHA live acceptance прошла:
-новый gateway PID `2612`, Doctor `rc=0`, Tempo/Loki readback и receipt
-`receipts/upstream-live/2f87283b503002e604a97eb1cb8a5e1aca9a76e5.json`.
-Upstream handoff теперь также подтверждён: `2f87283` является предком текущего
-upstream `main` `acef775` через PR #676 (`367fbf9` merge). Live runtime всё ещё
-явно описан как base `e23f1d2` + overlay `2f87283`; это не утверждает, что
-последующие upstream descendants и releases уже установлены в live.
+Для официального upstream `acef775` Docker gate уже был пройден ранее; текущая
+live-приёмка зафиксирована отдельным receipt:
+
+- install metadata и `plugin.yaml`: upstream `acef775`, version `1.33.3`;
+- manual controlled restart: gateway PID `2612 → 23472`;
+- Doctor: `rc=0`, 34 hooks;
+- Tempo trace `e901a8554ad0aac051fac7e5ed5d37e6`: PID `23472`, version `1.33.3`;
+- Loki bounded query: `0` совпадений;
+- receipt: `receipts/upstream-live/acef7753628a89878005071de7cfdb3fddee6df1.json`.
+
+Текущий live теперь использует официальный upstream без локального overlay.
 
 ## Обновление
 
@@ -147,10 +151,10 @@ upstream `main` `acef775` через PR #676 (`367fbf9` merge). Live runtime в�
 1. backup:  плагин + hermes_otel.yaml  (scratch/hermes-otel-live-backup-<date>)
 2. hermes plugins install briancaffey/hermes-otel/hermes_otel \
        --force --ref <40-char-sha> --yes-deps --enable
-3. проверить, что `plugin.yaml` действительно сменил version на `1.33.1`;
+3. проверить, что `plugin.yaml` действительно сменил version на `1.33.3`;
    если нет — скопировать дерево из worktree нужного SHA вручную
-4. убедиться, что установлен upstream base `e23f1d21...`;
-5. наложить только актуальный локальный overlay из `local-lab#281`;
+4. убедиться, что установлен официальный upstream `acef775...`;
+5. не накладывать старый локальный overlay: его изменения уже вошли в PR #676;
 6. hermes pm repair           # зависимости (1.33 требует exporter-otlp-proto-grpc)
 7. hermes plugins doctor --ci hermes_otel
 8. hermes gateway restart     # из ОТДЕЛЬНОГО shell: изнутри gateway запрещено
@@ -185,20 +189,22 @@ scratch/hermes-otel-live-backup-<date>/
 
 ## Известный остаток
 
-Исходный `WinError 32` был связан с unload cleanup и закрыт PR #672. Для
-terminal LiveStore path добавлен follow-up `local-lab#281`. После установки
-candidate `2f87283` и controlled restart gateway сменил PID `11600 → 2612`;
-четыре live production-файла byte-for-byte совпали с кандидатом, а
-`hermes plugins doctor --ci hermes_otel` завершился `rc=0` с 34 hooks.
-Tempo trace `602b965e5fce617bec4187f66fa0e2b0` содержит свежие API spans PID
-`2612`, service version `1.33.1`, включая `input.value` и `output.value`.
-Bounded Loki window `2026-11-22T20:08:57Z..20:23:57Z` не содержит совпадений по
-`WinError 32` или `hermes_otel_live.db`.
+Исходный `WinError 32` был связан с unload cleanup и закрыт PR #672. Follow-up
+из `local-lab#281` вошёл в upstream PR #676 вместе с maintainer follow-up.
+После установки официального upstream `acef775` и ручного controlled restart
+на gateway сменился PID `2612 → 23472`; четыре live production-файла
+byte-for-byte совпали с upstream, а `hermes plugins doctor --ci hermes_otel`
+завершился `rc=0` с 34 hooks.
+Tempo trace `e901a8554ad0aac051fac7e5ed5d37e6` содержит service version `1.33.3`
+и PID `23472`; content trace `b8f685eda4baeedc9696fb631d006644` подтвердил
+`input.value` и `output.value`. Bounded Loki window
+`2026-11-22T21:25:42Z..21:40:42Z` не содержит совпадений по `WinError 32` или
+`hermes_otel_live.db`.
 
-Это подтверждает текущий локальный rollout, exact-SHA receipt и upstream handoff:
-`2f87283` вошёл в историю текущего upstream `main` через PR #676. Это не
-доказывает, что последующие upstream releases уже установлены в этот live
-runtime. Проверять дальнейшее обновление live нужно отдельным exact-SHA rollout.
+Exact-SHA receipt:
+`receipts/upstream-live/acef7753628a89878005071de7cfdb3fddee6df1.json`;
+checker `VERIFIED`. Текущий live использует официальный upstream `1.33.3` без
+локального overlay.
 
 Проверять текущий runtime так:
 
@@ -211,7 +217,7 @@ hermes gateway status                    # 34 hooks, Logs -> 1 backend(s)
 
 ```text
 # трейсы хода
-{ resource.service.name = "hermes-agent" && resource.service.version = "1.33.1" }
+{ resource.service.name = "hermes-agent" && resource.service.version = "1.33.3" }
 # содержимое
 { name =~ "api\\..*" } -> input.value / output.value присутствуют
 ```
