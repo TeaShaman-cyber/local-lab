@@ -70,6 +70,14 @@ local working tree -> local branch -> tracking ref -> live remote ref -> GitHub 
 - Мерж — по точному head: `gh pr merge --match-head-commit <sha>`; ветку не удалять, если проектом не решено иначе.
 - Комментарий бота с findings — не шум: P1/P2 закрывать правкой или явным ответом, «gate pass» этого не заменяет.
 
+### Upstream handoff
+
+- Ветка форка, уже питающая внешний upstream PR, — публикационная поверхность: push в неё равен изменению upstream PR, хотя репозиторий project-owned.
+- Работу вести в `candidate/*`; upstream-linked ветка продвигается только через fork PR после QA, exact-head review и **live acceptance того же 40-символьного SHA**.
+- Старый live receipt не переносится на новый head. `tests=PASS`, Docker CI, mutation, model checking и чистый Codex review не заменяют установку exact SHA, controlled restart и readback живого runtime.
+- До продвижения проверить receipt командой `python tools/contracts/check_upstream_promotion.py`; missing/mismatched receipt — `BLOCKED` или `REPROBE_REQUIRED`, не повод пушить «пока CI идёт».
+- Процедура, схема receipt и восстановление после преждевременной публикации: `docs/reference/upstream-promotion.md`.
+
 ### PostHog после Codex-ревью — отдельный шаг основного агента
 
 При каждом разборе ревью Codex-бота для PR в `TeaShaman-cyber/local-lab`

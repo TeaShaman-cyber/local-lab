@@ -622,9 +622,29 @@ services:
       source_sha: e23f1d21d8c4d6898ec2bc295fd4fc63d02378f8
       local_patch: >-
         release_live_store + ctx.on_unload (upstream issue #671, PR #672) plus
-        terminal LiveStore close/order follow-up (local candidate 5c5aef7,
-        local-lab#281; not upstream yet)
+        terminal LiveStore close/order follow-up (live-verified local overlay
+        2f87283; upstream main contains this commit via PR #676; local-lab#281)
       doc: docs/reference/observability/grafana-observability/hermes-otel-plugin.md
+      ci_gate:
+        image: hermes-otel-ci-base:local
+        image_digest: sha256:2c1b59b798a2148be3cab3f39eca38ecbf2322958dc48389114afdcd1c0f0b3b
+        runtime: Docker Desktop Linux VM
+        purpose: >-
+          persistent local runner for the upstream repository's `make ci` on an
+          exact hermes-otel candidate before live installation or upstream handoff
+        command: >-
+          inside the image: remove `/.dockerenv`, unset
+          `HERMES_OTEL_QUERY_HOST`, apply the exact candidate patch to upstream
+          base e23f1d2, then run `make ci`
+        cache_volumes:
+          uv: hermes-otel-uv-cache:/root/.cache/uv
+          npm: hermes-otel-npm-cache:/root/.npm
+        run_lifecycle: >-
+          each CI container is ephemeral (`--rm`); the image and cache volumes
+          are persistent local infrastructure
+        housekeeping: >-
+          cleanup and pruning are a separate Docker housekeeping task; do not
+          remove this image or these cache volumes during the CI gate
     monitoring: >-
       Сам является источником телеметрии. Живость — строки `hermes gateway status`
       (версия, 34 хука, content_capture=full, Logs → 1 backend) плюс свежие спаны
@@ -635,15 +655,21 @@ services:
       что есть input.value и tool-атрибуты. Признак старой версии — 15 hooks.
     notes: >-
       Readback 2026-11-22: upstream base 1.33.1 @ e23f1d2 + local candidate
-      5c5aef7, content_capture=full, capture_logs=true, 34 hooks, Logs -> 1
-      backend. Controlled restart сменил gateway PID 18880 -> 14804; live files
-      совпали с candidate, `plugins doctor --ci` rc=0, Tempo trace
-      d16c2673f5b5ff002a55637a5b7125eb содержит свежие спаны PID 14804 с
-      input.value/output.value. Loki window 2026-11-22T08:40:00Z..08:50:00Z
-      не содержит `WinError 32` или `hermes_otel_live.db`.
-      Mutation gate M1..M9: 9/9 killed; close-window Lean negative control:
-      run 45002881933, PASS. Catalog/install metadata согласованы с upstream
-      base e23f1d2; overlay назван отдельно. Backup и откат — в doc выше.
+      2f87283, content_capture=full, capture_logs=true, 34 hooks, Logs -> 1
+      backend. Controlled restart сменил gateway PID 11600 -> 2612; live runtime
+      files byte-for-byte совпали с candidate, `plugins doctor --ci` rc=0. Tempo
+      trace 602b965e5fce617bec4187f66fa0e2b0 содержит свежие API spans PID 2612,
+      service.version 1.33.1, input.value/output.value. Loki window
+      2026-11-22T20:08:57Z..20:23:57Z не содержит `WinError 32` или
+      `hermes_otel_live.db`. Exact-SHA receipt:
+      receipts/upstream-live/2f87283b503002e604a97eb1cb8a5e1aca9a76e5.json;
+      checker VERIFIED. Mutation gate M1..M9: 9/9 killed; close-window Lean
+      negative control: run 45002881933, PASS. Upstream readback: 2f87283 is an
+      ancestor of current upstream main acef775 via PR #676 (merge 367fbf9),
+      which added follow-up efafbac and later releases. Catalog/install metadata
+      сохраняют local runtime base e23f1d2 + overlay 2f87283; live receipt does
+      not claim the later upstream descendants are installed. Backup и откат —
+      в doc выше.
 
   - id: INFRA-025
     name: context-backend-postgres
