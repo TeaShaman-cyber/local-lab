@@ -67,15 +67,43 @@ https://github.com/briancaffey/hermes-otel/pull/672:
   reload остаётся закрытый singleton);
 - `hermes_otel/pipeline.py` — shutdown вызывает `release_live_store`.
 
-Текущий follow-up в `local-lab#281` не переписывает PR #672 и добавляет более
-узкую terminal-hardening правку:
+Текущий follow-up в `local-lab#281` (локальный candidate commit `5c5aef7`) не
+переписывает PR #672 и добавляет более узкую terminal-hardening правку:
 
 - `hermes_otel/live_store.py` — terminal close guard, сериализация `flush()` и
-  `close()`, запрет повторного открытия SQLite после terminal close;
+  `close()`, запрет повторного открытия SQLite после terminal close; строка,
+  принятая во время `close()`, сохраняется для terminal flush, а отказ после
+  `_closed` считается в `dropped_after_close` вместо молчаливой потери;
+- `hermes_otel/live_store_registry.py` — store остаётся зарегистрированным до
+  доказанного успешного close, чтобы ошибка terminal flush сохраняла владельца
+  и допускала повторную попытку;
 - `hermes_otel/pipeline.py` — release store после остановки providers/logger и
   снятия log handler;
 - unit/integration regression tests для repeated shutdown и concurrent
   flush/close.
+
+### Что дополнительно поймало усиление
+
+Исходная проблема была уже не только в `WinError 32` при unload. Проверка класса,
+а не одного случая, обнаружила ещё несколько независимых границ:
+
+- `close()` мог пересечься с обычным `flush()` и снова открыть SQLite после
+  terminal close;
+- store удалялся из registry до доказанного успешного close, поэтому retry
+  терял владельца и pending rows;
+- pipeline мог освободить store раньше providers/logger, которые ещё способны
+  записать событие;
+- timed-out writer мог потерять сильную ссылку до фактического завершения;
+- первая версия terminal guard молча выбрасывала строку, принятую во время
+  `close()`. Это расхождение сначала показала Lean-модель, затем воспроизвёл
+  Python-тест на базе `e23f1d2` (`1` строка) и кандидате до фикса (`0` строк).
+
+Гейт после исправления: focused LiveStore tests `48 passed`; mutation suite
+`M1..M9` — `9/9 killed`, `0 survived`, `0 harness errors`; SHA-256 проверенного
+diff — `b5727820c1729d82f76db3f3b683baaf49ef10001cff4d377e1fc1eb4535e395`.
+Lean negative control теперь называется `preFixAdd`: run
+`45002881933`, `LEAN_REJECTED/PASS`, probe SHA-256
+`c80c4cd86906f81c6535e7ab2a4d3563168abd793c5203d505319d2cff94f6b9`.
 
 Следовательно, live сейчас содержит upstream `1.33.1` плюс этот overlay.
 Проверка базовой lifecycle-правки — `grep -c release_live_store
@@ -107,12 +135,11 @@ hermes_otel/__init__.py` возвращает регистрацию unload call
 `plugins/.install-metadata.json` (`revision`, `catalog.sha`) должны указывать на
 тот же SHA, иначе следующий `check-updates` покажет ложный дрейф.
 
-После текущего ручного rollout это правило выявило реальный drift: live
-`plugin.yaml` уже `1.33.1`, а `.hermes-catalog.json` и
-`plugins/.install-metadata.json` всё ещё содержат catalog SHA
-`32554cf76c8dbeb8d382eaff9007112abf3f7b2c` от `1.33.0`. До следующего
-managed install/update metadata нужно безопасно reconcile-нуть; не считать
-этот drift исправленным только потому, что код и telemetry уже работают.
+После первого ручного rollout это правило выявило реальный drift: live
+`plugin.yaml` был `1.33.1`, а metadata всё ещё указывала на `1.33.0`. Во время
+приёмки candidate `5c5aef7` `.hermes-catalog.json` и
+`plugins/.install-metadata.json` согласованы с upstream base `e23f1d21...`;
+локальный overlay остаётся отдельно названным и не выдаётся за upstream SHA.
 
 ## Откат
 
@@ -124,21 +151,25 @@ scratch/hermes-otel-live-backup-<date>/
 ```
 
 Для текущего rollout проверенный backup находится в
-`scratch/hermes-otel-live-backup-20261122-000327/`. После отката —
+`scratch/hermes-otel-live-backup-20261122-104445/`. После отката —
 `hermes gateway restart` из внешнего shell и readback версии/hooks/traces;
 ожидать `Registered 15 hooks` можно только при откате на 1.18.2.
 
 ## Известный остаток
 
 Исходный `WinError 32` был связан с unload cleanup и закрыт PR #672. Для
-terminal LiveStore path добавлен follow-up `local-lab#281`; после его live
-rollout текущий `hermes plugins doctor --ci hermes_otel` завершился `rc=0`, а
-bounded Loki window после restart не содержит совпадений по `WinError 32` или
+terminal LiveStore path добавлен follow-up `local-lab#281`. После установки
+candidate `5c5aef7` и controlled restart gateway сменил PID `18880 → 14804`;
+три live production-файла byte-for-byte совпали с кандидатом, а
+`hermes plugins doctor --ci hermes_otel` завершился `rc=0` с 34 hooks.
+Tempo trace `d16c2673f5b5ff002a55637a5b7125eb` содержит свежие спаны PID `14804`,
+service version `1.33.1`, включая `input.value` и `output.value`. Bounded Loki window
+`2026-11-22T08:40:00Z..08:50:00Z` не содержит совпадений по `WinError 32` или
 `hermes_otel_live.db`.
 
 Это подтверждает текущий rollout, но не является upstream CI и не доказывает
 отсутствие всех будущих race-сценариев. До upstream handoff остаются exact-head
-independent review, fork PR, hosted CI readback и reconcile metadata drift.
+independent review, fork PR и hosted CI readback.
 
 Проверять текущий runtime так:
 
