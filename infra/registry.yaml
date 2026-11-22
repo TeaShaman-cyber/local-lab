@@ -622,9 +622,30 @@ services:
       source_sha: e23f1d21d8c4d6898ec2bc295fd4fc63d02378f8
       local_patch: >-
         release_live_store + ctx.on_unload (upstream issue #671, PR #672) plus
-        terminal LiveStore close/order follow-up (local candidate 5c5aef7,
-        local-lab#281; not upstream yet)
+        terminal LiveStore close/order follow-up (live-verified local overlay
+        5c5aef7; current hardening candidate 2f87283, local-lab#281; not
+        upstream yet)
       doc: docs/reference/observability/grafana-observability/hermes-otel-plugin.md
+      ci_gate:
+        image: hermes-otel-ci-base:local
+        image_digest: sha256:2c1b59b798a2148be3cab3f39eca38ecbf2322958dc48389114afdcd1c0f0b3b
+        runtime: Docker Desktop Linux VM
+        purpose: >-
+          persistent local runner for the upstream repository's `make ci` on an
+          exact hermes-otel candidate before live installation or upstream handoff
+        command: >-
+          inside the image: remove `/.dockerenv`, unset
+          `HERMES_OTEL_QUERY_HOST`, apply the exact candidate patch to upstream
+          base e23f1d2, then run `make ci`
+        cache_volumes:
+          uv: hermes-otel-uv-cache:/root/.cache/uv
+          npm: hermes-otel-npm-cache:/root/.npm
+        run_lifecycle: >-
+          each CI container is ephemeral (`--rm`); the image and cache volumes
+          are persistent local infrastructure
+        housekeeping: >-
+          cleanup and pruning are a separate Docker housekeeping task; do not
+          remove this image or these cache volumes during the CI gate
     monitoring: >-
       Сам является источником телеметрии. Живость — строки `hermes gateway status`
       (версия, 34 хука, content_capture=full, Logs → 1 backend) плюс свежие спаны

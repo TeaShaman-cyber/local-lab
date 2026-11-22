@@ -110,6 +110,24 @@ Lean negative control теперь называется `preFixAdd`: run
 hermes_otel/live_store_registry.py` даёт `1`, а `grep on_unload
 hermes_otel/__init__.py` возвращает регистрацию unload callback.
 
+## Upstream CI runner
+
+Локальный Docker-runner для upstream `make ci` является постоянной частью
+инфраструктуры `INFRA-024`, а не одноразовым экспериментом. Его назначение —
+проверять exact candidate SHA на upstream base до live-install и upstream handoff.
+Сам контейнер каждого прогона одноразовый; image и dependency caches сохраняются
+для следующей задачи по этому плагину. Канонические имена, digest, volumes и
+команда находятся в `infra/registry.yaml` под `INFRA-024.location.ci_gate`.
+
+В runner нельзя переносить host-specific probe environment в полный CI. Перед
+`make ci` удаляется `/.dockerenv`, а `HERMES_OTEL_QUERY_HOST` не задаётся. Иначе
+adapter/dashboard tests переписывают адреса backend’ов и создают ложные массовые
+падения, не связанные с candidate.
+
+Для текущего hardening candidate `2f87283` Docker `make ci` остаётся отдельным
+обязательным gate. Live-install/restart допустим только после `PASS` именно для
+этого SHA; предыдущая live-приёмка `5c5aef7` на новый head не переносится.
+
 ## Обновление
 
 `hermes plugins update hermes_otel` для этого плагина не работает: каталог видит

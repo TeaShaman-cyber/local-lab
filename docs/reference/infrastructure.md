@@ -36,6 +36,35 @@ PY
 и Langfuse (трейсы LLM). Реестр ссылается на них в поле `monitoring` и не
 дублирует проверки.
 
+## Постоянный Docker-runner для upstream CI
+
+У `INFRA-024` есть постоянный локальный CI-ресурс в поле
+`location.ci_gate`. Он нужен не для запуска Hermes и не для production, а для
+одинакового upstream-маршрута перед live-install: точный candidate patch
+накладывается на upstream base и проверяется штатной командой `make ci` внутри
+Linux Docker runtime. Windows-host запуск не считается заменой: он уже давал
+ложные dashboard-падения из-за платформенной подмены адресов.
+
+Граница состояния такая:
+
+```text
+candidate SHA → Docker make ci PASS → live-install/restart
+```
+
+Индивидуальный CI-контейнер одноразовый (`--rm`), но image и кэши зависимостей
+являются постоянной локальной инфраструктурой. Точные image digest, volume names,
+команда и назначение — только в `infra/registry.yaml` под `INFRA-024`; здесь не
+создаётся второй список фактов.
+
+Перед `make ci` обязательны две защиты от ложного результата:
+
+- удалить `/.dockerenv`, чтобы код не включал Docker-specific host rewriting;
+- не задавать `HERMES_OTEL_QUERY_HOST`, если это не отдельный runtime probe.
+
+Из-за этих двух границ предыдущие прогоны могли дать сотни падений dashboard
+tests без дефекта в candidate. Образ и cache volumes не удалять во время этого
+CI-gate: Docker housekeeping и pruning — отдельная последующая задача.
+
 ## Правила
 
 ### RULE-001 — установка без мониторинга не считается установкой
