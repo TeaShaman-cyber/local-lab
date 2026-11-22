@@ -133,8 +133,10 @@ adapter/dashboard tests переписывают адреса backend’ов и 
 `DOCKER_UPSTREAM_MAKE_CI_PASS`, после чего exact-SHA live acceptance прошла:
 новый gateway PID `2612`, Doctor `rc=0`, Tempo/Loki readback и receipt
 `receipts/upstream-live/2f87283b503002e604a97eb1cb8a5e1aca9a76e5.json`.
-Live-install/restart уже подтверждены, но overlay ещё не является частью
-upstream-ветки.
+Upstream handoff теперь также подтверждён: `2f87283` является предком текущего
+upstream `main` `acef775` через PR #676 (`367fbf9` merge). Live runtime всё ещё
+явно описан как base `e23f1d2` + overlay `2f87283`; это не утверждает, что
+последующие upstream descendants и releases уже установлены в live.
 
 ## Обновление
 
@@ -193,9 +195,10 @@ Tempo trace `602b965e5fce617bec4187f66fa0e2b0` содержит свежие API
 Bounded Loki window `2026-11-22T20:08:57Z..20:23:57Z` не содержит совпадений по
 `WinError 32` или `hermes_otel_live.db`.
 
-Это подтверждает текущий локальный rollout и exact-SHA receipt, но не является
-upstream handoff. До upstream handoff остаются exact-head independent review,
-fork PR и hosted CI readback.
+Это подтверждает текущий локальный rollout, exact-SHA receipt и upstream handoff:
+`2f87283` вошёл в историю текущего upstream `main` через PR #676. Это не
+доказывает, что последующие upstream releases уже установлены в этот live
+runtime. Проверять дальнейшее обновление live нужно отдельным exact-SHA rollout.
 
 Проверять текущий runtime так:
 

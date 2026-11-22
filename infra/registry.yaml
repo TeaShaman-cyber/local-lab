@@ -623,7 +623,7 @@ services:
       local_patch: >-
         release_live_store + ctx.on_unload (upstream issue #671, PR #672) plus
         terminal LiveStore close/order follow-up (live-verified local overlay
-        2f87283; local-lab#281; not upstream yet)
+        2f87283; upstream main contains this commit via PR #676; local-lab#281)
       doc: docs/reference/observability/grafana-observability/hermes-otel-plugin.md
       ci_gate:
         image: hermes-otel-ci-base:local
@@ -664,8 +664,11 @@ services:
       `hermes_otel_live.db`. Exact-SHA receipt:
       receipts/upstream-live/2f87283b503002e604a97eb1cb8a5e1aca9a76e5.json;
       checker VERIFIED. Mutation gate M1..M9: 9/9 killed; close-window Lean
-      negative control: run 45002881933, PASS. Catalog/install metadata
-      сохраняют upstream base e23f1d2; overlay назван отдельно. Backup и откат —
+      negative control: run 45002881933, PASS. Upstream readback: 2f87283 is an
+      ancestor of current upstream main acef775 via PR #676 (merge 367fbf9),
+      which added follow-up efafbac and later releases. Catalog/install metadata
+      сохраняют local runtime base e23f1d2 + overlay 2f87283; live receipt does
+      not claim the later upstream descendants are installed. Backup и откат —
       в doc выше.
 
   - id: INFRA-025
