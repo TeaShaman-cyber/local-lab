@@ -622,7 +622,8 @@ services:
       source_sha: e23f1d21d8c4d6898ec2bc295fd4fc63d02378f8
       local_patch: >-
         release_live_store + ctx.on_unload (upstream issue #671, PR #672) plus
-        terminal LiveStore close/order follow-up (local-lab#281; not upstream yet)
+        terminal LiveStore close/order follow-up (local candidate 5c5aef7,
+        local-lab#281; not upstream yet)
       doc: docs/reference/observability/grafana-observability/hermes-otel-plugin.md
     monitoring: >-
       Сам является источником телеметрии. Живость — строки `hermes gateway status`
@@ -633,14 +634,16 @@ services:
       найти спаны с resource.process.pid равным текущему PID gateway и убедиться,
       что есть input.value и tool-атрибуты. Признак старой версии — 15 hooks.
     notes: >-
-      Readback 2026-11-22: upstream base 1.33.1 @ e23f1d2 + локальный
-      terminal LiveStore follow-up, content_capture=full, capture_logs=true,
-      tool commands/targets/errors включены, 34 hooks, Logs -> 1 backend(s),
-      свежий Tempo trace после restart, `plugins doctor --ci` rc=0. Bounded
-      Loki window после rollout не содержит `WinError 32` или
-      `hermes_otel_live.db`; это live evidence, не upstream CI. Backup и
-      процедура отката — в doc выше. Catalog/install metadata ещё drift'ят на
-      1.33.0 SHA `32554cf...` и требуют отдельного reconcile.
+      Readback 2026-11-22: upstream base 1.33.1 @ e23f1d2 + local candidate
+      5c5aef7, content_capture=full, capture_logs=true, 34 hooks, Logs -> 1
+      backend. Controlled restart сменил gateway PID 18880 -> 14804; live files
+      совпали с candidate, `plugins doctor --ci` rc=0, Tempo trace
+      d16c2673f5b5ff002a55637a5b7125eb содержит свежие спаны PID 14804 с
+      input.value/output.value. Loki window 2026-11-22T08:40:00Z..08:50:00Z
+      не содержит `WinError 32` или `hermes_otel_live.db`.
+      Mutation gate M1..M9: 9/9 killed; close-window Lean negative control:
+      run 45002881933, PASS. Catalog/install metadata согласованы с upstream
+      base e23f1d2; overlay назван отдельно. Backup и откат — в doc выше.
 
   - id: INFRA-025
     name: context-backend-postgres
