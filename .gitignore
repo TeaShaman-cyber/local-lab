@@ -40,3 +40,5 @@ snapshots/
 session.sqlite
 shard-meta.json
 shard-result.json
+specd.local.yaml
+.specd/config/

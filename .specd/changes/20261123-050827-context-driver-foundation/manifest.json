@@ -1,0 +1,281 @@
+{
+  "name": "context-driver-foundation",
+  "createdAt": "2026-11-23T05:08:27.476Z",
+  "description": "Adopt official SpecD lifecycle and establish the normative context-driver contract without changing runtime authority or live integrations.",
+  "schema": {
+    "name": "schema-std",
+    "version": 1
+  },
+  "specIds": [
+    "default:context-driver/core-contract"
+  ],
+  "artifacts": [
+    {
+      "type": "proposal",
+      "optional": false,
+      "requires": [],
+      "state": "complete",
+      "files": [
+        {
+          "key": "proposal",
+          "filename": "proposal.md",
+          "state": "complete",
+          "validatedHash": "sha256:0ffff1d00e52f50cb5105f56839b954dcfe4970a14b4ad5ee3b0781916392f52"
+        }
+      ]
+    },
+    {
+      "type": "specs",
+      "optional": false,
+      "requires": [
+        "proposal"
+      ],
+      "state": "complete",
+      "files": [
+        {
+          "key": "default:context-driver/core-contract",
+          "filename": "specs/default/context-driver/core-contract/spec.md",
+          "state": "complete",
+          "validatedHash": "sha256:84dc550ab83479bd7280be27b35d770342e96d4d96a4216e9c3a2afe79da5444"
+        }
+      ]
+    },
+    {
+      "type": "verify",
+      "optional": false,
+      "requires": [
+        "specs"
+      ],
+      "state": "complete",
+      "files": [
+        {
+          "key": "default:context-driver/core-contract",
+          "filename": "specs/default/context-driver/core-contract/verify.md",
+          "state": "complete",
+          "validatedHash": "sha256:bff9095d0797763f7c4ef7cfa68c1b6a1c41bdb316a3c89bd1073a7612d77e78"
+        }
+      ]
+    },
+    {
+      "type": "design",
+      "optional": false,
+      "requires": [
+        "proposal",
+        "specs",
+        "verify"
+      ],
+      "state": "complete",
+      "files": [
+        {
+          "key": "design",
+          "filename": "design.md",
+          "state": "complete",
+          "validatedHash": "sha256:3a4f5536aeef3996b9860f2d34f8abefde3abb051644fe231803b177f7a9391d"
+        }
+      ]
+    },
+    {
+      "type": "tasks",
+      "optional": false,
+      "requires": [
+        "specs",
+        "design"
+      ],
+      "state": "complete",
+      "files": [
+        {
+          "key": "tasks",
+          "filename": "tasks.md",
+          "state": "complete",
+          "validatedHash": "sha256:cc40ad0f88ba9e6788c5d29858cd57602f304aa8400ab10bc2633130ad45a2c5"
+        }
+      ]
+    }
+  ],
+  "history": [
+    {
+      "type": "created",
+      "at": "2026-11-23T05:08:27.476Z",
+      "by": {
+        "name": "TeaShaman-cyber",
+        "email": "pokladsemen@gmail.com"
+      },
+      "specIds": [
+        "default:context-driver/core-contract"
+      ],
+      "schemaName": "schema-std",
+      "schemaVersion": 1
+    },
+    {
+      "type": "artifacts-synced",
+      "at": "2026-11-23T05:08:27.507Z",
+      "by": {
+        "name": "specd",
+        "email": "system@getspecd.dev"
+      },
+      "typesAdded": [
+        "proposal",
+        "specs",
+        "verify",
+        "design",
+        "tasks"
+      ],
+      "typesRemoved": [],
+      "filesAdded": [
+        {
+          "type": "proposal",
+          "key": "proposal"
+        },
+        {
+          "type": "specs",
+          "key": "default:context-driver/core-contract"
+        },
+        {
+          "type": "verify",
+          "key": "default:context-driver/core-contract"
+        },
+        {
+          "type": "design",
+          "key": "design"
+        },
+        {
+          "type": "tasks",
+          "key": "tasks"
+        }
+      ],
+      "filesRemoved": []
+    },
+    {
+      "type": "transitioned",
+      "at": "2026-11-23T05:10:23.937Z",
+      "by": {
+        "name": "TeaShaman-cyber",
+        "email": "pokladsemen@gmail.com"
+      },
+      "from": "drafting",
+      "to": "designing"
+    },
+    {
+      "type": "transitioned",
+      "at": "2026-11-23T05:16:15.609Z",
+      "by": {
+        "name": "TeaShaman-cyber",
+        "email": "pokladsemen@gmail.com"
+      },
+      "from": "designing",
+      "to": "ready"
+    },
+    {
+      "type": "transitioned",
+      "at": "2026-11-23T05:16:21.850Z",
+      "by": {
+        "name": "TeaShaman-cyber",
+        "email": "pokladsemen@gmail.com"
+      },
+      "from": "ready",
+      "to": "implementing"
+    },
+    {
+      "type": "invalidated",
+      "at": "2026-11-23T05:16:48.505Z",
+      "by": {
+        "name": "specd",
+        "email": "system@getspecd.dev"
+      },
+      "cause": "artifact-drift",
+      "message": "Invalidated because validated artifacts drifted: proposal [proposal]",
+      "affectedArtifacts": [
+        {
+          "type": "proposal",
+          "files": [
+            "proposal"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "transitioned",
+      "at": "2026-11-23T05:16:48.505Z",
+      "by": {
+        "name": "specd",
+        "email": "system@getspecd.dev"
+      },
+      "from": "implementing",
+      "to": "designing"
+    },
+    {
+      "type": "transitioned",
+      "at": "2026-11-23T05:24:18.994Z",
+      "by": {
+        "name": "TeaShaman-cyber",
+        "email": "pokladsemen@gmail.com"
+      },
+      "from": "designing",
+      "to": "ready"
+    },
+    {
+      "type": "transitioned",
+      "at": "2026-11-23T05:24:26.297Z",
+      "by": {
+        "name": "TeaShaman-cyber",
+        "email": "pokladsemen@gmail.com"
+      },
+      "from": "ready",
+      "to": "implementing"
+    },
+    {
+      "type": "invalidated",
+      "at": "2026-11-23T05:32:27.381Z",
+      "by": {
+        "name": "specd",
+        "email": "system@getspecd.dev"
+      },
+      "cause": "artifact-drift",
+      "message": "Invalidated because validated artifacts drifted: design [design]; tasks [tasks]",
+      "affectedArtifacts": [
+        {
+          "type": "design",
+          "files": [
+            "design"
+          ]
+        },
+        {
+          "type": "tasks",
+          "files": [
+            "tasks"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "transitioned",
+      "at": "2026-11-23T05:32:27.381Z",
+      "by": {
+        "name": "specd",
+        "email": "system@getspecd.dev"
+      },
+      "from": "implementing",
+      "to": "designing"
+    },
+    {
+      "type": "transitioned",
+      "at": "2026-11-23T05:35:37.497Z",
+      "by": {
+        "name": "TeaShaman-cyber",
+        "email": "pokladsemen@gmail.com"
+      },
+      "from": "designing",
+      "to": "ready"
+    },
+    {
+      "type": "transitioned",
+      "at": "2026-11-23T05:35:44.207Z",
+      "by": {
+        "name": "TeaShaman-cyber",
+        "email": "pokladsemen@gmail.com"
+      },
+      "from": "ready",
+      "to": "implementing"
+    }
+  ]
+}

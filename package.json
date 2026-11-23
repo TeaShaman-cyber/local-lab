@@ -1,0 +1,19 @@
+{
+  "name": "local-lab-tooling",
+  "private": true,
+  "devDependencies": {
+    "@specd/schema-std": "0.1.1",
+    "@specd/specd": "0.2.0"
+  },
+  "overrides": {
+    "tar": "7.5.23",
+    "zod": "4.6.7"
+  },
+  "allowScripts": {
+    "@ast-grep/lang-go@0.0.5": true,
+    "@ast-grep/lang-php@0.0.6": true,
+    "@ast-grep/lang-python@0.0.5": true,
+    "better-sqlite3@12.11.1": true,
+    "lbug@0.14.3": true
+  }
+}

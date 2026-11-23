@@ -105,7 +105,7 @@ find_tool() {
 echo "=== shellcheck ==="
 if sc="$(find_tool shellcheck)"; then
     bad=0
-    for f in scripts/*.sh .githooks/*; do
+    for f in scripts/*.sh tools/specd/*.sh .githooks/*; do
         [ -f "$f" ] || continue
         if ! "$sc" -S warning "$f"; then
             echo "FAIL shellcheck: $f" >&2
@@ -148,11 +148,21 @@ else
 fi
 
 echo "=== shell syntax ==="
-for f in scripts/*.sh .githooks/*; do
+for f in scripts/*.sh tools/specd/*.sh .githooks/*; do
     [ -f "$f" ] || continue
     bash -n "$f"
     echo "ok  $f"
 done
+
+echo "=== SpecD ==="
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    tools/specd/check.sh
+elif [ "$STRICT" -eq 1 ]; then
+    echo "FAIL Docker is unavailable for the canonical SpecD gate (STRICT=1)" >&2
+    exit 1
+else
+    echo "SKIP Docker is unavailable; SpecD was not validated"
+fi
 
 if [ "$lint_fail" -ne 0 ]; then
     echo "QA FAIL: linters found problems (see above)" >&2
