@@ -20,3 +20,21 @@ python -m tools.thinkpad_fan.cql (read only).
 Tests: python -m pytest tools/thinkpad_fan -q (fake device; no hardware).
 Rollback of code: revert this PR; no service or installed component is created.
 Prior experimental scripts and logs remain evidence only, not deployment candidates.
+
+## Offline curve candidate
+
+Issue #289 also tracks user-defined smooth fan behavior. The pure Python
+`curve.py` follows the linear interpolation idea in
+[tpnsfand](https://github.com/h4fnp/tpnsfand/tree/132c6e2adabc381445ce17babc7c738742020c22),
+not that model's register protocol. `target_rpm` produces a continuous target;
+`next_level` models the fallback for a calibrated discrete actuator using
+RPM midpoint hysteresis and at most one adjacent level per evaluation.
+
+No default curve, calibration, polling interval, hardware writes, daemon or
+temperature policy is provided. Tests use synthetic values only. A clamped
+curve endpoint is not a thermal protection mechanism. The model cannot establish
+smooth physical speed, cooling capacity or PSC7 performance; actual stable RPM
+measurements, acoustic response, time-domain behavior and independent temperature
+observations are required before selecting live settings. If levels are not
+distinct and monotonic, the discrete model rejects them rather than guessing.
+Rollback: revert these source files; no runtime changes.
