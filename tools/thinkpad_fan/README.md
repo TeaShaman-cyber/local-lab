@@ -38,3 +38,19 @@ measurements, acoustic response, time-domain behavior and independent temperatur
 observations are required before selecting live settings. If levels are not
 distinct and monotonic, the discrete model rejects them rather than guessing.
 Rollback: revert these source files; no runtime changes.
+
+## Calibration-only profile candidate
+
+`python -m tools.thinkpad_fan.calibration_profile SOURCE NEW_DESTINATION`
+derives a separate INI from the current passive TPFanCtrl2 configuration.
+It refuses to overwrite any existing file. It starts in Auto (Active=1),
+preselects manual level 5, and makes both Smart profiles return Auto at any
+valid positive temperature. This makes the application's manual-temperature
+exit an experimental handback, not a permanent factory-policy requirement.
+The observed TPFanCtrl2 v2.7.0 engine checks ManModeExit with strict greater-than;
+85 C is the configured secondary limit, not a guarantee of an exact 85 C stop.
+Independent DPTF monitoring and a bounded trial with verified restoration are
+still needed. No installation, restart, command or manual activation here.
+Source reference: TPFanCtrl2 3acd20ca52c018f30e3a2d376bbe9bd3d1cb52f8,
+fancontrol.cpp OnTimer, fanstuff.cpp SmartControl/SetFan, misc.cpp INI parser.
+Rollback: remove the new candidate file; the original is unchanged.
