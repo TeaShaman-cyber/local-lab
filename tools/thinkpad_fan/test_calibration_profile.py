@@ -44,3 +44,11 @@ def test_lf_input():
     result = calibration_profile(BASE.replace(b"\r\n", b"\n"))
     assert b"\r" not in result
     assert b"Active=1\n" in result
+
+
+def test_mixed_newlines_preserve_unrelated_lines():
+    source = BASE.replace(b"Cycle=1\r\n", b"Cycle=1\n")
+    source = source.replace(b"ManModeExit=78 // old\r\n", b"ManModeExit=78 // old\n")
+    expected = calibration_profile(BASE).replace(b"Cycle=1\r\n", b"Cycle=1\n")
+    expected = expected.replace(b"ManModeExit=85\r\n", b"ManModeExit=85\n")
+    assert calibration_profile(source) == expected

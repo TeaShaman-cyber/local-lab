@@ -28,12 +28,11 @@ def calibration_profile(source: bytes) -> bytes:
     if b"\x00" in source or b"\r" in source.replace(b"\r\n", b""):
         raise ValueError("unsupported INI encoding or newline")
     newline = b"\r\n" if b"\r\n" in source else b"\n"
-    if newline == b"\r\n" and b"\n" in source.replace(newline, b""):
-        raise ValueError("mixed newlines")
     seen = set()
     result = []
     for line in source.splitlines(keepends=True):
         body = line.rstrip(b"\r\n")
+        ending = line[len(body):] or newline
         key, sep, value = body.partition(b"=")
         key = key.strip().lower()
         if not sep or key not in REQUIRED.keys() | REPLACE.keys():
@@ -47,11 +46,11 @@ def calibration_profile(source: bytes) -> bytes:
         expected = REQUIRED.get(key)
         if expected is not None and value.split(b"//", 1)[0].strip().lower() != expected:
             raise ValueError(f"unexpected setting: {key!r}")
-        result.append(REPLACE[key] + newline if key in REPLACE else line)
+        result.append(REPLACE[key] + ending if key in REPLACE else line)
         if key == b"level" and not any(
             row.partition(b"=")[0].strip().lower() == b"level2" for row in source.splitlines()
         ):
-            result.append(REPLACE[b"level2"] + newline)
+            result.append(REPLACE[b"level2"] + ending)
     if REQUIRED.keys() - seen or b"level" not in seen:
         raise ValueError("missing required passive-profile settings")
     return b"".join(result)
