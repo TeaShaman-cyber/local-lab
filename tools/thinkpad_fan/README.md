@@ -68,3 +68,30 @@ eight seconds, no command/mode change, no stale interval over three seconds,
 at least 80% valid within 2500–6500 RPM, most recent sample valid, valid
 range at most 150 RPM. These are measurement criteria, not a control policy.
 No invented values, no automatic fan command. Thermal supervision is separate.
+
+## TPFanCtrl2 transport diagnostic candidate (not installed)
+
+Pinned upstream v2.7.0, commit 3acd20ca52c018f30e3a2d376bbe9bd3d1cb52f8.
+Research and upstream discussion: [#289](https://github.com/TeaShaman-cyber/local-lab/issues/289)
+and [upstream #2](https://github.com/mews-se/TPFanCtrl2/issues/2).
+The patch in `upstream/checked-transport.patch` adds explicit PawnIO operation
+results to the ordinary EC mailbox path, enables strict OBF for this diagnostic
+build and removes extra I/O from failure logging. A valid FF byte is distinct
+from a failed read. It is intentionally not a complete fan-controller patch.
+
+For an isolated, disposable checkout of that exact upstream commit, run
+`python tools/thinkpad_fan/upstream/check_transport.py UPSTREAM_CHECKOUT`
+from local-lab (Linux, g++ available). Before patching it must fail on the
+known faults; use `git apply --check` and `git apply` with the absolute patch
+path from the disposable upstream checkout, then rerun the harness.
+The harness extracts actual C++ functions and simulates the PawnIO boundary:
+delayed/absent OBF, valid FF, and failure at each ordinary read/write step.
+It performs no EC I/O; it is a separate offline diagnostic, not the Windows build
+or the regular Python QA gate. To undo, discard the disposable checkout.
+
+Still unresolved: compatibility of strict OBF on the L14 LPC channel,
+automatic layout retries after uncertain transactions, higher-level SetFan
+acknowledgement and selector writes, extended-sensor legacy wrappers, TVicPort
+(no per-operation error reporting), live thermal supervision and physical RPM.
+Do not deploy or start this candidate; review and Windows build are required
+before any separately governed live experiment.
