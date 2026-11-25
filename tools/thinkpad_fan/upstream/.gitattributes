@@ -1,0 +1,2 @@
+# Unified diff context has meaningful leading and trailing whitespace.
+checked-transport.patch -whitespace
