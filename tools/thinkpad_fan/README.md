@@ -54,3 +54,17 @@ still needed. No installation, restart, command or manual activation here.
 Source reference: TPFanCtrl2 3acd20ca52c018f30e3a2d376bbe9bd3d1cb52f8,
 fancontrol.cpp OnTimer, fanstuff.cpp SmartControl/SetFan, misc.cpp INI parser.
 Rollback: remove the new candidate file; the original is unchanged.
+
+## Raw tachometer calibration (read only)
+
+`python -m tools.thinkpad_fan.tach 5` samples the existing v2.7.0 shared
+engine state; it neither changes mode nor opens PawnIO. Output includes every
+distinct observed raw frame and, if stable, a median RPM with accepted/rejected
+counts. The upstream CSV can substitute previous RPM values for bad readings,
+so it is not independent tachometer confirmation. Two identical memory reads
+reduce, but cannot eliminate, torn-frame risk (upstream has no seqlock).
+Provisional criteria for the tested 4/5 band: ten observations over at least
+eight seconds, no command/mode change, no stale interval over three seconds,
+at least 80% valid within 2500–6500 RPM, most recent sample valid, valid
+range at most 150 RPM. These are measurement criteria, not a control policy.
+No invented values, no automatic fan command. Thermal supervision is separate.
