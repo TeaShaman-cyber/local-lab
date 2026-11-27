@@ -82,7 +82,7 @@ def export_file(path, spool, kind):
     for line in data[:n].splitlines(keepends=True):
         raw = line.rstrip(b"\r\n").decode("cp1252", errors="replace")
         # Only bounded, task-specific diagnostics; no config or arbitrary logs.
-        allowed = (re.match(r"^\d{2}:\d{2}:\d{2};", raw) if kind == "csv" else
+        allowed = (re.match(r"^\d{1,2}:\d{2}:\d{2};", raw) if kind == "csv" else
                    re.match(r"^\[[0-9.]+ [0-9:]+\] (CPU MSR:|Fan:|Manual:|Smart:|EcPair|EC |Lid |Suspend|Resume|Error)", raw)
                    if kind == "events" else True)
         if allowed:
