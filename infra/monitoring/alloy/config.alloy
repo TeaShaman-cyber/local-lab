@@ -574,3 +574,46 @@ loki.process "container_logs" {
     }
   }
 }
+
+// TPFan immutable diagnostic archive (issue #289).
+// Active log tails disabled pending file-sharing investigation.
+local.file_match "tpfan_archive" {
+  path_targets = [
+    {"__path__" = "E:/tpfan-qa/telemetry/tpfan-20261127.csv.jsonl", "job" = "tpfan", "stream" = "samples_archive"},
+  ]
+  sync_period = "5s"
+}
+loki.source.file "tpfan_archive" {
+  targets = local.file_match.tpfan_archive.targets
+  forward_to = [loki.process.tpfan_archive.receiver]
+}
+loki.process "tpfan_archive" {
+  stage.json {
+    expressions = { ts = "timestamp" }
+  }
+  stage.timestamp {
+    source = "ts"
+    format = "RFC3339Nano"
+    action_on_failure = "skip"
+  }
+  forward_to = [loki.write.grafana_cloud.receiver]
+}
+
+// File snapshots are closed before Alloy sees them. Never tail TPFan directly.
+local.file_match "tpfan_snapshot" {
+  path_targets = [
+    {"__path__" = "E:/tpfan-qa/telemetry/spool/csv-*.jsonl", "job" = "tpfan", "stream" = "samples_snapshot"},
+    {"__path__" = "E:/tpfan-qa/telemetry/spool/events-*.jsonl", "job" = "tpfan", "stream" = "events_snapshot"},
+  ]
+  sync_period = "5s"
+}
+loki.source.file "tpfan_snapshot" {
+  targets = local.file_match.tpfan_snapshot.targets
+  forward_to = [loki.process.tpfan_snapshot.receiver]
+}
+loki.process "tpfan_snapshot" {
+  stage.label_drop {
+    values = ["filename"]
+  }
+  forward_to = [loki.write.grafana_cloud.receiver]
+}

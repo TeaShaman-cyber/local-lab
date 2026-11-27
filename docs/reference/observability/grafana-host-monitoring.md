@@ -24,6 +24,7 @@ live in **this** repository: `infra/monitoring/alloy/config.alloy` and
 | Containers | otelcol-contrib `docker_stats` via read-only socket proxy | prometheusremotewrite |
 | Container logs | Alloy `loki.source.docker` via the same read-only proxy | Loki push (`job="docker"`) |
 | Hermes logs | Alloy `loki.source.file` + `loki.process` | Loki push |
+| ThinkPad fan research | shared-read immutable file snapshots -> Alloy | Loki (job="tpfan") |
 | Backup heartbeat | Alloy `loki.source.file` (its own `job="backup"`) | Loki push |
 | LLM latency/tokens | derived from agent.log by `stage.metrics` | scraped from Alloy's own /metrics |
 
@@ -197,7 +198,7 @@ service whose failure nobody noticed shows up here within minutes, so read
 OpenAI-style / AWS / JWT / Google OAuth key shapes with `[REDACTED]`. An alert rule on
 `count_over_time({job="hermes"} |= "[REDACTED]")` reports the *attempt*, not the value.
 
-**Write the regex without escaped dots — use `[.]`.** Inside an HCL string `\\` unescapes
+**Write the regex without escaped dots — use `[.]`.** Inside an HCL string `\` unescapes
 to two characters, which the regex engine reads as *a literal backslash*, so `eyJ…\.…`
 silently matches nothing and the shape passes through unredacted while the stage looks
 healthy. A character class removes the question entirely: `eyJ[A-Za-z0-9_-]{10,}[.]…`.
@@ -239,3 +240,56 @@ search for the key returns nothing, then truncate the file.
   access-policy token in `.env` cannot grant scopes to itself. Edit the policy in the
   instance UI, then read it back with `GET /api/v1/provisioning/policies` — the UI edit
   is the change, the read is the proof.
+
+
+## ThinkPad fan diagnostic telemetry (local-lab #289, 2026-11-27)
+
+Runtime: TPFanControl 82f8dcf-smart-timing, directory
+`E:/tpfan-qa/82f8dcf-smart-timing`. Both service and console processes
+were observed using this directory. No new EC reads, control commands or
+changes to fan mode. **Never tail the live TPFan files directly with Alloy.**
+In the initial deployment, both logs stopped advancing at 23:18:39 local
+time; removing the two live file sources was followed by resumed writing
+at 23:20:31–34, without restarting TPFan. The exact Windows sharing
+mechanism has not been proved.
+
+The existing Alloy config now reads only closed, immutable copies under
+`E:/tpfan-qa/telemetry`. The Windows task `Theseus TPFan Snapshot`
+runs every minute while its interactive user is logged in (default
+battery restrictions apply). It runs
+`tools/thinkpad_fan/snapshot.py --root E:/tpfan-qa/82f8dcf-smart-timing --spool E:/tpfan-qa/telemetry/spool`.
+The script opens original files briefly with FILE_SHARE_READ, WRITE and
+DELETE, reads at most 512 KiB per file per invocation, and closes the
+handle before creating a complete immutable JSONL batch. File identity,
+generation, byte offset and trailing anchor provide restart checkpoints;
+the incomplete last line is deferred. The spool is retained locally;
+do not delete checkpoint batches before a safe retention design is in
+place. Rotation between polls and same-content rewrites may still lose
+or duplicate data; this is not a transactional backup of TPFan.
+
+Loki streams (datasource grafanacloud-logs, host theseus-laptop):
+
+- `{job="tpfan",stream="samples_archive"}`: one dated historical CSV
+  archive for 27 Nov. 39,324 local lines, 15:51:41–23:18:39 UTC+02.
+  Source CSV contains clock time only; date inferred from current session
+  and event-log dates, not an intrinsic timestamp.
+- `{job="tpfan",stream="samples_snapshot"} | json`: incremental
+  copies; Loki timestamp is collection time, raw includes original clock.
+- `{job="tpfan",stream="events_snapshot"} | json`: filtered diagnostic
+  events, original dated event in raw; Loki timestamp is collection time.
+- `stream="events"` is the retired direct-tail experiment. Do not
+  aggregate it or the archive with snapshot counts: overlap is expected.
+
+Snapshot batch filenames are dropped as Loki labels to avoid creating
+one indexed stream per batch. Unique row identity is (source,file_id,
+generation,offset), inside JSON. No credentials in the snapshot script.
+Historical Loki count initially read 23,697 versus 39,324 local records:
+cloud completeness not verified; preserve local copies. Grafana Cloud
+retention/quotas still apply. A live file not advancing or a missing new
+snapshot is a collection gap, not a zero RPM measurement.
+
+Check the task result and spool mtime, Alloy component health, and actual
+Loki rows. The repo template must match the installed config via
+`python tools/contracts/check_alloy_projection.py`. Rollback is to
+remove only the tpfan_archive/tpfan_snapshot blocks, validate and reload,
+then disable the named task; never restart TPFan as part of telemetry.
