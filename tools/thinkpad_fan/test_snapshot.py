@@ -40,3 +40,13 @@ class SnapshotTest(unittest.TestCase):
             p.write_bytes(b"new\n")
             self.assertEqual(export_file(p,spool,"samples"),1)
             self.assertEqual(export_file(p,spool,"samples"),0)
+
+    def test_single_digit_hour_and_midnight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)/"test.txt"
+            spool = Path(tmp)/"spool"
+            p.write_bytes(b"23:59:59;70\n0:00:00;71\n9:12:01;72\n09:12:02;73\nheader\n")
+            self.assertEqual(export_file(p, spool, "csv"), 4)
+            rows = [json.loads(line)["raw"] for batch in spool.glob("*.jsonl") for line in batch.read_text().splitlines()]
+            self.assertEqual(rows, ["23:59:59;70", "0:00:00;71", "9:12:01;72", "09:12:02;73"])
+            self.assertEqual(export_file(p, spool, "csv"), 0)

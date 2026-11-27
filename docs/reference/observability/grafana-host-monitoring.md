@@ -367,3 +367,19 @@ an operator runtime stop, not a Compose policy change. On-demand recovery
 requires valid Nous authorization and a health check before starting
 dependent consumers. Do not pull a new image or start Hindsight just to
 investigate the inactive proxy. See issue #299.
+
+
+### TPFan midnight snapshot repair (28 Nov, issue #289)
+
+TPFan emits unpadded single-digit hours (e.g. 0:00:00). The snapshot CSV
+selection originally required two hour digits, yet advanced its checkpoint
+past the rejected lines. Accept one or two digits and preserve the original
+clock text. Regression test exercises midnight, both hour shapes, header
+rejection and restart idempotence. Recovered 2,865 omitted rows from
+the original file, using matching contiguous checkpoint intervals and
+trailing anchors, excluding previously emitted byte offsets. The separate
+immutable csv-recovery batch is not a new checkpoint; recovery rows retain
+the source file identity/generation/offset, with collection time distinct
+from the original clock. Existing source and checkpoint files are retained.
+Cloud delivery of both new and recovered records was observed. No change
+to measurement frequency, EC access or cloud destination.
