@@ -59,6 +59,13 @@ prometheus.relabel "process_keep" {
 prometheus.relabel "drop_low_value" {
   forward_to = [prometheus.remote_write.grafana_cloud.receiver]
 
+  // Per-file snapshot bookkeeping is local only. Raw logs still go to Loki.
+  rule {
+    source_labels = ["component_id", "path"]
+    regex         = "loki[.]source[.]file[.]tpfan_snapshot;.+"
+    action        = "drop"
+  }
+
   rule {
     source_labels = ["__name__"]
     regex         = "windows_process_.*|windows_net_nic_operation_status"
@@ -205,6 +212,7 @@ loki.process "hermes_logs" {
 
 loki.write "grafana_cloud" {
   endpoint {
+    batch_wait = "15s"
     url = "https://<LOKI_HOST>/loki/api/v1/push"
 
     basic_auth {
@@ -220,9 +228,19 @@ loki.write "grafana_cloud" {
 
 // Alloy's own /metrics endpoint carries the metrics generated from log lines
 // (hermes_llm_*). Scrape it so they reach the same Prometheus as host metrics.
+// Two bounded counters for metered-link accounting; no path labels.
+prometheus.relabel "transport_accounting" {
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+  rule {
+    source_labels = ["__name__"]
+    regex         = "prometheus_remote_storage_(bytes_total|samples_retried_total)"
+    action        = "keep"
+  }
+}
+
 prometheus.scrape "alloy_self" {
   targets         = [{ __address__ = "127.0.0.1:12345", job = "alloy-self" }]
-  forward_to      = [prometheus.relabel.drop_low_value.receiver]
+  forward_to      = [prometheus.relabel.drop_low_value.receiver, prometheus.relabel.transport_accounting.receiver]
   scrape_interval = "30s"
 }
 

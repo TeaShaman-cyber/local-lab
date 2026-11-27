@@ -293,3 +293,48 @@ Loki rows. The repo template must match the installed config via
 `python tools/contracts/check_alloy_projection.py`. Rollback is to
 remove only the tpfan_archive/tpfan_snapshot blocks, validate and reload,
 then disable the named task; never restart TPFan as part of telemetry.
+
+
+## Metered network (local-lab #299)
+
+The laptop has a finite traffic allowance. Do not equate Loki's
+uncompressed stored/log bytes with network bytes. Alloy v1.21.2 exposes
+loki_write_request_size_bytes_sum (encoded request body), and
+prometheus_remote_storage_bytes_total (compressed queue bytes).
+Neither includes all connection overhead, retries, downloads or other
+applications. Both are process-lifetime counters; use deltas, handle resets.
+Baseline 28 Nov 2026: about 249 MB Loki request bodies and 36 MB Prometheus
+over the current approximately eight-hour Alloy process lifetime. A separate
+60-second window measured 15,637 Loki request bytes in 14 batches and
+115,995 Prometheus bytes, 4,542 metric samples. Do not extrapolate startup
+backlog as steady-state traffic. Docker source read 14.6 million entries
+over that lifetime; precise attribution of the replay/backlog remains open.
+
+First reversible transport reduction:
+
+- Loki batch_wait 15s (formerly default 1s), retains all existing log
+  selection and redaction, but increases delivery latency and in-memory
+  exposure before a batch is sent.
+- Drop only per-file TPFan snapshot collector bookkeeping (component_id
+  loki.source.file.tpfan_snapshot with nonempty path) from remote metrics.
+  These metrics remain readable locally; their cloud history is intentionally
+  no longer extended. The raw research records, snapshot task and EcPair
+  logs are unchanged.
+- Export two bounded transport counters through transport_accounting:
+  prometheus_remote_storage_bytes_total and samples_retried_total.
+  Other remote-storage internals remain excluded.
+
+No downsampling of host/sensor readings, no log sampling or change to
+Hermes content capture, no deletion of local spool or existing cloud data.
+Reload validates configuration but does not prove lossless delivery of
+in-flight batches. Verify local counters, cloud freshness and actual logs.
+Restore the previous config from config.alloy.bak-metered-181 if needed
+and revert the matching template change.
+
+Next investigation: Docker socket-proxy logs record the collector's own
+successful GETs; hermes-proxy was observed in a restart loop (524 restarts).
+Do not stop services or discard diagnostic events just to reduce traffic.
+Check actual dependency, local retention and cloud alert consumers first.
+Hermes OTel full capture is a separate audit requirement; measure it
+independently. Prefer local complete history plus lossless compressed
+batches on demand over dropping research data.
