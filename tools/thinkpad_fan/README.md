@@ -95,3 +95,8 @@ acknowledgement and selector writes, extended-sensor legacy wrappers, TVicPort
 (no per-operation error reporting), live thermal supervision and physical RPM.
 Do not deploy or start this candidate; review and Windows build are required
 before any separately governed live experiment.
+
+
+## Diagnostic file export
+
+`snapshot.py` is a read-only file collector, not a hardware sampler. See [host monitoring](../../docs/reference/observability/grafana-host-monitoring.md) for the deployed task and Loki streams. Run `python -m unittest discover -s tools/thinkpad_fan -p test_snapshot.py` for checkpoint, partial-line, and rotation tests. Do not use Alloy to hold active TPFan CSV/log files open.

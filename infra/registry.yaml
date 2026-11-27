@@ -688,6 +688,24 @@ services:
       docs/adr/0001-context-backend-source-boundary.md.
 
 # Стенды для тестов и экспериментов. Порядок = приоритет: сначала LAB-001.
+
+  - id: INFRA-026
+    name: tpfan-diagnostic-snapshot
+    criticality: T
+    role: read-only archival telemetry for ThinkPad fan investigation (issue 289)
+    status: active
+    kind: scheduled-tasks
+    location:
+      task: Theseus TPFan Snapshot
+      script: E:/local-lab/tools/thinkpad_fan/snapshot.py
+      source: E:/tpfan-qa/82f8dcf-smart-timing
+      spool: E:/tpfan-qa/telemetry/spool
+      config: E:/local-lab/infra/monitoring/alloy/config.alloy
+    monitoring: 'Grafana Cloud Loki, job=tpfan, samples_snapshot and events_snapshot'
+    check: 'schtasks /Query /TN "Theseus TPFan Snapshot" /FO LIST /V'
+    docs: docs/reference/observability/grafana-host-monitoring.md
+    notes: 'Every minute, interactive user; default battery restrictions. Never tail active TPFan files directly. Immutable batches double as checkpoints; retain locally. Cloud completeness is not established.'
+
 # Признак продового/тестового — RULE-009 в infrastructure.md.
 test_stands:
   - id: LAB-001

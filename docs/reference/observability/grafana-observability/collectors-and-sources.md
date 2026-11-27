@@ -10,6 +10,7 @@ here was read back from a live Grafana Cloud datasource, not copied from docs.
 | What is the host doing right now / at 16:12 | Alloy `prometheus.exporter.windows` | one service, per-process and host series, no extra install |
 | How hot is it | `thermalzone` collector (ACPI zone) | free, no driver; approximate — this is a chassis thermal zone, not a CPU core |
 | Which cores, what real clock, what watts | OhmGraphite + PawnIO | only MSR-level source; everything else reports nominal values |
+| Fan RPM, control mode, MSR diagnostic events | TPFan immutable file snapshots via Alloy/Loki | no extra EC access; distinguish raw readings from physical speed |
 | Is the network path healthy | `prometheus.exporter.blackbox` | ICMP RTT + HTTP phase timings, goes through the real path (VPN included) |
 | What are the containers doing | OTel Collector `docker_stats` | works under Docker Desktop; cAdvisor does not |
 
@@ -122,3 +123,6 @@ register asynchronously; re-query after 20–60 s before concluding it is broken
 Throttling read: compare `ohm_cpu_hertz` per core against the chip's base and
 turbo. Sitting near base under load with high `ohm_cpu_celsius` is thermal/power
 capping — that is the evidence, not a guess.
+
+
+TPFan: see [host monitoring](../grafana-host-monitoring.md#thinkpad-fan-diagnostic-telemetry-local-lab-289-2026-11-27) for snapshot scheduling, the direct-tail interference experiment, timestamp provenance and incomplete historical delivery. Do not tail the active TPFan files directly.
