@@ -34,7 +34,7 @@ services:
       published_ports: none
     monitoring: Grafana Cloud — container_* через docker-exporter (INFRA-004)
     check: docker ps --filter name=hermes-proxy
-    notes: статического ключа нет ни в compose, ни в реестре; auth живёт в named volume theseus-hermes-proxy-data
+    notes: статического ключа нет ни в compose, ни в реестре; auth живёт в named volume theseus-hermes-proxy-data; 2026-11-28 runtime manually stopped after 539 restarts, Nous auth unavailable, preserve volume and recover on demand (#299)
 
   - id: INFRA-003
     name: docker-read-proxy

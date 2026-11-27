@@ -338,3 +338,32 @@ Check actual dependency, local retention and cloud alert consumers first.
 Hermes OTel full capture is a separate audit requirement; measure it
 independently. Prefer local complete history plus lossless compressed
 batches on demand over dropping research data.
+
+
+### Docker proxy noise and inactive Hermes subscription proxy (28 Nov)
+
+The two proxies are distinct. The Docker socket proxy is the active read-only
+observation route; do not stop it. In a 30-minute Loki window all 1,764
+socket-proxy lines matched successful versioned GET access records. The
+last 200 local lines also matched. A scoped Loki stage now drops only those
+successful GET/200 records for job=docker, service=docker-socket-proxy.
+Negative controls (500, POST, generic fatal line) do not match. Error logs,
+other services, and source-side Docker logs are unaffected. The actual
+Docker log driver was json-file with no explicit rotation configuration;
+this is not a verified infinite-retention guarantee. No logs were deleted.
+Restore config.alloy.bak-docker-182 and matching template to revert.
+
+The separate hermes-proxy (Hindsight Compose project) was unhealthy, with
+539 restarts and exit code 2. Its pinned image accepts the configured CLI
+arguments. The retained logs explicitly report Not logged into Nous Portal;
+the old config also emits a migration warning. No auth values were read,
+replaced or migrated. Hindsight API had been stopped for two weeks; local
+ports 8645 and 8888 did not respond and no active host Hermes config reference
+to 8645 was found. Honcho/PVE references remain historical possible consumers,
+not proof of a functioning route. Stopped only hermes-proxy, preserving its
+container, restart policy and dedicated auth volume. Hindsight, other stopped
+containers and active GitHub MCP / socket proxy were not changed. This is
+an operator runtime stop, not a Compose policy change. On-demand recovery
+requires valid Nous authorization and a health check before starting
+dependent consumers. Do not pull a new image or start Hindsight just to
+investigate the inactive proxy. See issue #299.

@@ -416,6 +416,15 @@ loki.process "container_logs" {
     replace    = "[REDACTED]"
   }
 
+
+  // Keep successful read-only API access logs on the host, not on the metered link.
+  // Do not suppress errors, non-GET operations, or other services.
+  stage.match {
+    selector = "{job=\"docker\",service=\"docker-socket-proxy\"} |~ \" dockerfrontend dockerbackend/dockersocket [0-9/-]+ 200 [0-9]+ .*\\\"GET /v[0-9.]+/\""
+    action = "drop"
+    drop_counter_reason = "docker_read_proxy_success"
+  }
+
   // Health-check chatter is the bulk of container output and says nothing.
   stage.drop {
     expression = "GET /health HTTP/1\\.1\" 200"
