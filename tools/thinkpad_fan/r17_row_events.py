@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from r17_row import Observation, qualify
@@ -153,30 +154,63 @@ def import_rows(c, root):
         sha = hashlib.sha256(raw).hexdigest()
         if len(raw) > MAX_RECORD or p.stem != sha:
             raise ValueError("invalid row evidence digest or size")
-        d, obs = decode(raw)
-        q = qualify(obs)
-        # A long/clock-discontinuous acquisition is preserved but not qualified.
-        if (
-            d["end_tick"] - d["begin_tick"] > 2000
-            or abs(d["end_ns"] - d["begin_ns"] - (d["end_tick"] - d["begin_tick"]) * 1000000) > 32000000
-        ):
-            q = {**dict.fromkeys(FIELDS), "quality": "stale"}
-        c.execute(
-            "insert into r17_rows values (" + ",".join("?" for _ in range(18)) + ") on conflict do nothing",
-            [
-                sha,
-                d["source"],
-                d["begin_tick"],
-                d["end_tick"],
-                d["begin_ns"],
-                d["end_ns"],
-                d["status"],
-                json.dumps(d["before"]),
-                json.dumps(d["after"]),
-                d["row_a"],
-                d["row_b"],
-                d["error"],
-                q["quality"],
-                *(q[k] for k in FIELDS),
-            ],
-        )
+        insert_record(c,raw,sha)
+
+
+def insert_record(c,raw,sha):
+    d, obs = decode(raw)
+    q = qualify(obs)
+    # A long/clock-discontinuous acquisition is preserved but not qualified.
+    if (
+        d["end_tick"] - d["begin_tick"] > 2000
+        or abs(d["end_ns"] - d["begin_ns"] - (d["end_tick"] - d["begin_tick"]) * 1000000) > 32000000
+    ):
+        q = {**dict.fromkeys(FIELDS), "quality": "stale"}
+    c.execute(
+        "insert into r17_rows values (" + ",".join("?" for _ in range(18)) + ") on conflict do nothing",
+        [
+            sha,
+            d["source"],
+            d["begin_tick"],
+            d["end_tick"],
+            d["begin_ns"],
+            d["end_ns"],
+            d["status"],
+            json.dumps(d["before"]),
+            json.dumps(d["after"]),
+            d["row_a"],
+            d["row_b"],
+            d["error"],
+            q["quality"],
+            *(q[k] for k in FIELDS),
+        ],
+    )
+
+# The producer emits UTC ns and boot-relative tick for the same interval.
+# Never infer missing values from the last accepted sample.
+TPFAN_ROW=re.compile(rb"\[[^\r\n]+\] EcPair r17 v1 (\d+),(\d+),(\d+),(\d+),([0-5]),([0-9a-f]{8}|-),([0-9a-f]{8}|-),([0-9a-f]{20}|-),([0-9a-f]{20}|-),([01])\r?\n")
+TPFAN_STATUS=("complete","guard_rejected","failed","restore_unverified","transport_uncertain","state_changed")
+
+
+def import_tpfan_rows(c, raw, run):
+    offset=0
+    for line in raw.splitlines(keepends=True):
+        if not line.endswith(b"\n"):
+            break
+        if b" EcPair r17 v1 " in line:
+            m=TPFAN_ROW.fullmatch(line)
+            if not m:
+                raise ValueError("malformed integrated R17 observation")
+            begin,end,begin_ns,end_ns,status=map(int,m.groups()[:5])
+            before,after,a,b=(None if x==b"-" else bytes.fromhex(x.decode()) for x in m.groups()[5:9])
+            inhibited=m[10]==b"1"
+            name=TPFAN_STATUS[status]
+            if inhibited and name=="complete":
+                name="inhibited"
+            obs=Observation(name,tuple(before) if before is not None else None,
+                            tuple(after) if after is not None else None,a,b,
+                            "inhibited" if inhibited else None)
+            record=encode(obs,begin,end,begin_ns,end_ns,"TPFan-R17-row56-v1")
+            sha=hashlib.sha256(b"tpfan-r17-v1|"+run.encode()+b"|"+str(offset).encode()+b"|"+line).hexdigest()
+            insert_record(c,record,sha)
+        offset+=len(line)

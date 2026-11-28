@@ -269,3 +269,31 @@ def test_live_preflight_uses_current_generation_after_reboot():
         live_level_one(raw,900000)
     with pytest.raises(RuntimeError):
         live_level_one(raw+b"[28.11.2026 15:14:01] Port backend: PawnIO test\n",3500)
+
+
+def test_integrated_tpfan_rows_import_from_log_idempotently():
+    import duckdb
+    from hardware_warehouse import init
+    from r17_row_events import import_tpfan_rows
+
+    good=b"[28.11.2026 17:35:57] EcPair r17 v1 100,200,100000000,200000000,0,01000660,01000660,f609ca099300f4011900,f609ca099300f4011900,0\r\n"
+    uncertain=b"[28.11.2026 17:36:57] EcPair r17 v1 60100,60200,60100000000,60200000000,3,01000660,-,f609ca099300f4011900,-,1\n"
+    with duckdb.connect() as c:
+        init(c)
+        import_tpfan_rows(c,good+uncertain,"run-a")
+        import_tpfan_rows(c,good+uncertain,"run-a")
+        assert c.execute("select status,floor_pwm,quality from r17_rows order by begin_tick").fetchall()==[
+            ("complete",25,"repeatable"),("restore_unverified",None,"unavailable")]
+        import_tpfan_rows(c,good[:-1],"run-a")
+        assert c.execute("select count(*) from r17_rows").fetchone()==(2,)
+
+
+def test_integrated_tpfan_row_does_not_qualify_unrestored_or_torn_data():
+    import duckdb
+    from hardware_warehouse import init
+    from r17_row_events import import_tpfan_rows
+    line=b"[28.11.2026 17:35:57] EcPair r17 v1 100,200,100000000,200000000,0,01000660,01000660,f609ca099300f4011900,f609ca099300f4011a00,0\n"
+    with duckdb.connect() as c:
+        init(c)
+        import_tpfan_rows(c,line,"run-a")
+        assert c.execute("select floor_pwm,quality from r17_rows").fetchone()==(None,"partial_agreement")

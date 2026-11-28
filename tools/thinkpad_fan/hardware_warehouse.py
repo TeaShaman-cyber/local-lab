@@ -227,6 +227,8 @@ def import_poll_run(c, source, raw, rows, appended=False):
             raise ValueError("missing appended run boundary")
         first=next(line for line in raw.splitlines(keepends=True) if POLL_LINE.fullmatch(line))
         run=hashlib.sha256(b"appended-v1|"+run.encode()+b"|"+startup+first).hexdigest()
+    from r17_row_events import import_tpfan_rows
+    import_tpfan_rows(c,raw,run)
     smart = parse_smart(raw, [dict(zip(FIELDS, row)) for row in rows])
     c.register("incoming_polls",pa.table({"run_id":[run]*len(rows),**{k:[r[i] for r in rows] for i,k in enumerate(FIELDS)}}))
     try:
