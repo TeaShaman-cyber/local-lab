@@ -30,6 +30,7 @@ CHANNELS = {
                "Microsoft-Windows-WHEA-Logger", "ACPI", "disk", "stornvme", "storahci",
                "Microsoft-Windows-StorPort", "Microsoft-Windows-USB-USBHUB3"),
     "Microsoft-Windows-WLAN-AutoConfig/Operational": (),
+    "Microsoft-Windows-USB-UCMUCSICX/Operational": (),
 }
 LIMIT = 5000
 
