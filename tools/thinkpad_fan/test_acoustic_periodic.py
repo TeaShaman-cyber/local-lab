@@ -107,3 +107,13 @@ def test_pinned_capture_uses_explicit_device_not_current_default(monkeypatch):
     monkeypatch.setattr(w, "release", lambda p: None)
     assert w.endpoint(Ole(), "pinned").value == 20
     assert (10, 4) not in calls
+
+
+def test_capture_rejection_retains_reason_without_trace(tmp_path):
+    def rejected(*args, **kwargs):
+        raise ValueError("invalid audio packet after startup")
+
+    assert run_once(tmp_path, 100, "pinned", rejected, lambda: None, now=lambda: 10) == "capture_rejected"
+    status = json.loads((tmp_path / "status.json").read_text())
+    assert status["reason"] == "invalid audio packet after startup"
+    assert not list(tmp_path.glob("trace-*.json"))

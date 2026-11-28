@@ -65,8 +65,11 @@ def summarize(data, rate, first, clock):
 def run_once(folder, expires, endpoint_id, capture, check_room, now=time.time):
     folder.mkdir(parents=True, exist_ok=True)
 
-    def finish(status):
-        atomic_json(folder / "status.json", {"status": status, "utc_ns": time.time_ns()})
+    def finish(status, reason=None):
+        value = {"status": status, "utc_ns": time.time_ns()}
+        if reason is not None:
+            value["reason"] = str(reason)[:200]
+        atomic_json(folder / "status.json", value)
         return status
 
     if now() >= expires:
@@ -87,10 +90,10 @@ def run_once(folder, expires, endpoint_id, capture, check_room, now=time.time):
             "another capture session started; discarded",
             "capture contention; discarded",
         ):
-            return finish("skipped_busy")
-        return finish("capture_rejected")
-    except (OSError, ValueError):
-        return finish("capture_rejected")
+            return finish("skipped_busy", e)
+        return finish("capture_rejected", e)
+    except (OSError, ValueError) as e:
+        return finish("capture_rejected", e)
     if now() >= expires:
         return finish("expired")
     try:
@@ -99,8 +102,8 @@ def run_once(folder, expires, endpoint_id, capture, check_room, now=time.time):
         if path.exists():
             return finish("duplicate")
         atomic_json(path, result)
-    except (ValueError, OSError):
-        return finish("analysis_rejected")
+    except (ValueError, OSError) as e:
+        return finish("analysis_rejected", e)
     return finish("captured")
 
 

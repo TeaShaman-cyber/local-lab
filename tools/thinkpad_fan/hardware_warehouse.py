@@ -265,8 +265,8 @@ def main():
             check_room(ROOT)
             if (folder/"anchors.json").is_file():
                 import_trace(c,folder)
-                from cpu_limits import import_cpu_limits
-                import_cpu_limits(c,folder)
+                from cpu_limits import try_import_cpu_limits
+                try_import_cpu_limits(c,folder)
         check_room(ROOT)
         import_windows(c)
         import_polls(c,SOURCE)

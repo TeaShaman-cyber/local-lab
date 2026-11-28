@@ -69,3 +69,19 @@ def test_snapshot_contains_cpu_limit_tables(tmp_path):
         manifest = publish(c, tmp_path / "snapshot")
         assert manifest["tables"]["cpu_limit_samples"]["rows"] == 1
         assert manifest["tables"]["cpu_limit_batches"]["rows"] == 1
+
+
+def test_bad_cpu_sidecar_does_not_block_other_batches(tmp_path):
+    from cpu_limits import try_import_cpu_limits
+
+    bad = tmp_path / "segment-4"
+    bad.mkdir()
+    (bad / "cpu-limits.json").write_text("{bad")
+    good = tmp_path / "segment-5"
+    good.mkdir()
+    (good / "cpu-limits.json").write_text(json.dumps({"schema": 1, "samples": [fixture()], "status": "ok"}))
+    with duckdb.connect() as c:
+        assert try_import_cpu_limits(c, bad) is False
+        assert try_import_cpu_limits(c, good) is True
+        assert c.execute("select count(*) from cpu_limit_samples").fetchone()[0] == 1
+        assert (bad / "cpu-limits.json").read_text() == "{bad"

@@ -110,6 +110,15 @@ def import_cpu_limits(c, folder):
         raise
 
 
+def try_import_cpu_limits(c, folder):
+    try:
+        import_cpu_limits(c, folder)
+        return True
+    except (ValueError, KeyError, TypeError, OSError) as e:
+        print("CPU_LIMIT_IMPORT_REJECTED", folder.name, str(e)[:200], flush=True)
+        return False
+
+
 def collect_interval(seconds, reader_factory, sleep=time.sleep, monotonic=time.monotonic):
     """Keep the ETL window bounded; never substitute zero for a failed read."""
     end = monotonic() + seconds
