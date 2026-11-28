@@ -244,9 +244,9 @@ search for the key returns nothing, then truncate the file.
 
 ## ThinkPad fan diagnostic telemetry (local-lab #289, 2026-11-27)
 
-Runtime: TPFanControl 920a4d0-ec-temp-gate, directory
-`E:/tpfan-qa/920a4d0-ec-temp-gate`. Both service and console processes
-were observed using this directory after the authorized 28 Nov 09:22–23 local-time switch. EcTelemetryWaitMs=5 preserves the preceding audit configuration. EcTempShadow records the readiness-aware CPU estimate and its provenance, without changing the control input. The additional EcTempShadow gate record reports acquisition age, agreement, epoch and a diagnostic permission to decrease; it is not consumed by fan control. Previous builds (2b8fe95-ec-temp-shadow, 615ec8c-ec-audit and 82f8dcf-smart-timing), task XML and startup shortcut backups remain available for rollback. No new EC reads, control commands or
+Runtime: TPFanControl ee6d8f4-ec-tach-quality, directory
+`E:/tpfan-qa/ee6d8f4-ec-tach-quality`. Both service and console processes
+were observed using this directory after the authorized 28 Nov 09:31–32 local-time switch. EcTelemetryWaitMs=5 preserves the preceding audit configuration. EcTempShadow records the readiness-aware CPU estimate and its provenance, without changing the control input. The additional EcTempShadow gate record reports acquisition age, agreement, epoch and a diagnostic permission to decrease; it is not consumed by fan control. EcPair tach records whole-word RPM readiness, age and agreement; -1 means no usable estimate. This is diagnostic only, with no change to the existing raw shared-state or control path. Previous builds (920a4d0-ec-temp-gate, 2b8fe95-ec-temp-shadow, 615ec8c-ec-audit and 82f8dcf-smart-timing), task XML and startup shortcut backups remain available for rollback. No new EC reads, control commands or
 changes to fan mode. **Never tail the live TPFan files directly with Alloy.**
 In the initial deployment, both logs stopped advancing at 23:18:39 local
 time; removing the two live file sources was followed by resumed writing
@@ -257,7 +257,7 @@ The existing Alloy config now reads only closed, immutable copies under
 `E:/tpfan-qa/telemetry`. The Windows task `Theseus TPFan Snapshot`
 runs every minute while its interactive user is logged in (default
 battery restrictions apply). It runs
-`tools/thinkpad_fan/snapshot.py --root E:/tpfan-qa/920a4d0-ec-temp-gate --spool E:/tpfan-qa/telemetry/spool`.
+`tools/thinkpad_fan/snapshot.py --root E:/tpfan-qa/ee6d8f4-ec-tach-quality --spool E:/tpfan-qa/telemetry/spool`.
 The script opens original files briefly with FILE_SHARE_READ, WRITE and
 DELETE, reads at most 512 KiB per file per invocation, and closes the
 handle before creating a complete immutable JSONL batch. File identity,

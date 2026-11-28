@@ -698,7 +698,7 @@ services:
     location:
       task: Theseus TPFan Snapshot
       script: E:/local-lab/tools/thinkpad_fan/snapshot.py
-      source: E:/tpfan-qa/920a4d0-ec-temp-gate
+      source: E:/tpfan-qa/ee6d8f4-ec-tach-quality
       spool: E:/tpfan-qa/telemetry/spool
       config: E:/local-lab/infra/monitoring/alloy/config.alloy
     monitoring: 'Grafana Cloud Loki, job=tpfan, samples_snapshot and events_snapshot'
