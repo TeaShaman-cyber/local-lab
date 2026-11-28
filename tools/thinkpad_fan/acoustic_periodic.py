@@ -53,6 +53,9 @@ def summarize(data, rate, first, clock):
         "sample_rate": rate,
         "sample_count": len(data),
         "clock": {k: clock[k] for k in ("before", "after", "first_qpc_ns")},
+        "capture_quality": {
+            k: clock[k] for k in ("buffer_frames", "max_loop_ms", "processing", "format") if k in clock
+        },
         "stable_peaks": peaks,
         "band_edges_hz": bands,
         "band_seconds": [
