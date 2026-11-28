@@ -8,6 +8,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -75,7 +76,8 @@ def parse_polls(raw):
     return rows
 
 def command(args, timeout=30):
-    return subprocess.run(args,capture_output=True,timeout=timeout,check=False)
+    return subprocess.run(args,capture_output=True,timeout=timeout,check=False,
+                          creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
 
 def checked(args, timeout=30):
     r=command(args,timeout)
@@ -259,6 +261,10 @@ def main():
         print("WAREHOUSE",c.execute("select (select count(*) from events),(select count(*) from windows_events),(select count(*) from polls)").fetchone(),flush=True)
 
 if __name__=="__main__":
+    # pythonw has no standard streams. Keep one bounded per-run diagnostic log.
+    if sys.stdout is None or sys.stderr is None:
+        stream=(ROOT/"warehouse-run.log").open("w",encoding="utf-8",buffering=1)
+        sys.stdout=sys.stderr=stream
     started=time.time_ns()
     status={"started_ns":started,"result":"FAILED"}
     try:

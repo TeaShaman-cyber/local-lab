@@ -36,3 +36,18 @@ class WarehouseTest(unittest.TestCase):
         self.assertEqual(get("WakeToRun"),"false")
         self.assertEqual(get("ExecutionTimeLimit"),"PT10M")
         self.assertIn("--seconds 240",get("Arguments"))
+
+    def test_task_uses_gui_interpreter(self):
+        import xml.etree.ElementTree as ET
+
+        from hardware_task import NS, task_xml
+        root=ET.fromstring(task_xml("S-1-5-21-1","2026-11-28T12:00:00"))
+        self.assertTrue(root.findtext(".//{"+NS+"}Command").endswith("pythonw.exe"))
+
+    def test_native_children_are_windowless(self):
+        from unittest.mock import patch
+
+        import hardware_warehouse as h
+        with patch.object(h.subprocess,"CREATE_NO_WINDOW",0x08000000,create=True), patch.object(h.subprocess,"run") as run:
+            h.command(["logman","query","-ets"])
+            self.assertEqual(run.call_args.kwargs["creationflags"],0x08000000)
