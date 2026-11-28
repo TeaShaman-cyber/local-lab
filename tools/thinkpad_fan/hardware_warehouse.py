@@ -201,8 +201,8 @@ def capture(root, seconds):
                for line in (folder/"providers.txt").read_text().splitlines() if line.strip()):
             raise RuntimeError("provider readback mismatch")
         from cpu_limits import collect_interval
-        from cpu_limits_windows import Reader
-        cpu_batch = collect_interval(seconds, Reader)
+        from cpu_limits_windows import PlatformReader
+        cpu_batch = collect_interval(seconds, PlatformReader)
         b=anchor()
     finally:
         checked(["logman","stop",SESSION,"-ets"])
