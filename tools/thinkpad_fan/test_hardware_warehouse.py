@@ -152,3 +152,13 @@ def test_identical_initial_payloads_in_distinct_boots(tmp_path):
         archive.write_bytes(old+new)
         import_polls(c,archive,identity_source=path)
         assert c.execute("select count(*) from polls").fetchone()==(2,)
+
+
+def test_ucsi_error_provider_and_persistent_channel():
+    from pathlib import Path
+
+    from hardware_warehouse import CHANNELS
+    rows=[line.split() for line in Path(__file__).with_name("hardware_providers.txt").read_text().splitlines() if line.strip()]
+    name="Microsoft-Windows-USB-UCMUCSICX"
+    assert [row for row in rows if row[0]==name]==[[name,"0x8000000000000001","2"]]
+    assert CHANNELS[name+"/Operational"]==()

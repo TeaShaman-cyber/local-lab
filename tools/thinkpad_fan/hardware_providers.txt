@@ -18,3 +18,4 @@ DptfCpuEtwProvider 0xffffffffffffffff 4
 Lenovo-Sif-Core 0xffffffffffffffff 4
 Lenovo-Sif-Device 0xffffffffffffffff 4
 Lenovo-Power-BaseModule 0xffffffffffffffff 4
+Microsoft-Windows-USB-UCMUCSICX 0x8000000000000001 2
