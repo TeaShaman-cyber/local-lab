@@ -95,3 +95,48 @@ def test_order_contrast_handles_fundamental_near_lower_spectral_edge():
     frame = {"spectrum_dbfs": [-100.0] * 30}
     frame["spectrum_dbfs"][5] = -80
     assert order_contrast(frame, 2.9296875, 9, 2518, 1) == 20
+
+
+def test_comb_finds_multiple_orders_not_fixed_single_tone():
+    from acoustic_trace import fit_harmonic_spacing
+
+    peaks = [44.0, 50.0, 386.6, 463.5, 541.1, 695.7, 927.4, 1004.8, 1313.8, 1391.1, 1468.3, 2241.4, 3323.3]
+    result = fit_harmonic_spacing(peaks, 72, 82)
+    assert result["status"] == "CANDIDATE"
+    assert abs(result["spacing_hz"] - 77.28) < 0.05
+    assert result["matched"] == 11
+    assert fit_harmonic_spacing([44.0, 509.0], 38, 47)["status"] == "INSUFFICIENT"
+    assert fit_harmonic_spacing([386.6, 386.7, 386.8, 386.9, 387.0], 72, 82)["status"] == "INSUFFICIENT"
+
+
+def test_comb_alias_or_competing_spacings_are_not_forced_to_one_rpm():
+    from acoustic_trace import fit_harmonic_spacing
+
+    result = fit_harmonic_spacing([77.3 * n for n in (5, 6, 7, 9, 12, 13)], 35, 90)
+    assert result["status"] == "AMBIGUOUS"
+    assert result["spacing_hz"] is None
+    result = fit_harmonic_spacing([77.3 * n for n in (5, 6, 7, 9, 12, 13)], 72, 82)
+    assert result["status"] == "CANDIDATE"
+
+
+def test_stable_peaks_exclude_startup_and_interpolate_bins():
+    from acoustic_trace import stable_spectral_peaks
+
+    trace = {
+        "bin_hz": 2.0,
+        "first_bin": 10,
+        "sample_count": 40000,
+        "sample_rate": 8000,
+        "envelope": [{"start_ns": 1000000000}],
+        "spectra": [],
+    }
+    # Startup tone is discarded; repeated parabolic peak at index 10.25.
+    base = [-100.0] * 30
+    for i in (9, 10, 11):
+        base[i] = -60 - 8 * (i - 10.25) ** 2
+    trace["spectra"] = [
+        {"center_ns": 1000000000 + i * 500000000, "spectrum_dbfs": base if i >= 4 else [-100.0] * 30} for i in range(10)
+    ]
+    peaks = stable_spectral_peaks(trace)
+    assert len(peaks) == 1
+    assert abs(peaks[0]["frequency_hz"] - 40.5) < 1e-6

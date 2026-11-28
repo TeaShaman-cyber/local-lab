@@ -125,3 +125,84 @@ def order_contrast(frame, bin_hz, first_bin, rpm, order):
     if len(side) < 6:
         return None
     return max(values[i - 1 : i + 2]) - statistics.median(side)
+
+
+def fit_harmonic_spacing(peaks, minimum_hz, maximum_hz, tolerance_hz=2.5):
+    """Fit a harmonic comb within an explicit search band; never infer a unique RPM.
+
+    One vote per distinct order, reject too few matches and competing aliases.
+    The grid is only a candidate generator; refine using least squares through zero.
+    """
+    if not (
+        0 < minimum_hz < maximum_hz <= 500 and maximum_hz - minimum_hz <= 200 and 0 < tolerance_hz < minimum_hz / 4
+    ):
+        raise ValueError("invalid search band")
+    peaks = sorted(set(float(f) for f in peaks if math.isfinite(f) and 300 <= f < 3500))
+    if len(peaks) > 512:
+        raise ValueError("too many spectral candidates")
+
+    def matches(spacing):
+        chosen = {}
+        for f in peaks:
+            n = round(f / spacing)
+            err = abs(f - n * spacing)
+            if n > 0 and err <= tolerance_hz and (n not in chosen or err < chosen[n][0]):
+                chosen[n] = (err, f)
+        return [(n, f) for n, (_, f) in sorted(chosen.items())]
+
+    fits = []
+    for k in range(round((maximum_hz - minimum_hz) / 0.05) + 1):
+        grid = min(maximum_hz, minimum_hz + k * 0.05)
+        pairs = matches(grid)
+        if len(pairs) < 5:
+            continue
+        spacing = sum(n * f for n, f in pairs) / sum(n * n for n, _ in pairs)
+        if not minimum_hz <= spacing <= maximum_hz:
+            continue
+        pairs = matches(spacing)
+        if len(pairs) < 5:
+            continue
+        mse = sum((f - n * spacing) ** 2 for n, f in pairs) / len(pairs)
+        fits.append((len(pairs), mse, spacing, pairs))
+    if not fits:
+        return {"status": "INSUFFICIENT", "spacing_hz": None, "matched": 0}
+    fits.sort(key=lambda v: (-v[0], v[1], -v[2]))
+    count, mse, spacing, pairs = fits[0]
+    rival = next((v for v in fits if abs(v[2] - spacing) > 1), None)
+    # Distinct combs with equal support cannot be disambiguated by peak positions alone.
+    if rival and rival[0] == count:
+        return {"status": "AMBIGUOUS", "spacing_hz": None, "matched": count, "candidate_hz": [spacing, rival[2]]}
+    return {
+        "status": "CANDIDATE",
+        "spacing_hz": spacing,
+        "matched": count,
+        "rms_error_hz": math.sqrt(mse),
+        "pairs": pairs,
+        "rival_matches": rival[0] if rival else 0,
+    }
+
+
+def stable_spectral_peaks(trace):
+    """Median spectral lines, excluding two startup seconds and final half-second."""
+    start = trace["envelope"][0]["start_ns"]
+    end = start + trace["sample_count"] * 1e9 / trace["sample_rate"]
+    spectra = [f["spectrum_dbfs"] for f in trace["spectra"] if start + 2e9 <= f["center_ns"] <= end - 0.5e9]
+    if len(spectra) < 3:
+        return []
+    med = [statistics.median(v) for v in zip(*spectra, strict=True)]
+    peaks = []
+    for i in range(1, len(med) - 1):
+        if med[i] <= med[i - 1] or med[i] <= med[i + 1]:
+            continue
+        prominence = med[i] - statistics.median(med[max(0, i - 8) : i + 9])
+        if prominence < 8:
+            continue
+        delta = 0.5 * (med[i - 1] - med[i + 1]) / (med[i - 1] - 2 * med[i] + med[i + 1])
+        peaks.append(
+            {
+                "frequency_hz": (trace["first_bin"] + i + delta) * trace["bin_hz"],
+                "level_dbfs": med[i],
+                "prominence_db": prominence,
+            }
+        )
+    return peaks

@@ -129,3 +129,13 @@ to avoid startup transients. `order_contrast` compares power around a
 tachometer-derived rotational order to neighboring bins; a match at one
 constant speed is a candidate, not proof of fan attribution. Repeat across
 naturally occurring speeds. Do not use audio to control the fan.
+
+For cross-speed calibration, use `stable_spectral_peaks(trace)` (exclude
+initial 2 seconds and last 0.5 seconds) followed by
+`fit_harmonic_spacing(frequencies_hz, minimum_hz, maximum_hz)`.
+Require at least five distinct harmonic orders in the 300–3500 Hz band;
+report a candidate spacing, not a measured shaft speed. Equal-support aliases
+are ambiguous. A tachometer-derived search band is conditional evidence,
+not an independent speed measurement. Compare multiple operating points:
+a fixed-frequency peak may coincide with one rotational order by chance.
+Never use the fit as a controller input.
