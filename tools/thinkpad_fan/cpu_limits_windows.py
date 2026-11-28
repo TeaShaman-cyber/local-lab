@@ -1,12 +1,13 @@
-"""Read only the signed IntelMSR module; no MSR writes or EC accesses."""
+"""Read signed IntelMSR and IntelMCHBAR modules; no register writes or EC accesses."""
 
 import ctypes as C
 import hashlib
 import struct
 import time
+from contextlib import ExitStack
 from pathlib import Path
 
-from cpu_limits import make_sample
+from cpu_limits import decode_mmio, make_sample
 
 MODULE = Path("E:/tpfan-qa/msr-probe-289/IntelMSR-0.2.12.bin")
 SHA = "30a5a302283de1e080dfee99e686eca91d7e53e911095cb91a320fb961f1ce12"
@@ -15,6 +16,9 @@ CORE = (0x64F, 0x19C, 0x198, 0xE7, 0xE8)
 
 
 class Reader:
+    module = MODULE
+    sha = SHA
+
     def __enter__(self):
         import winreg
 
@@ -23,8 +27,8 @@ class Reader:
             vendor = winreg.QueryValueEx(key, "VendorIdentifier")[0]
         if vendor != "GenuineIntel" or not identity.startswith("Intel64 Family 6 Model 142 Stepping "):
             raise ValueError("unsupported CPU model")
-        blob = MODULE.read_bytes()
-        if len(blob) > 65536 or hashlib.sha256(blob).hexdigest() != SHA:
+        blob = self.module.read_bytes()
+        if len(blob) > 65536 or hashlib.sha256(blob).hexdigest() != self.sha:
             raise ValueError("unexpected signed module")
         k = self.k = C.WinDLL("kernel32", use_last_error=True)
         ptr, dw, size = C.c_void_p, C.c_uint32, C.c_size_t
@@ -94,3 +98,60 @@ class Reader:
                 if not self.k.SetThreadAffinityMask(thread, old):
                     raise OSError("affinity restore failed")
         return make_sample(start_ns, time.time_ns(), start_tick, self.k.GetTickCount64(), package, cores)
+
+
+class MmioReader(Reader):
+    module = Path("E:/tpfan-qa/msr-probe-289/IntelMCHBAR-0.2.12.bin")
+    sha = "3f82b832d99b4aac37d2a20fdb7c9baa2a3bc0488612c9019c9484eb0e8a6eae"
+
+    def read_limits(self):
+        tick, utc = self.k.GetTickCount64(), time.time_ns()
+        raw = struct.unpack("<Q", self.ioctl(0x841, struct.pack("<32sQ", b"ioctl_read_qword", 0x59A0), 8))[0]
+        unit = struct.unpack("<Q", self.ioctl(0x841, struct.pack("<32sQ", b"ioctl_read_dword", 0x5938), 8))[0]
+        return dict(
+            status="ok",
+            start_ns=utc,
+            end_ns=time.time_ns(),
+            start_tick=tick,
+            end_tick=self.k.GetTickCount64(),
+            raw=raw,
+            unit=unit,
+        )
+
+
+class PlatformReader:
+    """MSR remains available even if the independent read-only MMIO module fails."""
+
+    def __init__(self, msr_factory=Reader, mmio_factory=MmioReader):
+        self.msr_factory = msr_factory
+        self.mmio_factory = mmio_factory
+
+    def __enter__(self):
+        self.stack = ExitStack()
+        try:
+            self.msr = self.stack.enter_context(self.msr_factory())
+            try:
+                self.mmio = self.stack.enter_context(self.mmio_factory())
+            except (OSError, ValueError, RuntimeError) as exc:
+                print("CPU_MMIO_UNAVAILABLE", str(exc)[:200], flush=True)
+                self.mmio = None
+        except BaseException:
+            self.stack.close()
+            raise
+        return self
+
+    def __exit__(self, *args):
+        return self.stack.__exit__(*args)
+
+    def sample(self):
+        s = self.msr.sample()
+        s["mmio"] = {"status": "unavailable"}
+        if self.mmio is not None:
+            try:
+                s["mmio"] = self.mmio.read_limits()
+                decode_mmio(s)
+            except (OSError, ValueError, RuntimeError) as exc:
+                print("CPU_MMIO_UNAVAILABLE", str(exc)[:200], flush=True)
+                s["mmio"] = {"status": "unavailable"}
+                self.mmio = None
+        return s

@@ -201,3 +201,17 @@ above the median of the same trace. Exclude the initial two seconds and final
 half-second. These are uncalibrated transient candidates, not a source
 classifier; adjacent peaks can represent the same event. No full envelope,
 spectrogram, audio waveform or speech reconstruction data are persisted.
+
+Independent Intel package power-limit surfaces (model 8E): MSR 0x610 and
+MCHBAR+0x59A0 are evaluated separately (Intel 10th Gen datasheet vol.2,
+section 3.3.31). The R17 CtdpB SSDT's CTCN/CTCD explicitly write the latter.
+The existing signed IntelMSR module remains unchanged. Optional read-only
+IntelMCHBAR 0.2.12 (same official release; pinned SHA-256) reads only the
+package limit and unit registers, with independent acquisition timestamps
+and power-unit agreement. No register writes, no lock changes, no EC I/O.
+Stage the pinned module at E:/tpfan-qa/msr-probe-289/IntelMCHBAR-0.2.12.bin.
+On load/read/validation failure the MMIO sample is unavailable, never zero;
+MSR collection continues. New rows are in cpu_mmio_limits keyed by the
+same batch_sha/sample_index; legacy samples have no corresponding row.
+Both surfaces remain separate in DuckDB and portable snapshots. Existing
+240s/5min acquisition schedule unchanged, not continuous coverage.

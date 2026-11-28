@@ -43,12 +43,69 @@ def decode(s):
     )
 
 
+def decode_mmio(s):
+    m = s.get("mmio")
+    if "mmio" not in s:
+        return None
+    if not isinstance(m, dict):
+        raise ValueError("invalid MMIO metadata")
+    if m == {"status": "unavailable"}:
+        return dict(
+            status="unavailable",
+            start_ns=None,
+            end_ns=None,
+            start_tick=None,
+            end_tick=None,
+            raw=None,
+            unit=None,
+            pl1_w=None,
+            pl2_w=None,
+            pl1_enabled=None,
+            pl2_enabled=None,
+            locked=None,
+        )
+    keys = ("start_ns", "end_ns", "start_tick", "end_tick", "raw", "unit")
+    if m.get("status") != "ok" or any(type(m.get(k)) is not int for k in keys):
+        raise ValueError("invalid MMIO metadata")
+    a, b, t, u, raw, unit = (m[k] for k in keys)
+    if not (
+        s["end_ns"] <= a <= b <= s["start_ns"] + 500_000_000
+        and s["end_tick"] <= t <= u
+        and abs((b - s["start_ns"]) - (u - s["start_tick"]) * 1_000_000) <= 32_000_000
+        and 0 <= raw < 2**64 - 1
+        and 0 <= unit < 2**32
+        and unit & 15 == s["package"][0] & 15
+    ):
+        raise ValueError("invalid MMIO value or acquisition interval")
+    scale = 2 ** -(unit & 15)
+    return dict(
+        status="ok",
+        start_ns=a,
+        end_ns=b,
+        start_tick=t,
+        end_tick=u,
+        raw=raw,
+        unit=unit,
+        pl1_w=(raw & 0x7FFF) * scale,
+        pl2_w=((raw >> 32) & 0x7FFF) * scale,
+        pl1_enabled=bool(raw & (1 << 15)),
+        pl2_enabled=bool(raw & (1 << 47)),
+        locked=bool(raw & (1 << 63)),
+    )
+
+
 def init_cpu_limits(c):
     c.execute("""create table if not exists cpu_limit_samples(
         batch_sha varchar, sample_index integer, start_ns bigint, end_ns bigint,
         start_tick bigint, end_tick bigint, package json, cores json, reason_union ubigint,
         pl1_active boolean, pl2_active boolean, thermal_active boolean, prochot_active boolean,
         pl1_w double, pl2_w double, pl1_enabled boolean, pl2_enabled boolean,
+        primary key(batch_sha,sample_index))""")
+    c.execute("""create table if not exists cpu_mmio_limits(
+        batch_sha varchar, sample_index integer, status varchar,
+        start_ns bigint, end_ns bigint, start_tick bigint, end_tick bigint,
+        raw ubigint, unit ubigint, pl1_w double, pl2_w double,
+        pl1_enabled boolean, pl2_enabled boolean, locked boolean,
         primary key(batch_sha,sample_index))""")
     c.execute("""create table if not exists cpu_limit_batches(
         sha varchar primary key, segment varchar unique, status varchar, n integer)""")
@@ -80,9 +137,13 @@ def import_cpu_limits(c, folder):
     ):
         raise ValueError("inconsistent CPU batch")
     rows = []
+    mmio_rows = []
     prev = -1
     for i, s in enumerate(samples):
         d = decode(s)
+        m = decode_mmio(s)
+        if m is not None:
+            mmio_rows.append((sha, i, *m.values()))
         if s["start_tick"] <= prev:
             raise ValueError("nonmonotonic CPU samples")
         prev = s["end_tick"]
@@ -103,6 +164,8 @@ def import_cpu_limits(c, folder):
     try:
         if rows:
             c.executemany("insert into cpu_limit_samples values (" + ",".join(["?"] * 17) + ")", rows)
+        if mmio_rows:
+            c.executemany("insert into cpu_mmio_limits values (" + ",".join(["?"] * 14) + ")", mmio_rows)
         c.execute("insert into cpu_limit_batches values (?,?,?,?)", [sha, folder.name, status, len(rows)])
         c.execute("commit")
     except Exception:
@@ -129,6 +192,7 @@ def collect_interval(seconds, reader_factory, sleep=time.sleep, monotonic=time.m
             while monotonic() < end and len(samples) < 120:
                 sample = reader.sample()
                 decode(sample)
+                decode_mmio(sample)
                 samples.append(sample)
                 sleep(max(0, min(2, end - monotonic())))
     except (OSError, ValueError, RuntimeError) as e:

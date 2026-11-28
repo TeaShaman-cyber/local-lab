@@ -12,6 +12,7 @@ TABLES = {
     "capture_batches": "sha,started_ns,ended_ns,events_lost,buffers_lost,mode",
     "imports": "sha,bytes,n",
     "cpu_limit_samples": "batch_sha,sample_index,start_ns,end_ns,start_tick,end_tick,package,cores,reason_union,pl1_active,pl2_active,thermal_active,prochot_active,pl1_w,pl2_w,pl1_enabled,pl2_enabled",
+    "cpu_mmio_limits": "batch_sha,sample_index,status,start_ns,end_ns,start_tick,end_tick,raw,unit,pl1_w,pl2_w,pl1_enabled,pl2_enabled,locked",
     "cpu_limit_batches": "sha,segment,status,n",
     "smart_events": "run_id,byte_offset,tick,kind,seq,payload,parse_status,line_sha256",
 }
@@ -33,7 +34,7 @@ def publish(c, root: Path):
     c.execute("begin")
     try:
         for table,columns in TABLES.items():
-            if table in ("smart_events", "cpu_limit_samples", "cpu_limit_batches") and not c.execute(
+            if table in ("smart_events", "cpu_limit_samples", "cpu_limit_batches", "cpu_mmio_limits") and not c.execute(
                     "select count(*) from information_schema.tables where table_name=?", [table]
             ).fetchone()[0]:
                 continue
