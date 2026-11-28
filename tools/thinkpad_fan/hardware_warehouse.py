@@ -200,9 +200,22 @@ def import_polls(c, source, identity_source=None):
         raw=f.read(128*1024**2+1)
     if len(raw)>128*1024**2:
         raise RuntimeError("poll snapshot exceeds 128MiB; split before import")
+    # R17 failure evidence is independent of a completed ordinary poll.
+    # Commit it even if the service exits before its first full-poll record.
+    from r17_row_events import import_tpfan_rows
+    c.execute("begin")
+    try:
+        observed=import_tpfan_rows(c,raw,identity_source or source)
+        c.execute("commit")
+    except Exception:
+        c.execute("rollback")
+        raise
     # Validate all run boundaries before inserting any generation.
     segments=[(chunk,parse_polls(chunk)) for chunk in split_poll_runs(raw)]
     if not segments or any(not rows for _,rows in segments):
+        if observed and not any(rows for _,rows in segments):
+            print("R17_ONLY",observed,flush=True)
+            return
         raise RuntimeError("no full polls")
     c.execute("begin")
     try:
@@ -227,8 +240,6 @@ def import_poll_run(c, source, raw, rows, appended=False):
             raise ValueError("missing appended run boundary")
         first=next(line for line in raw.splitlines(keepends=True) if POLL_LINE.fullmatch(line))
         run=hashlib.sha256(b"appended-v1|"+run.encode()+b"|"+startup+first).hexdigest()
-    from r17_row_events import import_tpfan_rows
-    import_tpfan_rows(c,raw,run)
     smart = parse_smart(raw, [dict(zip(FIELDS, row)) for row in rows])
     c.register("incoming_polls",pa.table({"run_id":[run]*len(rows),**{k:[r[i] for r in rows] for i,k in enumerate(FIELDS)}}))
     try:

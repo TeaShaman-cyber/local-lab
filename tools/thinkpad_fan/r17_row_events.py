@@ -1,5 +1,6 @@
 """Immutable local observation spool and additive DuckDB projection."""
 
+import datetime as dt
 import hashlib
 import json
 import re
@@ -143,6 +144,7 @@ def init_rows(c):
         begin_ns bigint,end_ns bigint,status varchar,before_state varchar,after_state varchar,
         row_a varchar,row_b varchar,error varchar,quality varchar,
         target_rpm integer,processed_rpm integer,output_pwm integer,upper_pwm integer,floor_pwm integer)""")
+    c.execute("create table if not exists r17_log_positions(sha varchar primary key,line_sha varchar not null)")
 
 
 def import_rows(c, root):
@@ -157,12 +159,12 @@ def import_rows(c, root):
         insert_record(c,raw,sha)
 
 
-def insert_record(c,raw,sha):
+def insert_record(c,raw,sha,wall_ok=True):
     d, obs = decode(raw)
     q = qualify(obs)
     # A long/clock-discontinuous acquisition is preserved but not qualified.
     if (
-        d["end_tick"] - d["begin_tick"] > 2000
+        not wall_ok or d["end_tick"] - d["begin_tick"] > 2000
         or abs(d["end_ns"] - d["begin_ns"] - (d["end_tick"] - d["begin_tick"]) * 1000000) > 32000000
     ):
         q = {**dict.fromkeys(FIELDS), "quality": "stale"}
@@ -188,22 +190,38 @@ def insert_record(c,raw,sha):
 
 # The producer emits UTC ns and boot-relative tick for the same interval.
 # Never infer missing values from the last accepted sample.
-TPFAN_ROW=re.compile(rb"\[[^\r\n]+\] EcPair r17 v1 (\d+),(\d+),(\d+),(\d+),([0-5]),([0-9a-f]{8}|-),([0-9a-f]{8}|-),([0-9a-f]{20}|-),([0-9a-f]{20}|-),([01])\r?\n")
+TPFAN_ROW=re.compile(rb"\[([^\r\n]+)\] EcPair r17 v1 (\d+),(\d+),(\d+),(\d+),([0-5]),([0-9a-f]{8}|-),([0-9a-f]{8}|-),([0-9a-f]{20}|-),([0-9a-f]{20}|-),([01])\r?\n")
 TPFAN_STATUS=("complete","guard_rejected","failed","restore_unverified","transport_uncertain","state_changed")
 
 
-def import_tpfan_rows(c, raw, run):
-    offset=0
-    for line in raw.splitlines(keepends=True):
+def import_tpfan_rows(c, raw, source):
+    from hardware_warehouse import STARTUP
+    if b" EcPair r17 v1 " not in raw:
+        return 0
+    offset=origin=0
+    generation=b"legacy-prefix"
+    seen=set()
+    count=0
+    lines=raw.splitlines(keepends=True)
+    for i,line in enumerate(lines):
         if not line.endswith(b"\n"):
+            if i!=len(lines)-1:
+                raise ValueError("interior non-LF log record")
             break
+        if STARTUP.fullmatch(line):
+            generation=line
+            if generation in seen:
+                raise ValueError("ambiguous repeated R17 startup identity")
+            seen.add(generation)
+            origin=offset
         if b" EcPair r17 v1 " in line:
             m=TPFAN_ROW.fullmatch(line)
             if not m:
                 raise ValueError("malformed integrated R17 observation")
-            begin,end,begin_ns,end_ns,status=map(int,m.groups()[:5])
-            before,after,a,b=(None if x==b"-" else bytes.fromhex(x.decode()) for x in m.groups()[5:9])
-            inhibited=m[10]==b"1"
+            g=m.groups()
+            begin,end,begin_ns,end_ns,status=map(int,g[1:6])
+            before,after,a,b=(None if x==b"-" else bytes.fromhex(x.decode()) for x in g[6:10])
+            inhibited=g[10]==b"1"
             name=TPFAN_STATUS[status]
             if inhibited and name=="complete":
                 name="inhibited"
@@ -211,6 +229,19 @@ def import_tpfan_rows(c, raw, run):
                             tuple(after) if after is not None else None,a,b,
                             "inhibited" if inhibited else None)
             record=encode(obs,begin,end,begin_ns,end_ns,"TPFan-R17-row56-v1")
-            sha=hashlib.sha256(b"tpfan-r17-v1|"+run.encode()+b"|"+str(offset).encode()+b"|"+line).hexdigest()
-            insert_record(c,record,sha)
+            sha=hashlib.sha256(b"tpfan-r17-v1|"+str(source).encode()+b"|"+generation+b"|"+str(offset-origin).encode()).hexdigest()
+            line_sha=hashlib.sha256(line).hexdigest()
+            prior=c.execute("select line_sha from r17_log_positions where sha=?",[sha]).fetchone()
+            if prior and prior[0]!=line_sha:
+                raise ValueError("conflicting integrated R17 evidence")
+            try:
+                stamp=dt.datetime.strptime(g[0].decode("ascii"),"%d.%m.%Y %H:%M:%S")
+                t0,t1=stamp.timestamp(),stamp.replace(fold=1).timestamp()
+                wall_ok=t0==t1 and abs(end_ns-int(t0)*10**9)<=2*10**9
+            except (ValueError,OverflowError,OSError):
+                wall_ok=False
+            insert_record(c,record,sha,wall_ok=wall_ok)
+            c.execute("insert into r17_log_positions values (?,?) on conflict do nothing",[sha,line_sha])
+            count+=1
         offset+=len(line)
+    return count
