@@ -103,6 +103,8 @@ def insert(c, table, names, rows, conflict=False):
         c.unregister("incoming")
 
 def init(c):
+    from r17_row_events import init_rows
+    init_rows(c)
     from smart_events import init_smart
     init_smart(c)
     c.execute("create table if not exists imports(sha varchar primary key, source varchar, bytes bigint,n bigint)")
@@ -263,6 +265,8 @@ def main():
         check_room(ROOT)
         import_windows(c)
         import_polls(c,SOURCE)
+        from r17_row_events import import_rows
+        import_rows(c, ROOT/"r17-row-spool")
         c.execute("checkpoint")
         print("WAREHOUSE",c.execute("select (select count(*) from events),(select count(*) from windows_events),(select count(*) from polls)").fetchone(),flush=True)
 

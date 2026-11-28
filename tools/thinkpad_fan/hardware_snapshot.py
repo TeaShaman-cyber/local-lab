@@ -12,6 +12,7 @@ TABLES = {
     "capture_batches": "sha,started_ns,ended_ns,events_lost,buffers_lost,mode",
     "imports": "sha,bytes,n",
     "smart_events": "run_id,byte_offset,tick,kind,seq,payload,parse_status,line_sha256",
+    "r17_rows": "sha,source,begin_tick,end_tick,begin_ns,end_ns,status,before_state,after_state,row_a,row_b,error,quality,target_rpm,processed_rpm,output_pwm,upper_pwm,floor_pwm",
 }
 
 def generation_name(value):
@@ -31,8 +32,8 @@ def publish(c, root: Path):
     c.execute("begin")
     try:
         for table,columns in TABLES.items():
-            if table == "smart_events" and not c.execute(
-                    "select count(*) from information_schema.tables where table_name='smart_events'"
+            if table in ("smart_events","r17_rows") and not c.execute(
+                    "select count(*) from information_schema.tables where table_name=?", [table]
             ).fetchone()[0]:
                 continue
             path=folder/(table+".parquet")

@@ -23,6 +23,8 @@ def main():
     tables=("events","windows_events","polls","trace_anchors","capture_batches","imports")
     if "smart_events" in manifest["tables"]:
         tables += ("smart_events",)
+    if "r17_rows" in manifest["tables"]:
+        tables += ("r17_rows",)
     with duckdb.connect(config={"memory_limit":"512MB","threads":1,"max_temp_directory_size":"96MB"}) as c:
         for table in tables:
             path=folder/(table+".parquet")
@@ -48,6 +50,13 @@ def main():
             print(*result.fetchall(),sep="\n")
         else:
             print("Smart event coverage: unavailable (legacy snapshot)")
+        if "r17_rows" in tables:
+            result = c.execute("""select quality,count(*) as n,count(floor_pwm) as qualified_floor,
+                                  min(floor_pwm),max(floor_pwm) from r17_rows group by quality order by quality""")
+            print([x[0] for x in result.description])
+            print(*result.fetchall(),sep="\n")
+        else:
+            print("R17 row coverage: unavailable (legacy snapshot)")
 
 if __name__=="__main__":
     main()
