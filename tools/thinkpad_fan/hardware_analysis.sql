@@ -2,7 +2,9 @@
 CREATE TEMP VIEW matched AS
 SELECT p.*,a.sha,a.offset_ns,
   (ra=1 AND rb=1 AND ta BETWEEN 1 AND 127 AND tb BETWEEN 1 AND 127 AND abs(ta-tb)<=5) tempdual
-FROM poll_tach_quality p JOIN trace_anchors a ON p.begin_ms>=a.tick_start+32 AND p.end_ms<=a.tick_end-32
+FROM poll_tach_quality p JOIN poll_wall_times w USING(run_id,seq)
+JOIN trace_anchors a ON p.begin_ms>=a.tick_start+32 AND p.end_ms<=a.tick_end-32
+  AND abs(w.wall_ns-(a.offset_ns+p.now*1000000))<=2000000000
 WHERE p.end_ms>p.begin_ms;
 CREATE TEMP VIEW activity AS
 SELECT p.run_id,p.seq,p.sha,p.fresh,p.tempdual,p.tach_quality,p.end_ms-p.begin_ms AS duration_ms,

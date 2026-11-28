@@ -75,6 +75,57 @@ def parse_polls(raw):
         rows.append(row)
     return rows
 
+# A native service startup marker plus sequence one admits a new run.
+# Merely seeing a duplicate or decreasing counter is not restart evidence.
+STARTUP = re.compile(rb"\[[^\r\n]+\] Port backend: PawnIO [^\r\n]+\r?\n")
+POLL_LINE = re.compile(rb"\[([^\r\n]+)\] EcPair full (-?\d+(?:,-?\d+){30})\r?\n")
+
+def split_poll_runs(raw):
+    start=offset=0
+    previous=None
+    startup=None
+    for line in raw.splitlines(keepends=True):
+        if not line.endswith(b"\n"):
+            break
+        if STARTUP.fullmatch(line):
+            startup=offset
+        if b"EcPair full " in line:
+            match=POLL_LINE.fullmatch(line)
+            if not match:
+                raise ValueError("malformed full poll")
+            row=tuple(map(int,match[2].split(b",")))
+            if row[0]<=0:
+                raise ValueError("invalid poll sequence")
+            if previous is not None and (row[0]<=previous[0] or row[6]<previous[6]):
+                if row[0]!=1 or startup is None or startup<=start:
+                    raise ValueError("unmarked sequence reset/duplicate")
+                yield raw[start:startup]
+                start=startup
+            previous=row
+            startup=None
+        offset+=len(line)
+    # Do not associate a new service startup tail with the old run before
+    # its first complete poll arrives.
+    yield raw[start:startup] if previous is not None and startup is not None else raw[start:]
+
+def poll_wall_times(raw):
+    # Log timestamps are second-resolution local wall time. Only use them
+    # as a coarse guard against cross-boot tick collisions, not exact timing.
+    result=[]
+    for line in raw.splitlines(keepends=True):
+        m=POLL_LINE.fullmatch(line)
+        if not m:
+            continue
+        seq=int(m[2].split(b",",1)[0])
+        try:
+            stamp=dt.datetime.strptime(m[1].decode("ascii"),"%d.%m.%Y %H:%M:%S")
+            a,b=stamp.timestamp(),stamp.replace(fold=1).timestamp()
+            ns=int(a)*10**9 if a==b else None
+        except (ValueError,OverflowError,OSError):
+            ns=None
+        result.append((seq,ns))
+    return result
+
 def command(args, timeout=30):
     return subprocess.run(args,capture_output=True,timeout=timeout,check=False,
                           creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
@@ -111,6 +162,7 @@ def init(c):
     c.execute("create table if not exists events(sha varchar, ordinal bigint, timestamp_ns bigint, provider_id varchar, provider_name varchar,event_id integer,version integer,task integer,opcode integer,level integer,event json,primary key(sha,ordinal))")
     c.execute("create table if not exists polls(run_id varchar,"+",".join(k+" bigint" for k in FIELDS)+",primary key(run_id,seq))")
     c.execute(Path(__file__).with_name("hardware_quality.sql").read_text())
+    c.execute("create table if not exists poll_wall_times(run_id varchar,seq bigint,wall_ns bigint,primary key(run_id,seq))")
     c.execute("create table if not exists poll_snapshots(sha varchar primary key,run_id varchar,bytes bigint,n bigint)")
     c.execute("create table if not exists trace_anchors(sha varchar primary key,tick_start bigint,tick_end bigint,offset_ns bigint,drift_ns bigint)")
     c.execute("create table if not exists windows_events(event_key varchar primary key,channel varchar,record_id bigint,provider varchar,event_id integer,timestamp_ns bigint,xml varchar)")
@@ -139,38 +191,49 @@ def import_windows(c):
             raise
         print("EVENTLOG",channel,len(rows),"CAPPED" if len(rows)>=LIMIT else "OK",flush=True)
 
-def import_polls(c, source):
-    from smart_events import import_smart, parse_smart
+def import_polls(c, source, identity_source=None):
     from snapshot import shared_open
     with shared_open(source) as f:
         raw=f.read(128*1024**2+1)
     if len(raw)>128*1024**2:
         raise RuntimeError("poll snapshot exceeds 128MiB; split before import")
-    rows=parse_polls(raw)
-    if not rows:
+    # Validate all run boundaries before inserting any generation.
+    segments=[(chunk,parse_polls(chunk)) for chunk in split_poll_runs(raw)]
+    if not segments or any(not rows for _,rows in segments):
         raise RuntimeError("no full polls")
-    run=hashlib.sha256((str(source)+"|"+",".join(map(str,rows[0]))).encode()).hexdigest()
-    smart = parse_smart(raw, [dict(zip(FIELDS, row)) for row in rows])
-    # Preserve the pilot identity (same path and first row).
     c.execute("begin")
     try:
-        # Reject conflicting reimports instead of silently masking changed evidence.
-        import pyarrow as pa
-        c.register("incoming_polls",pa.table({"run_id":[run]*len(rows),**{k:[r[i] for r in rows] for i,k in enumerate(FIELDS)}}))
-        try:
-            comparison=" or ".join("p."+k+" is distinct from b."+k for k in FIELDS[1:])
-            if c.execute("select count(*) from polls p join incoming_polls b using(run_id,seq) where "+comparison).fetchone()[0]:
-                raise ValueError("conflicting poll evidence")
-            c.execute("insert into polls select * from incoming_polls on conflict do nothing")
-        finally:
-            c.unregister("incoming_polls")
-        import_smart(c, run, smart)
-        c.execute("insert into poll_snapshots values (?,?,?,?) on conflict do nothing",[hashlib.sha256(raw).hexdigest(),run,len(raw),len(rows)])
+        for chunk,rows in segments:
+            import_poll_run(c, identity_source or source, chunk, rows)
         c.execute("commit")
     except Exception:
         c.execute("rollback")
         raise
-    print("POLLS",len(rows),flush=True)
+    print("POLLS",sum(len(rows) for _,rows in segments),"RUNS",len(segments),flush=True)
+
+def import_poll_run(c, source, raw, rows):
+    import pyarrow as pa
+    from smart_events import import_smart, parse_smart
+    run=hashlib.sha256((str(source)+"|"+",".join(map(str,rows[0]))).encode()).hexdigest()
+    smart = parse_smart(raw, [dict(zip(FIELDS, row)) for row in rows])
+    c.register("incoming_polls",pa.table({"run_id":[run]*len(rows),**{k:[r[i] for r in rows] for i,k in enumerate(FIELDS)}}))
+    try:
+        comparison=" or ".join("p."+k+" is distinct from b."+k for k in FIELDS[1:])
+        if c.execute("select count(*) from polls p join incoming_polls b using(run_id,seq) where "+comparison).fetchone()[0]:
+            raise ValueError("conflicting poll evidence")
+        c.execute("insert into polls select * from incoming_polls on conflict do nothing")
+    finally:
+        c.unregister("incoming_polls")
+    wall=poll_wall_times(raw)
+    c.register("incoming_wall",pa.table({"run_id":[run]*len(wall),"seq":[v[0] for v in wall],"wall_ns":pa.array([v[1] for v in wall],type=pa.int64())}))
+    try:
+        if c.execute("select count(*) from poll_wall_times p join incoming_wall b using(run_id,seq) where p.wall_ns is distinct from b.wall_ns").fetchone()[0]:
+            raise ValueError("conflicting poll wall time")
+        c.execute("insert into poll_wall_times select * from incoming_wall on conflict do nothing")
+    finally:
+        c.unregister("incoming_wall")
+    import_smart(c,run,smart)
+    c.execute("insert into poll_snapshots values (?,?,?,?) on conflict do nothing",[hashlib.sha256(raw).hexdigest(),run,len(raw),len(rows)])
 
 def anchor():
     tick=ctypes.windll.kernel32.GetTickCount64
