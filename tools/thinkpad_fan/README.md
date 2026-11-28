@@ -139,3 +139,27 @@ are ambiguous. A tachometer-derived search band is conditional evidence,
 not an independent speed measurement. Compare multiple operating points:
 a fixed-frequency peak may coincide with one rotational order by chance.
 Never use the fit as a controller input.
+
+## Periodic acoustic diagnostics (issue #289)
+
+Opt-in seven-day trial, independent of the ETL task. Windows native WASAPI
+captures 15 seconds every five minutes in the interactive user session;
+Docker Desktop Linux does not own the microphone. Explicit installation:
+`python tools/thinkpad_fan/acoustic_task.py --install` on the Windows host.
+The installer pins the current default capture endpoint; changing it causes
+capture rejection. Verify the endpoint is the intended laptop microphone
+before installation. No elevation, wake, raw audio files or full spectrograms;
+only local stable spectral peaks, coarse one-second band energies and clock
+anchors. These derived features may still reflect room sound and must not be
+uploaded without consent. Session detection is best-effort, not a guarantee
+against concurrent voice capture. No global audio settings or fan control.
+Storage admission checks both the warehouse budget and a 64 MiB local cap;
+no automatic deletion. Last outcome is records/status.json; capture records
+are atomically published as trace-<utc ns>.json. The expiry also gates
+capture in code. Disable early via Task Scheduler (Theseus Fan Acoustic
+Diagnostics); remove the task to uninstall, keep or manually delete local data.
+Manual on-demand full spectral capture remains separate.
+
+Optional read-only Docker summary:
+`docker compose -f infra/compose/hardware-analysis/docker-compose.yml --profile acoustic run --rm acoustic`.
+The container has no network or microphone, mounts only the compact records.

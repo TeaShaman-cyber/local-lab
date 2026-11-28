@@ -14,3 +14,17 @@ services:
       - ${HARDWARE_ANALYSIS_ROOT:-D:/theseus-hardware/analysis}:/snapshot:ro
     tmpfs:
       - /tmp:size=128m
+  acoustic:
+    profiles: [acoustic]
+    build:
+      context: ../../..
+      dockerfile: infra/compose/hardware-analysis/Dockerfile
+    entrypoint: ["python", "/app/acoustic_report.py"]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 0.5
+    volumes:
+      - ${HARDWARE_ACOUSTIC_ROOT:-D:/theseus-hardware/acoustic-periodic/records}:/acoustic:ro

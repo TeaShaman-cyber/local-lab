@@ -86,6 +86,29 @@ def endpoint(ole):
         release(e)
 
 
+def endpoint_id(dev, ole):
+    ptr = C.c_void_p()
+    call(dev, 5, [C.POINTER(C.c_void_p)], C.byref(ptr))
+    try:
+        return C.wstring_at(ptr)
+    finally:
+        ole.CoTaskMemFree(ptr)
+
+
+def current_endpoint_id():
+    ole = C.OleDLL("ole32")
+    ole.CoInitializeEx.argtypes = [C.c_void_p, W.DWORD]
+    ole.CoCreateInstance.argtypes = [C.POINTER(GUID), C.c_void_p, W.DWORD, C.POINTER(GUID), C.POINTER(C.c_void_p)]
+    ole.CoInitializeEx(None, 0)
+    dev = None
+    try:
+        dev = endpoint(ole)
+        return endpoint_id(dev, ole)
+    finally:
+        release(dev)
+        ole.CoUninitialize()
+
+
 def clock_anchor():
     k = C.WinDLL("kernel32", use_last_error=True)
     k.GetTickCount64.restype = C.c_ulonglong
@@ -120,7 +143,7 @@ def raw_properties():
     return AudioClientProperties(C.sizeof(AudioClientProperties), 0, 0, 1)
 
 
-def capture(seconds, raw=False):
+def capture(seconds, raw=False, expected_endpoint=None):
     ole = C.OleDLL("ole32")
     ole.CoInitializeEx.argtypes = [C.c_void_p, W.DWORD]
     ole.CoCreateInstance.argtypes = [C.POINTER(GUID), C.c_void_p, W.DWORD, C.POINTER(GUID), C.POINTER(C.c_void_p)]
@@ -132,6 +155,8 @@ def capture(seconds, raw=False):
     startup_excluded = []
     try:
         dev = endpoint(ole)
+        if expected_endpoint is not None and endpoint_id(dev, ole) != expected_endpoint:
+            raise RuntimeError("capture endpoint changed")
         if 1 in sessions(dev):
             raise RuntimeError("microphone already in use")
         if raw:
