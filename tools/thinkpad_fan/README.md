@@ -100,3 +100,42 @@ before any separately governed live experiment.
 ## Diagnostic file export
 
 `snapshot.py` is a read-only file collector, not a hardware sampler. See [host monitoring](../../docs/reference/observability/grafana-host-monitoring.md) for the deployed task and Loki streams. Run `python -m unittest discover -s tools/thinkpad_fan -p test_snapshot.py` for checkpoint, partial-line, and rotation tests. Do not use Alloy to hold active TPFan CSV/log files open.
+
+## On-demand acoustic trace (R17 investigation)
+
+Issue #289, iteration186 and current acoustic trace candidate.
+From an interactive Windows console, intentionally start a short capture:
+`python tools/thinkpad_fan/acoustic_windows.py --capture --seconds 15`.
+No background microphone service, scheduler, automatic triggering, or fan
+command. Keep microphone position fixed and remain silent during the test.
+Default output is local time-resolved spectrum and 20-ms peak/RMS envelope;
+`--save-wav` additionally retains the raw audible waveform (may contain
+room speech). Do not upload either without explicit consent. Store under
+D:/theseus-hardware/acoustic and remove manually when no longer needed.
+Budget admission uses the existing warehouse check. Capture is shared-mode;
+session checks are best-effort and cannot guarantee dictation compatibility.
+WASAPI packet position/QPC, discontinuity flags and before/after UTC/tick
+anchors are retained; timing-invalid captures are discarded. Mic level is
+uncalibrated; spectral peaks are candidate mechanical orders, not RPM truth.
+No EC traffic or deliberate spin-up. Native capture timing needs an actual
+user-initiated quiet Windows pilot before operational acceptance.
+
+For diagnostic capture on a supported endpoint, pass `--raw` to request
+RAW audio processing for this session only (no automatic fallback, no
+endpoint-wide setting change). Exclude flagged startup packets only before
+the first accepted sample, for at most one second; later flagged packets
+invalidate the capture. Exclude the first second from acoustic comparison
+to avoid startup transients. `order_contrast` compares power around a
+tachometer-derived rotational order to neighboring bins; a match at one
+constant speed is a candidate, not proof of fan attribution. Repeat across
+naturally occurring speeds. Do not use audio to control the fan.
+
+For cross-speed calibration, use `stable_spectral_peaks(trace)` (exclude
+initial 2 seconds and last 0.5 seconds) followed by
+`fit_harmonic_spacing(frequencies_hz, minimum_hz, maximum_hz)`.
+Require at least five distinct harmonic orders in the 300–3500 Hz band;
+report a candidate spacing, not a measured shaft speed. Equal-support aliases
+are ambiguous. A tachometer-derived search band is conditional evidence,
+not an independent speed measurement. Compare multiple operating points:
+a fixed-frequency peak may coincide with one rotational order by chance.
+Never use the fit as a controller input.
