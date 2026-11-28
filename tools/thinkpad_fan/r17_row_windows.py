@@ -23,7 +23,7 @@ SOURCE_ID = "R17ET45W-row56-PawnIO-strict-v1"
 def preflight():
     import winreg
 
-    from hardware_warehouse import FIELDS, ROOT, SOURCE, check_room, parse_polls
+    from hardware_warehouse import ROOT, SOURCE, check_room
     from snapshot import shared_open
 
     check_room(ROOT)
@@ -39,13 +39,27 @@ def preflight():
         raw = f.read(128 * 1024**2 + 1)
     if len(raw) > 128 * 1024**2:
         raise RuntimeError("source too large")
-    rows = parse_polls(raw)
-    if len(rows) < 3:
-        raise RuntimeError("insufficient live evidence")
     tick = c.windll.kernel32.GetTickCount64
     tick.restype = c.c_ulonglong
-    now = tick()
-    last = [dict(zip(FIELDS, row)) for row in rows[-3:]]
+    live_level_one(raw, tick())
+    return ROOT, module
+
+
+def live_level_one(raw, now):
+    from hardware_warehouse import FIELDS, POLL_LINE, STARTUP, parse_polls, split_poll_runs
+
+    # A pending startup without a fresh completed poll must not borrow the
+    # preceding service's last good samples. Use the same restart validation
+    # as the canonical importer, not a naive sequence reset.
+    lines=raw.splitlines(keepends=True)
+    last_poll=max((i for i,line in enumerate(lines) if POLL_LINE.fullmatch(line)),default=-1)
+    if last_poll<0 or any(STARTUP.fullmatch(line) for line in lines[last_poll+1:]):
+        raise RuntimeError("no current service polls")
+    runs=list(split_poll_runs(raw))
+    rows=parse_polls(runs[-1])
+    if len(rows)<3:
+        raise RuntimeError("insufficient live evidence")
+    last=[dict(zip(FIELDS,row)) for row in rows[-3:]]
     for row in last:
         if (
             row["mode"] not in (2, 3)
@@ -59,7 +73,7 @@ def preflight():
             or not 0 < max(row["package"], row["hottest"]) < 78
         ):
             raise RuntimeError("not in stable, cool, acknowledged level 1")
-    return ROOT, module
+    return last
 
 
 class PawnPort:

@@ -75,6 +75,7 @@ jobs:
           pip install --quiet \
             "pytest==9.2.0" \
             "duckdb==1.5.5" \
+            "pyarrow==26.0.1" \
             "ruff==0.17.3" \
             "yamllint==1.38.0" \
             "logfmtkv==0.2.1"

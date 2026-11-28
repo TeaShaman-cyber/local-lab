@@ -82,3 +82,83 @@ class WarehouseTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 publish(c,root)
             self.assertEqual(json.loads((root/"latest.json").read_text()),previous)
+
+
+def test_reboot_import_preserves_existing_run_and_rejects_unmarked_reset(tmp_path):
+    import duckdb
+    import pytest
+    from hardware_warehouse import FIELDS, import_polls, init
+
+    def poll(n, tick, stamp):
+        r=dict.fromkeys(FIELDS,0)
+        r.update(seq=n,now=tick,begin_ms=tick-100,end_ms=tick-10)
+        return f"[{stamp}] EcPair full ".encode()+",".join(str(r[k]) for k in FIELDS).encode()+b"\n"
+
+    old=poll(1,84000000,"28.11.2026 15:09:47")+poll(2,84001000,"28.11.2026 15:09:48")
+    marker=b"[28.11.2026 15:14:02] Port backend: PawnIO 2.2.0 with LpcThinkpadEC.bin\n"
+    new=poll(1,22843,"28.11.2026 15:14:03")+poll(2,23843,"28.11.2026 15:14:04")
+    path=tmp_path/"TPFanControl.log"
+    path.write_bytes(old)
+    with duckdb.connect() as c:
+        init(c)
+        import_polls(c,path)
+        prior=c.execute("select run_id from polls limit 1").fetchone()[0]
+        path.write_bytes(old+marker+new)
+        import_polls(c,path)
+        import_polls(c,path)
+        assert c.execute("select count(*),count(distinct run_id) from polls").fetchone()==(4,2)
+        assert c.execute("select count(*) from polls where run_id=?",[prior]).fetchone()==(2,)
+        assert c.execute("select count(*) from poll_wall_times").fetchone()==(4,)
+        path.write_bytes(old+new)
+        with pytest.raises(ValueError):
+            import_polls(c,path)
+        assert c.execute("select count(*) from polls").fetchone()==(4,)
+
+
+def test_tick_collision_never_matches_different_boot():
+    from pathlib import Path
+
+    import duckdb
+    from hardware_warehouse import init
+    with duckdb.connect() as c:
+        init(c)
+        c.execute("insert into polls(run_id,seq,begin_ms,end_ms,now) values ('a',1,1100,1200,1250),('b',1,1100,1200,1250)")
+        c.execute("insert into poll_wall_times values ('a',1,11000000000),('b',1,99000000000)")
+        c.execute("insert into trace_anchors values ('trace-a',1000,2000,10000000000,0)")
+        c.execute(Path(__file__).with_name("hardware_analysis.sql").read_text())
+        assert c.execute("select run_id,sha from matched").fetchall()==[("a","trace-a")]
+
+
+def test_identical_initial_payloads_in_distinct_boots(tmp_path):
+    import duckdb
+    from hardware_warehouse import import_polls, init
+
+    payload=b" EcPair full "+b",".join([b"1"]+[b"0"]*30)+b"\n"
+    old=b"[28.11.2026 15:09:47]"+payload
+    new=b"[28.11.2026 15:14:02] Port backend: PawnIO 2.2.0 with LpcThinkpadEC.bin\n"+b"[28.11.2026 15:14:03]"+payload
+    path=tmp_path/"TPFanControl.log"
+    with duckdb.connect() as c:
+        init(c)
+        path.write_bytes(old)
+        import_polls(c,path)
+        prior=c.execute("select run_id from polls").fetchone()[0]
+        path.write_bytes(old+new)
+        import_polls(c,path)
+        import_polls(c,path)
+        assert c.execute("select count(*),count(distinct run_id) from polls").fetchone()==(2,2)
+        assert c.execute("select count(*) from polls where run_id=?",[prior]).fetchone()==(1,)
+        # Copying a complete archive must preserve both identities.
+        archive=tmp_path/"archive.log"
+        archive.write_bytes(old+new)
+        import_polls(c,archive,identity_source=path)
+        assert c.execute("select count(*) from polls").fetchone()==(2,)
+
+
+def test_ucsi_error_provider_and_persistent_channel():
+    from pathlib import Path
+
+    from hardware_warehouse import CHANNELS
+    rows=[line.split() for line in Path(__file__).with_name("hardware_providers.txt").read_text().splitlines() if line.strip()]
+    name="Microsoft-Windows-USB-UCMUCSICX"
+    assert [row for row in rows if row[0]==name]==[[name,"0x8000000000000001","2"]]
+    assert CHANNELS[name+"/Operational"]==()

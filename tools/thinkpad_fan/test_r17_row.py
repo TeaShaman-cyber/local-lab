@@ -252,3 +252,20 @@ def test_bad_record_never_reaches_database(tmp_path):
         with pytest.raises(ValueError):
             import_rows(c, tmp_path)
         assert c.execute("select count(*) from r17_rows").fetchone() == (0,)
+
+
+def test_live_preflight_uses_current_generation_after_reboot():
+    from hardware_warehouse import FIELDS
+    from r17_row_windows import live_level_one
+
+    def poll(seq,tick):
+        r=dict.fromkeys(FIELDS,0)
+        r.update(seq=seq,now=tick,begin_ms=tick-100,end_ms=tick-10,ok=1,mode=3,level=1,post_level=1,ack=1,cpu_valid=1,package=65,hottest=67)
+        return b"[28.11.2026 15:14:00] EcPair full "+",".join(str(r[k]) for k in FIELDS).encode()+b"\n"
+
+    raw=poll(1,900000)+poll(2,901000)+b"[28.11.2026 15:14:00] Port backend: PawnIO test\n"+poll(1,1000)+poll(2,2000)+poll(3,3000)
+    live_level_one(raw,3500)
+    with pytest.raises(RuntimeError):
+        live_level_one(raw,900000)
+    with pytest.raises(RuntimeError):
+        live_level_one(raw+b"[28.11.2026 15:14:01] Port backend: PawnIO test\n",3500)

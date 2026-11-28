@@ -8,11 +8,15 @@ TABLES = {
     "events": "sha,ordinal,timestamp_ns,provider_id,provider_name,event_id,version,task,opcode,level",
     "windows_events": "event_key,channel,record_id,provider,event_id,timestamp_ns",
     "polls": "run_id,seq,ok,dispatch,begin_ms,end_ms,handler,now,epoch,poll_epoch,ordered,mode,level,ack,ec_max,ta,ra,tb,rb,rpm_a,lo_a,hi_a,rpm_b,lo_b,hi_b,cpu_valid,cpu_time,package,hottest,command_ok,post_level,post_pending",
+    "poll_wall_times": "run_id,seq,wall_ns",
     "trace_anchors": "sha,tick_start,tick_end,offset_ns,drift_ns",
     "capture_batches": "sha,started_ns,ended_ns,events_lost,buffers_lost,mode",
     "imports": "sha,bytes,n",
-    "smart_events": "run_id,byte_offset,tick,kind,seq,payload,parse_status,line_sha256",
+    "cpu_limit_samples": "batch_sha,sample_index,start_ns,end_ns,start_tick,end_tick,package,cores,reason_union,pl1_active,pl2_active,thermal_active,prochot_active,pl1_w,pl2_w,pl1_enabled,pl2_enabled",
+    "cpu_mmio_limits": "batch_sha,sample_index,status,start_ns,end_ns,start_tick,end_tick,raw,unit,pl1_w,pl2_w,pl1_enabled,pl2_enabled,locked",
+    "cpu_limit_batches": "sha,segment,status,n",
     "r17_rows": "sha,source,begin_tick,end_tick,begin_ns,end_ns,status,before_state,after_state,row_a,row_b,error,quality,target_rpm,processed_rpm,output_pwm,upper_pwm,floor_pwm",
+    "smart_events": "run_id,byte_offset,tick,kind,seq,payload,parse_status,line_sha256",
 }
 
 def generation_name(value):
@@ -32,7 +36,7 @@ def publish(c, root: Path):
     c.execute("begin")
     try:
         for table,columns in TABLES.items():
-            if table in ("smart_events","r17_rows") and not c.execute(
+            if table in ("r17_rows", "poll_wall_times", "smart_events", "cpu_limit_samples", "cpu_limit_batches", "cpu_mmio_limits") and not c.execute(
                     "select count(*) from information_schema.tables where table_name=?", [table]
             ).fetchone()[0]:
                 continue

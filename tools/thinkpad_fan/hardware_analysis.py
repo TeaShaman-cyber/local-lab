@@ -21,10 +21,9 @@ def main():
     if manifest["schema"]!=1 or manifest["generation"]!=name:
         raise ValueError("snapshot manifest mismatch")
     tables=("events","windows_events","polls","trace_anchors","capture_batches","imports")
-    if "smart_events" in manifest["tables"]:
-        tables += ("smart_events",)
-    if "r17_rows" in manifest["tables"]:
-        tables += ("r17_rows",)
+    for optional in ("r17_rows", "poll_wall_times", "smart_events", "cpu_limit_samples", "cpu_limit_batches", "cpu_mmio_limits"):
+        if optional in manifest["tables"]:
+            tables += (optional,)
     with duckdb.connect(config={"memory_limit":"512MB","threads":1,"max_temp_directory_size":"96MB"}) as c:
         for table in tables:
             path=folder/(table+".parquet")
@@ -37,6 +36,9 @@ def main():
                 raise ValueError("snapshot count mismatch")
         print(name,json.dumps({k:v["rows"] for k,v in manifest["tables"].items()}))
         c.execute(Path(__file__).with_name("hardware_quality.sql").read_text())
+        if "poll_wall_times" not in tables:
+            # Legacy snapshots cannot safely distinguish different boot epochs.
+            c.execute("create table poll_wall_times(run_id varchar,seq bigint,wall_ns bigint)")
         sql=Path(__file__).with_name("hardware_analysis.sql").read_text()
         for statement in c.extract_statements(sql):
             result=c.execute(statement.query)
@@ -50,11 +52,20 @@ def main():
             print(*result.fetchall(),sep="\n")
         else:
             print("Smart event coverage: unavailable (legacy snapshot)")
+        if "cpu_limit_samples" in tables and "cpu_limit_batches" in tables:
+            print("CPU limit coverage", c.execute("select status,count(*),sum(n) from cpu_limit_batches group by status order by status").fetchall())
+            print("CPU limits (sample counts, not elapsed time)", c.execute("""
+                select pl1_w,pl2_w,pl1_enabled,pl2_enabled,count(*) n,
+                count_if(pl1_active),count_if(pl2_active),count_if(thermal_active),count_if(prochot_active)
+                from cpu_limit_samples group by all order by n desc""").fetchall())
+
+        if "cpu_mmio_limits" in tables:
+            print("Independent MMIO limits (sample counts)",c.execute(
+                "select status,pl1_w,pl2_w,pl1_enabled,pl2_enabled,count(*) from cpu_mmio_limits group by all"
+            ).fetchall())
+
         if "r17_rows" in tables:
-            result = c.execute("""select quality,count(*) as n,count(floor_pwm) as qualified_floor,
-                                  min(floor_pwm),max(floor_pwm) from r17_rows group by quality order by quality""")
-            print([x[0] for x in result.description])
-            print(*result.fetchall(),sep="\n")
+            print("R17 floor coverage", c.execute("select quality,count(*),count(floor_pwm),min(floor_pwm),max(floor_pwm) from r17_rows group by quality order by quality").fetchall())
         else:
             print("R17 row coverage: unavailable (legacy snapshot)")
 

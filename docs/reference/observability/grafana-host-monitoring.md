@@ -389,7 +389,7 @@ to measurement frequency, EC access or cloud destination.
 
 The Windows task Theseus Hardware Warehouse samples ETW for 240 seconds every
 five minutes while the user is logged in. It never wakes the laptop and ignores
-overlapping invocations. The versioned profile includes 20 hardware providers;
+overlapping invocations. The versioned profile includes 21 hardware providers;
 the noisy WLAN-driver and processor-power streams are warnings-only, while
 WLAN AutoConfig remains informational. No packet capture is enabled. Raw ETL
 segments are circular and limited to 16 MiB; do not infer gapless coverage or
@@ -401,11 +401,22 @@ PyETWkit 3.2.0 native read_all API because its CLI calls a missing events method
 DuckDB 1.5.5 and PyArrow are installed in the existing D: virtual environment.
 ETL is keyed by source SHA and ordinal; Windows Event Log is keyed by canonical
 XML hash, with source channel, record ID and UTC nanoseconds. System imports
-only hardware-related providers, plus WLAN AutoConfig Operational; no Security
+only hardware-related providers, plus WLAN AutoConfig and USB UCMUCSICX Operational; no Security
 log or packet payload. First query covers up to seven days; subsequent queries
 overlap by at least an hour, capped at 5000 records per channel and explicitly
 marked if capped. TPFan rows preserve sequence and reject conflicting data.
 Clock anchors allow interval joins; missing sequence numbers remain missing.
+
+USB-C power hypothesis (#289): the installed Windows UCMUCSICX manifest
+exposes only error event 1, not continuous PD messages or VBUS voltage.
+The ETW profile enables the Default and Operational keywords at Error
+level. The already-enabled persistent Operational channel is also read
+using the existing bounded Event Log queries, to retain evidence between
+ETW windows. A zero-event batch means no reported error in the observed
+query/window, not proof of stable power. Correlate with Kernel-Power 105
+(AC online transitions), battery events, tach, DTS, MMIO and acoustic
+summaries. Do not provoke contact faults or send UCSI control commands.
+
 
 The 5 GiB budget is an admission guard, not a filesystem quota: keep 1 GiB
 headroom and at least 10 GiB free on D:, stop new work before crossing the
