@@ -11,6 +11,7 @@ TABLES = {
     "trace_anchors": "sha,tick_start,tick_end,offset_ns,drift_ns",
     "capture_batches": "sha,started_ns,ended_ns,events_lost,buffers_lost,mode",
     "imports": "sha,bytes,n",
+    "smart_events": "run_id,byte_offset,tick,kind,seq,payload,parse_status,line_sha256",
 }
 
 def generation_name(value):
@@ -30,6 +31,10 @@ def publish(c, root: Path):
     c.execute("begin")
     try:
         for table,columns in TABLES.items():
+            if table == "smart_events" and not c.execute(
+                    "select count(*) from information_schema.tables where table_name='smart_events'"
+            ).fetchone()[0]:
+                continue
             path=folder/(table+".parquet")
             c.execute(f"COPY (SELECT {columns} FROM {table}) TO {literal(path)} (FORMAT PARQUET, COMPRESSION ZSTD)")
             count=c.execute(f"select count(*) from {table}").fetchone()[0]

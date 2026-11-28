@@ -103,6 +103,8 @@ def insert(c, table, names, rows, conflict=False):
         c.unregister("incoming")
 
 def init(c):
+    from smart_events import init_smart
+    init_smart(c)
     c.execute("create table if not exists imports(sha varchar primary key, source varchar, bytes bigint,n bigint)")
     c.execute("create table if not exists events(sha varchar, ordinal bigint, timestamp_ns bigint, provider_id varchar, provider_name varchar,event_id integer,version integer,task integer,opcode integer,level integer,event json,primary key(sha,ordinal))")
     c.execute("create table if not exists polls(run_id varchar,"+",".join(k+" bigint" for k in FIELDS)+",primary key(run_id,seq))")
@@ -136,6 +138,7 @@ def import_windows(c):
         print("EVENTLOG",channel,len(rows),"CAPPED" if len(rows)>=LIMIT else "OK",flush=True)
 
 def import_polls(c, source):
+    from smart_events import import_smart, parse_smart
     from snapshot import shared_open
     with shared_open(source) as f:
         raw=f.read(128*1024**2+1)
@@ -145,6 +148,7 @@ def import_polls(c, source):
     if not rows:
         raise RuntimeError("no full polls")
     run=hashlib.sha256((str(source)+"|"+",".join(map(str,rows[0]))).encode()).hexdigest()
+    smart = parse_smart(raw, [dict(zip(FIELDS, row)) for row in rows])
     # Preserve the pilot identity (same path and first row).
     c.execute("begin")
     try:
@@ -158,6 +162,7 @@ def import_polls(c, source):
             c.execute("insert into polls select * from incoming_polls on conflict do nothing")
         finally:
             c.unregister("incoming_polls")
+        import_smart(c, run, smart)
         c.execute("insert into poll_snapshots values (?,?,?,?) on conflict do nothing",[hashlib.sha256(raw).hexdigest(),run,len(raw),len(rows)])
         c.execute("commit")
     except Exception:

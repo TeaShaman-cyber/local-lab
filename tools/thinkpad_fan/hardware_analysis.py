@@ -21,6 +21,8 @@ def main():
     if manifest["schema"]!=1 or manifest["generation"]!=name:
         raise ValueError("snapshot manifest mismatch")
     tables=("events","windows_events","polls","trace_anchors","capture_batches","imports")
+    if "smart_events" in manifest["tables"]:
+        tables += ("smart_events",)
     with duckdb.connect(config={"memory_limit":"512MB","threads":1,"max_temp_directory_size":"96MB"}) as c:
         for table in tables:
             path=folder/(table+".parquet")
@@ -39,6 +41,13 @@ def main():
             if result.description and statement.type==duckdb.StatementType.SELECT:
                 print([x[0] for x in result.description])
                 print(*result.fetchall(),sep="\n")
+        if "smart_events" in tables:
+            result = c.execute("""select kind,parse_status,count(*) as events,count(seq) as linked
+                                  from smart_events group by all order by kind,parse_status""")
+            print([x[0] for x in result.description])
+            print(*result.fetchall(),sep="\n")
+        else:
+            print("Smart event coverage: unavailable (legacy snapshot)")
 
 if __name__=="__main__":
     main()
