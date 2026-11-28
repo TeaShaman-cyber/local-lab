@@ -127,3 +127,28 @@ def test_tick_collision_never_matches_different_boot():
         c.execute("insert into trace_anchors values ('trace-a',1000,2000,10000000000,0)")
         c.execute(Path(__file__).with_name("hardware_analysis.sql").read_text())
         assert c.execute("select run_id,sha from matched").fetchall()==[("a","trace-a")]
+
+
+def test_identical_initial_payloads_in_distinct_boots(tmp_path):
+    import duckdb
+    from hardware_warehouse import import_polls, init
+
+    payload=b" EcPair full "+b",".join([b"1"]+[b"0"]*30)+b"\n"
+    old=b"[28.11.2026 15:09:47]"+payload
+    new=b"[28.11.2026 15:14:02] Port backend: PawnIO 2.2.0 with LpcThinkpadEC.bin\n"+b"[28.11.2026 15:14:03]"+payload
+    path=tmp_path/"TPFanControl.log"
+    with duckdb.connect() as c:
+        init(c)
+        path.write_bytes(old)
+        import_polls(c,path)
+        prior=c.execute("select run_id from polls").fetchone()[0]
+        path.write_bytes(old+new)
+        import_polls(c,path)
+        import_polls(c,path)
+        assert c.execute("select count(*),count(distinct run_id) from polls").fetchone()==(2,2)
+        assert c.execute("select count(*) from polls where run_id=?",[prior]).fetchone()==(1,)
+        # Copying a complete archive must preserve both identities.
+        archive=tmp_path/"archive.log"
+        archive.write_bytes(old+new)
+        import_polls(c,archive,identity_source=path)
+        assert c.execute("select count(*) from polls").fetchone()==(2,)

@@ -203,18 +203,27 @@ def import_polls(c, source, identity_source=None):
         raise RuntimeError("no full polls")
     c.execute("begin")
     try:
-        for chunk,rows in segments:
-            import_poll_run(c, identity_source or source, chunk, rows)
+        for index,(chunk,rows) in enumerate(segments):
+            import_poll_run(c, identity_source or source, chunk, rows, appended=index>0)
         c.execute("commit")
     except Exception:
         c.execute("rollback")
         raise
     print("POLLS",sum(len(rows) for _,rows in segments),"RUNS",len(segments),flush=True)
 
-def import_poll_run(c, source, raw, rows):
+def import_poll_run(c, source, raw, rows, appended=False):
     import pyarrow as pa
     from smart_events import import_smart, parse_smart
     run=hashlib.sha256((str(source)+"|"+",".join(map(str,rows[0]))).encode()).hexdigest()
+    if appended:
+        # Preserve the original segment identity for historical imports.
+        # An appended run starts at its observed backend marker, so its ID
+        # is stable on growth and on replay of the complete rotated archive.
+        startup=raw.splitlines(keepends=True)[0]
+        if not STARTUP.fullmatch(startup):
+            raise ValueError("missing appended run boundary")
+        first=next(line for line in raw.splitlines(keepends=True) if POLL_LINE.fullmatch(line))
+        run=hashlib.sha256(b"appended-v1|"+run.encode()+b"|"+startup+first).hexdigest()
     smart = parse_smart(raw, [dict(zip(FIELDS, row)) for row in rows])
     c.register("incoming_polls",pa.table({"run_id":[run]*len(rows),**{k:[r[i] for r in rows] for i,k in enumerate(FIELDS)}}))
     try:
