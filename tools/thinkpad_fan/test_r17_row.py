@@ -269,3 +269,61 @@ def test_live_preflight_uses_current_generation_after_reboot():
         live_level_one(raw,900000)
     with pytest.raises(RuntimeError):
         live_level_one(raw+b"[28.11.2026 15:14:01] Port backend: PawnIO test\n",3500)
+
+
+def integrated_line(tick=100, status=0, a="f609ca099300f4011900", b="f609ca099300f4011900",
+                    before="01000660", after="01000660", inhibited=0, shift=0):
+    import datetime as dt
+    stamp=dt.datetime(2026,11,28,17,35,57)
+    ns=int(stamp.timestamp())*10**9+shift
+    return f"[28.11.2026 17:35:57] EcPair r17 v1 {tick},{tick+100},{ns},{ns+100000000},{status},{before},{after},{a},{b},{inhibited}\n".encode()
+
+
+def test_integrated_tpfan_rows_import_from_log_idempotently():
+    import duckdb
+    from hardware_warehouse import init
+    from r17_row_events import import_tpfan_rows
+    good=integrated_line()
+    uncertain=integrated_line(60100,3,b="-",after="-",inhibited=1)
+    with duckdb.connect() as c:
+        init(c)
+        import_tpfan_rows(c,good+uncertain,"run-a")
+        import_tpfan_rows(c,good+uncertain,"run-a")
+        assert c.execute("select status,floor_pwm,quality from r17_rows order by begin_tick").fetchall()==[
+            ("complete",25,"repeatable"),("restore_unverified",None,"unavailable")]
+        import_tpfan_rows(c,good[:-1],"run-a")
+        assert c.execute("select count(*) from r17_rows").fetchone()==(2,)
+        with pytest.raises(ValueError,match="conflicting"):
+            import_tpfan_rows(c,integrated_line(a="f609ca099300f4011a00")+uncertain,"run-a")
+
+
+def test_integrated_tpfan_row_does_not_qualify_unrestored_or_torn_data():
+    import duckdb
+    from hardware_warehouse import init
+    from r17_row_events import import_tpfan_rows
+    with duckdb.connect() as c:
+        init(c)
+        import_tpfan_rows(c,integrated_line(b="f609ca099300f4011a00"),"run-a")
+        assert c.execute("select floor_pwm,quality from r17_rows").fetchone()==(None,"partial_agreement")
+        import_tpfan_rows(c,integrated_line(shift=3600*10**9),"run-b")
+        assert c.execute("select count(*) from r17_rows where quality='stale' and floor_pwm is null").fetchone()==(1,)
+        with pytest.raises(ValueError,match="interior"):
+            import_tpfan_rows(c,b"broken\r"+integrated_line(),"run-c")
+
+
+def test_pending_startup_evidence_survives_before_any_poll(tmp_path):
+    import duckdb
+    from hardware_warehouse import FIELDS, import_polls, init
+    path=tmp_path/"log"
+    start=b"[28.11.2026 17:35:56] Port backend: PawnIO test\n"
+    row=integrated_line(100,3,b="-",after="-",inhibited=1)
+    with duckdb.connect() as c:
+        init(c)
+        path.write_bytes(start+row)
+        import_polls(c,path)
+        assert c.execute("select status from r17_rows").fetchall()==[("restore_unverified",)]
+        vals=dict.fromkeys(FIELDS,0)
+        vals.update(seq=1,now=300)
+        path.write_bytes(start+row+b"[28.11.2026 17:35:57] EcPair full "+",".join(str(vals[k]) for k in FIELDS).encode()+b"\n")
+        import_polls(c,path)
+        assert c.execute("select count(*) from r17_rows").fetchone()==(1,)
