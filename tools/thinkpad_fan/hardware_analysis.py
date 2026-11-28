@@ -21,7 +21,7 @@ def main():
     if manifest["schema"]!=1 or manifest["generation"]!=name:
         raise ValueError("snapshot manifest mismatch")
     tables=("events","windows_events","polls","trace_anchors","capture_batches","imports")
-    for optional in ("poll_wall_times", "smart_events", "cpu_limit_samples", "cpu_limit_batches", "cpu_mmio_limits"):
+    for optional in ("r17_rows", "poll_wall_times", "smart_events", "cpu_limit_samples", "cpu_limit_batches", "cpu_mmio_limits"):
         if optional in manifest["tables"]:
             tables += (optional,)
     with duckdb.connect(config={"memory_limit":"512MB","threads":1,"max_temp_directory_size":"96MB"}) as c:
@@ -63,6 +63,11 @@ def main():
             print("Independent MMIO limits (sample counts)",c.execute(
                 "select status,pl1_w,pl2_w,pl1_enabled,pl2_enabled,count(*) from cpu_mmio_limits group by all"
             ).fetchall())
+
+        if "r17_rows" in tables:
+            print("R17 floor coverage", c.execute("select quality,count(*),count(floor_pwm),min(floor_pwm),max(floor_pwm) from r17_rows group by quality order by quality").fetchall())
+        else:
+            print("R17 row coverage: unavailable (legacy snapshot)")
 
 if __name__=="__main__":
     main()

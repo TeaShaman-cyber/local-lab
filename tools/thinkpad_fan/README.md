@@ -215,3 +215,33 @@ MSR collection continues. New rows are in cpu_mmio_limits keyed by the
 same batch_sha/sample_index; legacy samples have no corresponding row.
 Both surfaces remain separate in DuckDB and portable snapshots. Existing
 240s/5min acquisition schedule unchanged, not continuous coverage.
+
+## R17 regulator diagnostic row candidate (not scheduled)
+
+Issue #289, iterations 62/118/145/192/227. The selector-56 row exposes
+target RPM, processed tach, output PWM and upper/lower PWM bounds on
+the observed R17ET45W firmware. Two readings are compared field by field;
+even identical fields are not proof of atomicity or physical RPM. Original
+firmware replay demonstrated torn rows at 8 of 11 tested update boundaries.
+
+The one-shot Windows adapter is deliberately separate from the recurring
+warehouse task. It requires exact L14 20U2/R17ET45W, the verified signed
+existing module, recent acknowledged level-1 polls and CPU below 78 C
+(provisional pilot guard, not a change to the configured 85 C control policy).
+It uses the existing shared lock with no wait, only the known row, strict
+response readiness, no drain/layout fallback or retry, a 900 ms admission
+budget and 600 ms restoration admission budget. These are soft budgets;
+native driver calls are not guaranteed to return by a deadline. Restore
+the selector only when transaction synchronization is known and the page
+is still ours. Uncertain state or a process crash leaves a persistent marker,
+which must not be removed automatically. A failed restoration cannot be
+guaranteed safe by software alone.
+
+The warehouse passively imports immutable records from its local
+r17-row-spool, including failed/unknown records, never calls the sampler.
+Parquet exports preserve source, raw words, acquisition interval, quality
+and accepted fields. No raw observation leaves the machine. Do not schedule
+or enable the sampler until independent review and a supervised matching
+Windows pilot have verified page restoration, acquisition time and impact
+on existing Smart polling. Tests use fake port/transport and real DuckDB;
+the original firmware replay is separate evidence, not a native-driver test.
