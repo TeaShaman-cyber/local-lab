@@ -51,3 +51,34 @@ class WarehouseTest(unittest.TestCase):
         with patch.object(h.subprocess,"CREATE_NO_WINDOW",0x08000000,create=True), patch.object(h.subprocess,"run") as run:
             h.command(["logman","query","-ets"])
             self.assertEqual(run.call_args.kwargs["creationflags"],0x08000000)
+
+    def test_snapshot_pointer_is_safe(self):
+        from hardware_snapshot import generation_name
+        self.assertEqual(generation_name(42),"generation-42")
+        for bad in [-1,0,"../bad",True]:
+            with self.assertRaises(ValueError):
+                generation_name(bad)
+
+    def test_portable_snapshot_has_no_raw_payload(self):
+        from hardware_snapshot import TABLES
+        self.assertNotIn("event,",TABLES["events"])
+        self.assertNotIn("xml",TABLES["windows_events"])
+        self.assertIn("timestamp_ns",TABLES["events"])
+        self.assertIn("run_id",TABLES["polls"])
+
+    def test_snapshot_publish_failure_keeps_previous_pointer(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import Mock
+
+        from hardware_snapshot import publish
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            previous={"schema":1,"generation":"generation-1"}
+            (root/"latest.json").write_text(json.dumps(previous))
+            c=Mock()
+            c.execute.side_effect=[None,RuntimeError("copy failure"),None]
+            with self.assertRaises(RuntimeError):
+                publish(c,root)
+            self.assertEqual(json.loads((root/"latest.json").read_text()),previous)

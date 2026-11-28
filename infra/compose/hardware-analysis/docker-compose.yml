@@ -1,0 +1,16 @@
+name: theseus-hardware-analysis
+services:
+  analysis:
+    build:
+      context: ../../..
+      dockerfile: infra/compose/hardware-analysis/Dockerfile
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    cpus: 1.0
+    volumes:
+      - ${HARDWARE_ANALYSIS_ROOT:-D:/theseus-hardware/analysis}:/snapshot:ro
+    tmpfs:
+      - /tmp:size=128m
