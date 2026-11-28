@@ -14,6 +14,7 @@ from pathlib import Path
 from acoustic_trace import admit_packet, analyze, packet_clock
 
 ROOT = Path("D:/theseus-hardware")
+CAPTURE_BUFFER_HNS = 10_000_000
 
 
 class GUID(C.Structure):
@@ -169,6 +170,17 @@ def raw_properties():
     return AudioClientProperties(C.sizeof(AudioClientProperties), 0, 0, 1)
 
 
+def admit_capture_packet(frames, flags, rate, accepted, elapsed, pos, qpc, buffer_frames, max_loop_ms):
+    try:
+        return admit_packet(frames, flags, rate, accepted, elapsed)
+    except ValueError as exc:
+        raise ValueError(
+            f"{exc}; flags=0x{flags:02x} pos={pos} frames={frames} accepted={accepted} "
+            f"qpc={qpc} elapsed_ms={round(elapsed * 1000)} buffer_frames={buffer_frames} "
+            f"max_loop_ms={round(max_loop_ms)}"
+        ) from exc
+
+
 def capture(seconds, raw=False, expected_endpoint=None):
     ole = C.OleDLL("ole32")
     ole.CoInitializeEx.argtypes = [C.c_void_p, W.DWORD]
@@ -209,11 +221,15 @@ def capture(seconds, raw=False, expected_endpoint=None):
             [C.c_int, W.DWORD, C.c_longlong, C.c_longlong, C.c_void_p, C.c_void_p],
             0,
             0,
-            1000000,
+            CAPTURE_BUFFER_HNS,
             0,
             fmt,
             None,
         )
+        buffer_frames = C.c_uint32()
+        call(client, 4, [C.POINTER(C.c_uint32)], C.byref(buffer_frames))
+        if not 0 < buffer_frames.value <= rate * 2:
+            raise ValueError("unexpected capture buffer size")
         cap = C.c_void_p()
         call(
             client,
@@ -231,7 +247,12 @@ def capture(seconds, raw=False, expected_endpoint=None):
         check = 0
         limit = int(rate * seconds)
         print("Recording fan diagnostics locally; please remain silent.", flush=True)
+        previous_loop = time.monotonic()
+        max_loop_ms = 0.0
         while time.monotonic() < end and len(data) < limit:
+            loop_now = time.monotonic()
+            max_loop_ms = max(max_loop_ms, (loop_now - previous_loop) * 1000)
+            previous_loop = loop_now
             if time.monotonic() >= check:
                 if sessions(dev).count(1) > 1:
                     raise RuntimeError("another capture session started; discarded")
@@ -261,7 +282,17 @@ def capture(seconds, raw=False, expected_endpoint=None):
                     C.byref(qpc),
                 )
                 try:
-                    if not admit_packet(frames.value, flags.value, rate, len(data), time.monotonic() - (end - seconds)):
+                    if not admit_capture_packet(
+                        frames.value,
+                        flags.value,
+                        rate,
+                        len(data),
+                        time.monotonic() - (end - seconds),
+                        pos.value,
+                        qpc.value,
+                        buffer_frames.value,
+                        max_loop_ms,
+                    ):
                         startup_excluded.append((pos.value, frames.value, qpc.value, flags.value))
                         # Release the packet before asking for the next size.
                         n.value = 0
@@ -320,6 +351,8 @@ def capture(seconds, raw=False, expected_endpoint=None):
             "startup_excluded": startup_excluded,
             "format": [tag, ch, rate, bits],
             "channel": 0,
+            "buffer_frames": buffer_frames.value,
+            "max_loop_ms": round(max_loop_ms, 2),
             "processing": "raw_requested" if raw else "default",
         },
     )

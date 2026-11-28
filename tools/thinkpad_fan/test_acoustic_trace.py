@@ -140,3 +140,17 @@ def test_stable_peaks_exclude_startup_and_interpolate_bins():
     peaks = stable_spectral_peaks(trace)
     assert len(peaks) == 1
     assert abs(peaks[0]["frequency_hz"] - 40.5) < 1e-6
+
+
+def test_late_packet_error_retains_metadata_without_payload():
+    from acoustic_windows import admit_capture_packet
+
+    with pytest.raises(ValueError, match=r"flags=0x01.*pos=960.*frames=480.*accepted=480.*buffer_frames=48000"):
+        admit_capture_packet(480, 1, 48000, 480, 0.2, 960, 123456, 48000, 110)
+    assert not admit_capture_packet(480, 1, 48000, 0, 0.02, 0, 1, 48000, 17)
+
+
+def test_capture_buffer_is_one_second():
+    from acoustic_windows import CAPTURE_BUFFER_HNS
+
+    assert CAPTURE_BUFFER_HNS == 10_000_000

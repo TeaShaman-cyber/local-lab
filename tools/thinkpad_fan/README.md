@@ -187,3 +187,10 @@ An unavailable/partial collection is explicit, not zero limits. Portable
 snapshots optionally include both tables. Manual on-demand export still
 uses hardware_snapshot.py when the writer is idle. Rollback: revert code;
 existing historical records remain. No fan or power policy changes.
+
+Capture requests a one-second per-stream buffer (actual size read back).
+This provides headroom against scheduling delays, not a guarantee of lossless
+capture. Packet discontinuity/timestamp errors still invalidate the trace;
+status records flag, position, elapsed time, actual buffer and maximum
+observed outer-loop interval, without retaining audio. Successful compact
+records include capture-quality metadata. No global audio settings changed.
