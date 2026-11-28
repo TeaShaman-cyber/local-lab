@@ -105,6 +105,8 @@ def insert(c, table, names, rows, conflict=False):
 def init(c):
     from smart_events import init_smart
     init_smart(c)
+    from cpu_limits import init_cpu_limits
+    init_cpu_limits(c)
     c.execute("create table if not exists imports(sha varchar primary key, source varchar, bytes bigint,n bigint)")
     c.execute("create table if not exists events(sha varchar, ordinal bigint, timestamp_ns bigint, provider_id varchar, provider_name varchar,event_id integer,version integer,task integer,opcode integer,level integer,event json,primary key(sha,ordinal))")
     c.execute("create table if not exists polls(run_id varchar,"+",".join(k+" bigint" for k in FIELDS)+",primary key(run_id,seq))")
@@ -198,10 +200,13 @@ def capture(root, seconds):
         if any(line.split()[0].encode().lower() not in session.lower()
                for line in (folder/"providers.txt").read_text().splitlines() if line.strip()):
             raise RuntimeError("provider readback mismatch")
-        time.sleep(seconds)
+        from cpu_limits import collect_interval
+        from cpu_limits_windows import Reader
+        cpu_batch = collect_interval(seconds, Reader)
         b=anchor()
     finally:
         checked(["logman","stop",SESSION,"-ets"])
+    (folder/"cpu-limits.json").write_text(json.dumps(cpu_batch), encoding="utf-8")
     (folder/"anchors.json").write_text(json.dumps([a,b]))
     return folder
 
@@ -260,6 +265,8 @@ def main():
             check_room(ROOT)
             if (folder/"anchors.json").is_file():
                 import_trace(c,folder)
+                from cpu_limits import import_cpu_limits
+                import_cpu_limits(c,folder)
         check_room(ROOT)
         import_windows(c)
         import_polls(c,SOURCE)

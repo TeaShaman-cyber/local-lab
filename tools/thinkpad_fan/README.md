@@ -146,8 +146,9 @@ Opt-in seven-day trial, independent of the ETL task. Windows native WASAPI
 captures 15 seconds every five minutes in the interactive user session;
 Docker Desktop Linux does not own the microphone. Explicit installation:
 `python tools/thinkpad_fan/acoustic_task.py --install` on the Windows host.
-The installer pins the current default capture endpoint; changing it causes
-capture rejection. Verify the endpoint is the intended laptop microphone
+The installer pins the current default capture endpoint by ID; later default
+changes do not redirect collection. An inactive or missing pinned endpoint
+causes rejection. Keep the contention guard even on a dedicated device. Verify the endpoint is the intended laptop microphone
 before installation. No elevation, wake, raw audio files or full spectrograms;
 only local stable spectral peaks, coarse one-second band energies and clock
 anchors. These derived features may still reflect room sound and must not be
@@ -163,3 +164,26 @@ Manual on-demand full spectral capture remains separate.
 Optional read-only Docker summary:
 `docker compose -f infra/compose/hardware-analysis/docker-compose.yml --profile acoustic run --rm acoustic`.
 The container has no network or microphone, mounts only the compact records.
+
+
+## CPU limit telemetry (#289)
+
+The existing Windows warehouse ETL task also samples the signed IntelMSR
+0.2.12 module from the previously verified local probe directory. Exact
+module hash, Intel family 6 model 142, single processor group and eight
+logical processors required. No MSR writes, sticky-flag clearing or EC access.
+Every approximately two seconds during the 240-second ETL interval (not
+gapless), collect package 606/610/611/1B1 and per-logical-processor
+64F/19C/198/E7/E8 with start/end UTC and tick brackets. The raw register
+order is fixed by schema 1; each core row begins with its logical CPU index.
+The 64F live reason bits 10/11 are separate from sticky log bits 26/27.
+Decode MSR package PL1/PL2 watts and enable flags; these are not a guarantee
+of the effective MMIO/platform limits. APERF/MPERF and PERF_STATUS are raw
+evidence, not measured MHz without interval calculations.
+
+Each ETL segment gets a local cpu-limits.json sidecar; the same warehouse
+writer imports cpu_limit_samples and cpu_limit_batches transactionally.
+An unavailable/partial collection is explicit, not zero limits. Portable
+snapshots optionally include both tables. Manual on-demand export still
+uses hardware_snapshot.py when the writer is idle. Rollback: revert code;
+existing historical records remain. No fan or power policy changes.

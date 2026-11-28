@@ -69,7 +69,7 @@ def sessions(dev):
         release(mgr)
 
 
-def endpoint(ole):
+def endpoint(ole, pinned=None):
     e = C.c_void_p()
     d = C.c_void_p()
     ole.CoCreateInstance(
@@ -80,8 +80,34 @@ def endpoint(ole):
         C.byref(e),
     )
     try:
-        call(e, 4, [C.c_int, C.c_int, C.POINTER(C.c_void_p)], 1, 0, C.byref(d))
-        return d
+        if pinned is None:
+            call(e, 4, [C.c_int, C.c_int, C.POINTER(C.c_void_p)], 1, 0, C.byref(d))
+        else:
+            call(e, 5, [C.c_wchar_p, C.POINTER(C.c_void_p)], pinned, C.byref(d))
+        try:
+            state = W.DWORD()
+            call(d, 6, [C.POINTER(W.DWORD)], C.byref(state))
+            if state.value != 1:
+                raise RuntimeError("capture endpoint inactive")
+            ep = C.c_void_p()
+            try:
+                call(
+                    d,
+                    0,
+                    [C.POINTER(GUID), C.POINTER(C.c_void_p)],
+                    C.byref(guid("1BE09788-6894-4089-8586-9A2A6C265AC5")),
+                    C.byref(ep),
+                )
+                flow = C.c_int()
+                call(ep, 3, [C.POINTER(C.c_int)], C.byref(flow))
+                if flow.value != 1:
+                    raise RuntimeError("endpoint is not capture")
+            finally:
+                release(ep)
+            return d
+        except Exception:
+            release(d)
+            raise
     finally:
         release(e)
 
@@ -95,14 +121,14 @@ def endpoint_id(dev, ole):
         ole.CoTaskMemFree(ptr)
 
 
-def current_endpoint_id():
+def current_endpoint_id(pinned=None):
     ole = C.OleDLL("ole32")
     ole.CoInitializeEx.argtypes = [C.c_void_p, W.DWORD]
     ole.CoCreateInstance.argtypes = [C.POINTER(GUID), C.c_void_p, W.DWORD, C.POINTER(GUID), C.POINTER(C.c_void_p)]
     ole.CoInitializeEx(None, 0)
     dev = None
     try:
-        dev = endpoint(ole)
+        dev = endpoint(ole, pinned)
         return endpoint_id(dev, ole)
     finally:
         release(dev)
@@ -154,7 +180,7 @@ def capture(seconds, raw=False, expected_endpoint=None):
     packets = []
     startup_excluded = []
     try:
-        dev = endpoint(ole)
+        dev = endpoint(ole, expected_endpoint)
         if expected_endpoint is not None and endpoint_id(dev, ole) != expected_endpoint:
             raise RuntimeError("capture endpoint changed")
         if 1 in sessions(dev):
