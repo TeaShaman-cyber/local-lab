@@ -244,9 +244,9 @@ search for the key returns nothing, then truncate the file.
 
 ## ThinkPad fan diagnostic telemetry (local-lab #289, 2026-11-27)
 
-Runtime: TPFanControl 615ec8c-ec-audit, directory
-`E:/tpfan-qa/615ec8c-ec-audit`. Both service and console processes
-were observed using this directory after the authorized 27 Nov 23:47–49 local-time switch. EcTelemetryWaitMs=0 observes OBF, without deliberately waiting for it or changing the fan curve. Historical archive and pre-switch snapshots refer to the previous 82f8dcf-smart-timing runtime. Both directories and the former task XML/startup shortcut are retained for rollback. No new EC reads, control commands or
+Runtime: TPFanControl 2b8fe95-ec-temp-shadow, directory
+`E:/tpfan-qa/2b8fe95-ec-temp-shadow`. Both service and console processes
+were observed using this directory after the authorized 28 Nov 09:09 local-time switch. EcTelemetryWaitMs=5 preserves the preceding audit configuration. EcTempShadow records the readiness-aware CPU estimate and its provenance, without changing the control input. Previous builds (615ec8c-ec-audit and 82f8dcf-smart-timing), task XML and startup shortcut backups remain available for rollback. No new EC reads, control commands or
 changes to fan mode. **Never tail the live TPFan files directly with Alloy.**
 In the initial deployment, both logs stopped advancing at 23:18:39 local
 time; removing the two live file sources was followed by resumed writing
@@ -257,7 +257,7 @@ The existing Alloy config now reads only closed, immutable copies under
 `E:/tpfan-qa/telemetry`. The Windows task `Theseus TPFan Snapshot`
 runs every minute while its interactive user is logged in (default
 battery restrictions apply). It runs
-`tools/thinkpad_fan/snapshot.py --root E:/tpfan-qa/615ec8c-ec-audit --spool E:/tpfan-qa/telemetry/spool`.
+`tools/thinkpad_fan/snapshot.py --root E:/tpfan-qa/2b8fe95-ec-temp-shadow --spool E:/tpfan-qa/telemetry/spool`.
 The script opens original files briefly with FILE_SHARE_READ, WRITE and
 DELETE, reads at most 512 KiB per file per invocation, and closes the
 handle before creating a complete immutable JSONL batch. File identity,
