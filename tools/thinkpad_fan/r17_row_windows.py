@@ -6,6 +6,7 @@ fan command, firmware change, layout fallback or automatic retry.
 
 import ctypes as c
 import hashlib
+import os
 import struct
 import time
 from ctypes import wintypes as w
@@ -20,11 +21,10 @@ MODULE_SHA = "54bbf7f10d3511abfff167597485926ddf1587045f6ae849671cfaa85f97a1db"
 SOURCE_ID = "R17ET45W-row56-PawnIO-strict-v1"
 
 
-def preflight():
+def static_preflight():
     import winreg
 
-    from hardware_warehouse import ROOT, SOURCE, check_room
-    from snapshot import shared_open
+    from hardware_warehouse import ROOT, check_room
 
     check_room(ROOT)
     with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\BIOS") as k:
@@ -35,6 +35,14 @@ def preflight():
     module = MODULE.read_bytes()
     if hashlib.sha256(module).hexdigest() != MODULE_SHA:
         raise RuntimeError("unexpected PawnIO module")
+    return ROOT, module
+
+
+def preflight():
+    from hardware_warehouse import SOURCE
+    from snapshot import shared_open
+
+    root,module=static_preflight()
     with shared_open(SOURCE) as f:
         raw = f.read(128 * 1024**2 + 1)
     if len(raw) > 128 * 1024**2:
@@ -42,7 +50,7 @@ def preflight():
     tick = c.windll.kernel32.GetTickCount64
     tick.restype = c.c_ulonglong
     live_level_one(raw, tick())
-    return ROOT, module
+    return root, module
 
 
 def live_level_one(raw, now):
@@ -74,6 +82,53 @@ def live_level_one(raw, now):
         ):
             raise RuntimeError("not in stable, cool, acknowledged level 1")
     return last
+
+
+def eligible_window(raw, now, previous):
+    # This fast path is used only after full static and generation checks.
+    # A tail containing a restart or a partial new poll is not admissible.
+    from hardware_warehouse import POLL_LINE, STARTUP
+
+    lines=raw.splitlines(keepends=True)
+    if any(STARTUP.fullmatch(line) for line in lines):
+        return None
+    if lines and not lines[-1].endswith(b"\n"):
+        return None
+    try:
+        rows=live_level_one(raw,now)
+    except (RuntimeError,ValueError):
+        return None
+    if any(row["mode"]!=3 for row in rows):
+        return None
+    if any(b["seq"]!=a["seq"]+1 or b["now"]<=a["now"] for a,b in zip(rows,rows[1:])):
+        return None
+    if rows[-1]["seq"]<=previous or now-rows[-1]["now"]>250:
+        return None
+    if not any(POLL_LINE.fullmatch(line) for line in lines):
+        return None
+    return rows[-1]["seq"]
+
+
+def await_window(port, source, previous, identity, minimum_size, seconds=20):
+    from snapshot import shared_open
+
+    deadline=time.monotonic()+seconds
+    while time.monotonic()<deadline:
+        with shared_open(source) as f:
+            st=os.fstat(f.fileno())
+            if (st.st_dev,st.st_ino)!=identity or st.st_size<minimum_size:
+                return None
+            f.seek(0,2)
+            offset=max(0,f.tell()-32768)
+            f.seek(offset)
+            raw=f.read(32768)
+        if offset:
+            raw=raw[raw.find(b"\n")+1:]
+        seq=eligible_window(raw,port.now(),previous)
+        if seq is not None:
+            return seq
+        time.sleep(.025)
+    return None
 
 
 class PawnPort:
@@ -192,12 +247,27 @@ def main():
     args = p.parse_args()
     if not args.sample:
         p.error("one explicit sample required; no automatic sampling")
-    root, module = preflight()
+    from hardware_warehouse import SOURCE
+    from snapshot import shared_open
+
+    root,module=static_preflight()
+    with shared_open(SOURCE) as f:
+        st=os.fstat(f.fileno())
+        identity=(st.st_dev,st.st_ino)
+        raw=f.read(128*1024**2+1)
+    if len(raw)>128*1024**2:
+        raise RuntimeError("source too large")
+    port=PawnPort(module)
+    # Validate current generation once, outside the short admission window.
+    previous=live_level_one(raw,port.now())[-1]["seq"]
     marker = root / "r17-row-attempt.lock"
     # Crash or uncertain hardware state is a permanent stop, not a retry signal.
     with marker.open("x", encoding="ascii") as f:
         f.write(str(time.time_ns()))
-    port = PawnPort(module)
+    seq=await_window(port,SOURCE,previous,identity,len(raw))
+    if seq is None:
+        marker.unlink()
+        raise RuntimeError("no eligible Manual1 window; no EC transaction")
     observer = Observer()
     begin_tick = port.now()
     begin_ns = time.time_ns()
@@ -205,6 +275,7 @@ def main():
     end_tick = port.now()
     end_ns = time.time_ns()
     record = publish_record(root / "r17-row-spool", obs, begin_tick, end_tick, begin_ns, end_ns, SOURCE_ID)
+    print("R17_WINDOW",seq,flush=True)
     print("R17", obs.status, record.name, "duration_ms", end_tick - begin_tick, flush=True)
     if observer.inhibited or obs.status in ("restore_unverified", "transport_uncertain"):
         raise RuntimeError("diagnostic inhibited; inspect state, no retry")

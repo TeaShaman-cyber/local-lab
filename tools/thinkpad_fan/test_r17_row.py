@@ -269,3 +269,21 @@ def test_live_preflight_uses_current_generation_after_reboot():
         live_level_one(raw,900000)
     with pytest.raises(RuntimeError):
         live_level_one(raw+b"[28.11.2026 15:14:01] Port backend: PawnIO test\n",3500)
+
+
+def test_window_admission_rejects_old_or_discontinuous_polls():
+    from hardware_warehouse import FIELDS
+    from r17_row_windows import eligible_window
+
+    def poll(seq,tick,mode=3):
+        r=dict.fromkeys(FIELDS,0)
+        r.update(seq=seq,now=tick,begin_ms=tick-100,end_ms=tick-10,ok=1,mode=mode,level=1,post_level=1,ack=1,cpu_valid=1,package=65,hottest=67)
+        return b"[28.11.2026 15:14:00] EcPair full "+",".join(str(r[k]) for k in FIELDS).encode()+b"\n"
+
+    raw=poll(1,1000)+poll(2,2000)+poll(3,3000)
+    assert eligible_window(raw,3050,2)==3
+    assert eligible_window(raw,3251,2) is None
+    assert eligible_window(raw,3050,3) is None
+    assert eligible_window(poll(1,1000)+poll(3,2000)+poll(4,3000),3050,2) is None
+    assert eligible_window(raw+poll(4,3100,2),3150,2) is None
+    assert eligible_window(raw+b"[28.11.2026 15:14:01] Port backend: PawnIO test\n",3050,2) is None
