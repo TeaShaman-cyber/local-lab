@@ -414,3 +414,12 @@ size and event count; DuckDB memory and spill are bounded. last-run.json
 reports the latest invocation status. Raw and decoded local data can contain
 network identifiers; never upload them by default. Review retention separately;
 no automatic deletion. Disable the task to stop scheduled collection.
+
+Windowless correction (issues #67, #150, #289): the scheduled action uses the
+dedicated venv's PE subsystem 2 pythonw.exe, verified before installation.
+Every native child process uses CREATE_NO_WINDOW. With no standard streams,
+the warehouse overwrites its single latest-run diagnostic log and preserves
+last-run.json. Docker Desktop currently runs Linux containers; host ETW and
+Event Log acquisition and PyETWkit decoding need Windows APIs. Keep that
+boundary native; container-side offline analysis is a separate optional
+consumer, not a second concurrent writer to hardware.duckdb.

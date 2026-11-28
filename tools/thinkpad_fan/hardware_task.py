@@ -1,5 +1,6 @@
 """Install the bounded interactive hardware warehouse task on its Windows host."""
 import datetime as dt
+import struct
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -43,13 +44,20 @@ def task_xml(sid, start):
     ):
         add(settings,name,value)
     action = add(add(task,"Actions",Context="Author"),"Exec")
-    add(action,"Command",str(ROOT/"venv/Scripts/python.exe"))
+    add(action,"Command",str(ROOT/"venv/Scripts/pythonw.exe"))
     add(action,"Arguments",f'"{SOURCE/"hardware_warehouse.py"}" --seconds 240')
     add(action,"WorkingDirectory",str(ROOT))
     return ET.tostring(task,encoding="utf-16",xml_declaration=True)
 
+def gui_subsystem(path):
+    data=path.read_bytes()
+    pe=struct.unpack_from("<I",data,0x3c)[0]
+    return data[pe:pe+4]==b"PE\0\0" and struct.unpack_from("<H",data,pe+24+68)[0]==2
+
 def main():
     import csv
+    if not gui_subsystem(ROOT/"venv/Scripts/pythonw.exe"):
+        raise RuntimeError("pythonw is not a GUI subsystem executable")
     if subprocess.run(["schtasks","/Query","/TN",NAME],capture_output=True).returncode==0:
         raise RuntimeError("task exists; inspect before replacement")
     raw=subprocess.check_output(["whoami","/user","/fo","csv","/nh"])
