@@ -50,3 +50,20 @@ class SnapshotTest(unittest.TestCase):
             rows = [json.loads(line)["raw"] for batch in spool.glob("*.jsonl") for line in batch.read_text().splitlines()]
             self.assertEqual(rows, ["23:59:59;70", "0:00:00;71", "9:12:01;72", "09:12:02;73"])
             self.assertEqual(export_file(p, spool, "csv"), 0)
+
+    def test_temperature_shadow_events(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)/"test.log"
+            spool = Path(tmp)/"spool"
+            lines = [
+                "[28.11.2026 9:12:04] EcPair tick=62446640 a=09d1/66 obf=1,1,1 b=09d0/65 obf=1,1,1",
+                "[28.11.2026 9:12:04] EcTempShadow tick=62446640 value=66 source=A quality=dual",
+                "[28.11.2026 9:12:05] EcTempShadow tick=62447640 value=-1 source=none quality=unknown",
+                "[28.11.2026 9:12:06] EcTempShadowOther private arbitrary line",
+                "[28.11.2026 9:12:07] unrelated diagnostic",
+            ]
+            p.write_bytes(("\n".join(lines)+"\n").encode())
+            self.assertEqual(export_file(p, spool, "events"), 3)
+            rows = [json.loads(line)["raw"] for batch in spool.glob("*.jsonl") for line in batch.read_text().splitlines()]
+            self.assertEqual(rows, lines[:3])
+            self.assertEqual(export_file(p, spool, "events"), 0)
