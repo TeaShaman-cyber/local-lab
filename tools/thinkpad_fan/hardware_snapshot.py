@@ -8,6 +8,7 @@ TABLES = {
     "events": "sha,ordinal,timestamp_ns,provider_id,provider_name,event_id,version,task,opcode,level",
     "windows_events": "event_key,channel,record_id,provider,event_id,timestamp_ns",
     "polls": "run_id,seq,ok,dispatch,begin_ms,end_ms,handler,now,epoch,poll_epoch,ordered,mode,level,ack,ec_max,ta,ra,tb,rb,rpm_a,lo_a,hi_a,rpm_b,lo_b,hi_b,cpu_valid,cpu_time,package,hottest,command_ok,post_level,post_pending",
+    "poll_wall_times": "run_id,seq,wall_ns",
     "trace_anchors": "sha,tick_start,tick_end,offset_ns,drift_ns",
     "capture_batches": "sha,started_ns,ended_ns,events_lost,buffers_lost,mode",
     "imports": "sha,bytes,n",
@@ -34,7 +35,7 @@ def publish(c, root: Path):
     c.execute("begin")
     try:
         for table,columns in TABLES.items():
-            if table in ("smart_events", "cpu_limit_samples", "cpu_limit_batches", "cpu_mmio_limits") and not c.execute(
+            if table in ("poll_wall_times", "smart_events", "cpu_limit_samples", "cpu_limit_batches", "cpu_mmio_limits") and not c.execute(
                     "select count(*) from information_schema.tables where table_name=?", [table]
             ).fetchone()[0]:
                 continue

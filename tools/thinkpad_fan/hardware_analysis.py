@@ -21,7 +21,7 @@ def main():
     if manifest["schema"]!=1 or manifest["generation"]!=name:
         raise ValueError("snapshot manifest mismatch")
     tables=("events","windows_events","polls","trace_anchors","capture_batches","imports")
-    for optional in ("smart_events", "cpu_limit_samples", "cpu_limit_batches", "cpu_mmio_limits"):
+    for optional in ("poll_wall_times", "smart_events", "cpu_limit_samples", "cpu_limit_batches", "cpu_mmio_limits"):
         if optional in manifest["tables"]:
             tables += (optional,)
     with duckdb.connect(config={"memory_limit":"512MB","threads":1,"max_temp_directory_size":"96MB"}) as c:
@@ -36,6 +36,9 @@ def main():
                 raise ValueError("snapshot count mismatch")
         print(name,json.dumps({k:v["rows"] for k,v in manifest["tables"].items()}))
         c.execute(Path(__file__).with_name("hardware_quality.sql").read_text())
+        if "poll_wall_times" not in tables:
+            # Legacy snapshots cannot safely distinguish different boot epochs.
+            c.execute("create table poll_wall_times(run_id varchar,seq bigint,wall_ns bigint)")
         sql=Path(__file__).with_name("hardware_analysis.sql").read_text()
         for statement in c.extract_statements(sql):
             result=c.execute(statement.query)
