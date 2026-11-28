@@ -47,31 +47,23 @@ def encode(obs, begin_tick, end_tick, begin_ns, end_ns, source):
     ).encode("ascii")
 
 
-def decode(raw):
-    def pairs(items):
-        result = {}
-        for key, value in items:
-            if key in result:
-                raise ValueError("duplicate JSON field")
-            result[key] = value
-        return result
+def _unique_fields(items):
+    result = {}
+    for key, value in items:
+        if key in result:
+            raise ValueError("duplicate JSON field")
+        result[key] = value
+    return result
 
-    d = json.loads(raw, object_pairs_hook=pairs)
-    keys = {
-        "schema",
-        "source",
-        "begin_tick",
-        "end_tick",
-        "begin_ns",
-        "end_ns",
-        "status",
-        "before",
-        "after",
-        "row_a",
-        "row_b",
-        "error",
-    }
-    if not isinstance(d, dict) or set(d) != keys or type(d["schema"]) is not int or d["schema"] != 1:
+
+_RECORD_KEYS = {
+    "schema", "source", "begin_tick", "end_tick", "begin_ns", "end_ns",
+    "status", "before", "after", "row_a", "row_b", "error",
+}
+
+
+def _validate_metadata(d):
+    if not isinstance(d, dict) or set(d) != _RECORD_KEYS or type(d["schema"]) is not int or d["schema"] != 1:
         raise ValueError("invalid record schema")
     if not isinstance(d["source"], str) or not 1 <= len(d["source"]) <= 128:
         raise ValueError("invalid source")
@@ -85,26 +77,27 @@ def decode(raw):
     if d["error"] is not None and (not isinstance(d["error"], str) or len(d["error"]) > 128):
         raise ValueError("invalid error")
 
-    def state(key):
-        v = d[key]
-        if v is None:
-            return None
-        if not isinstance(v, list) or len(v) != 4 or any(type(x) is not int or not 0 <= x <= 255 for x in v):
-            raise ValueError("invalid state")
-        return tuple(v)
 
-    def row(key):
-        v = d[key]
-        if v is None:
-            return None
-        if not isinstance(v, str) or len(v) != 20:
-            raise ValueError("invalid row")
-        b = bytes.fromhex(v)
-        if len(b) != 10 or b.hex() != v:
-            raise ValueError("noncanonical row")
-        return b
+def _decode_state(v):
+    if v is None:
+        return None
+    if not isinstance(v, list) or len(v) != 4 or any(type(x) is not int or not 0 <= x <= 255 for x in v):
+        raise ValueError("invalid state")
+    return tuple(v)
 
-    obs = Observation(d["status"], state("before"), state("after"), row("row_a"), row("row_b"), d["error"])
+
+def _decode_row(v):
+    if v is None:
+        return None
+    if not isinstance(v, str) or len(v) != 20:
+        raise ValueError("invalid row")
+    b = bytes.fromhex(v)
+    if len(b) != 10 or b.hex() != v:
+        raise ValueError("noncanonical row")
+    return b
+
+
+def _validate_success(obs):
     if obs.status == "complete" and (
         obs.before is None
         or obs.before != obs.after
@@ -114,6 +107,16 @@ def decode(raw):
         or obs.error is not None
     ):
         raise ValueError("incomplete success record")
+
+
+def decode(raw):
+    d = json.loads(raw, object_pairs_hook=_unique_fields)
+    _validate_metadata(d)
+    obs = Observation(
+        d["status"], _decode_state(d["before"]), _decode_state(d["after"]),
+        _decode_row(d["row_a"]), _decode_row(d["row_b"]), d["error"],
+    )
+    _validate_success(obs)
     return d, obs
 
 
