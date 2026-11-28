@@ -119,3 +119,13 @@ anchors are retained; timing-invalid captures are discarded. Mic level is
 uncalibrated; spectral peaks are candidate mechanical orders, not RPM truth.
 No EC traffic or deliberate spin-up. Native capture timing needs an actual
 user-initiated quiet Windows pilot before operational acceptance.
+
+For diagnostic capture on a supported endpoint, pass `--raw` to request
+RAW audio processing for this session only (no automatic fallback, no
+endpoint-wide setting change). Exclude flagged startup packets only before
+the first accepted sample, for at most one second; later flagged packets
+invalidate the capture. Exclude the first second from acoustic comparison
+to avoid startup transients. `order_contrast` compares power around a
+tachometer-derived rotational order to neighboring bins; a match at one
+constant speed is a candidate, not proof of fan attribution. Repeat across
+naturally occurring speeds. Do not use audio to control the fan.

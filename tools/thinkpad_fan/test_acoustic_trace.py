@@ -62,3 +62,36 @@ def test_startup_packet_exclusion_never_hides_later_discontinuity():
     ):
         with pytest.raises(ValueError):
             admit_packet(frames, flags, 48000, accepted, elapsed)
+
+
+def test_raw_audio_properties_are_16_byte_session_local_request():
+    import ctypes
+
+    from acoustic_windows import raw_properties
+
+    p = raw_properties()
+    assert ctypes.sizeof(p) == 16
+    assert (p.cbSize, p.bIsOffload, p.eCategory, p.Options) == (16, 0, 0, 1)
+
+
+def test_order_contrast_separates_moving_harmonic_from_fixed_frequency():
+    from acoustic_trace import order_contrast
+
+    rate = 8192
+    for rpm in (2400, 3360):
+        x = [a + b for a, b in zip(tone(4 * rpm / 60, rate, 1), tone(300, rate, 1))]
+        result = analyze(x, rate, 0)
+        frame = result["spectra"][0]
+        assert order_contrast(frame, result["bin_hz"], result["first_bin"], rpm, 4) > 8
+        other = 3360 if rpm == 2400 else 2400
+        # Wrong expected rotation should not explain the fixed or moving peak.
+        assert order_contrast(frame, result["bin_hz"], result["first_bin"], other, 4) < 8
+    assert order_contrast(frame, result["bin_hz"], result["first_bin"], 0, 4) is None
+
+
+def test_order_contrast_handles_fundamental_near_lower_spectral_edge():
+    from acoustic_trace import order_contrast
+
+    frame = {"spectrum_dbfs": [-100.0] * 30}
+    frame["spectrum_dbfs"][5] = -80
+    assert order_contrast(frame, 2.9296875, 9, 2518, 1) == 20

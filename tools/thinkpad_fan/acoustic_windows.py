@@ -111,7 +111,16 @@ def clock_anchor():
     }
 
 
-def capture(seconds):
+class AudioClientProperties(C.Structure):
+    _fields_ = [("cbSize", C.c_uint32), ("bIsOffload", C.c_int32), ("eCategory", C.c_int32), ("Options", C.c_int32)]
+
+
+def raw_properties():
+    # IAudioClient2 per-stream request; no global endpoint changes.
+    return AudioClientProperties(C.sizeof(AudioClientProperties), 0, 0, 1)
+
+
+def capture(seconds, raw=False):
     ole = C.OleDLL("ole32")
     ole.CoInitializeEx.argtypes = [C.c_void_p, W.DWORD]
     ole.CoCreateInstance.argtypes = [C.POINTER(GUID), C.c_void_p, W.DWORD, C.POINTER(GUID), C.POINTER(C.c_void_p)]
@@ -125,7 +134,12 @@ def capture(seconds):
         dev = endpoint(ole)
         if 1 in sessions(dev):
             raise RuntimeError("microphone already in use")
-        client = activate(dev, "1CB9AD4C-DBFA-4c32-B178-C2F568A703B2")
+        if raw:
+            client = activate(dev, "726778CD-F60A-4eda-82DE-E47610CD78AA")
+            props = raw_properties()
+            call(client, 16, [C.POINTER(AudioClientProperties)], C.byref(props))
+        else:
+            client = activate(dev, "1CB9AD4C-DBFA-4c32-B178-C2F568A703B2")
         fmt = C.c_void_p()
         call(client, 8, [C.POINTER(C.c_void_p)], C.byref(fmt))
         tag, ch, rate, _, align, bits, extra = struct.unpack("<HHIIHHH", C.string_at(fmt, 18))
@@ -255,6 +269,7 @@ def capture(seconds):
             "startup_excluded": startup_excluded,
             "format": [tag, ch, rate, bits],
             "channel": 0,
+            "processing": "raw_requested" if raw else "default",
         },
     )
 
@@ -262,6 +277,7 @@ def capture(seconds):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--capture", action="store_true")
+    p.add_argument("--raw", action="store_true", help="Request per-session RAW processing; no fallback")
     p.add_argument("--seconds", type=int, default=15)
     p.add_argument("--save-wav", action="store_true", help="Explicitly retain audio including possible room speech")
     args = p.parse_args()
@@ -270,7 +286,7 @@ def main():
     from hardware_warehouse import check_room
 
     check_room(ROOT)
-    data, rate, first, clock = capture(args.seconds)
+    data, rate, first, clock = capture(args.seconds, raw=args.raw)
     print("Microphone closed. Computing acoustic trace.", flush=True)
     result = analyze(data, rate, first)
     result["clock"] = clock

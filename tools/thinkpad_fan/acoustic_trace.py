@@ -111,3 +111,17 @@ def analyze(x, rate, first_ns):
         "spectra": spectra,
         "envelope": envelope,
     }
+
+
+def order_contrast(frame, bin_hz, first_bin, rpm, order):
+    """Local spectral contrast near a reference rotational order, not attribution."""
+    if not all(math.isfinite(v) and v > 0 for v in (rpm, order, bin_hz)):
+        return None
+    values = frame["spectrum_dbfs"]
+    i = round(rpm * order / (60 * bin_hz)) - first_bin
+    if not 3 <= i < len(values) - 3:
+        return None
+    side = values[max(0, i - 8) : i - 2] + values[i + 3 : i + 9]
+    if len(side) < 6:
+        return None
+    return max(values[i - 1 : i + 2]) - statistics.median(side)
