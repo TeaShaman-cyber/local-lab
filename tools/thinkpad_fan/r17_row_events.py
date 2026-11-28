@@ -80,7 +80,7 @@ def decode(raw):
             raise ValueError("invalid time")
     if d["begin_tick"] > d["end_tick"] or d["begin_ns"] > d["end_ns"]:
         raise ValueError("reversed interval")
-    if d["status"] not in STATUSES:
+    if not isinstance(d["status"], str) or d["status"] not in STATUSES:
         raise ValueError("invalid status")
     if d["error"] is not None and (not isinstance(d["error"], str) or len(d["error"]) > 128):
         raise ValueError("invalid error")
