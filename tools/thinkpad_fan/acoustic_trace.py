@@ -4,6 +4,17 @@ import math
 import statistics
 
 
+def admit_packet(frames, flags, rate, accepted, elapsed):
+    """Exclude flagged startup packets only, never a gap in accepted audio."""
+    if not 0 < frames <= rate:
+        raise ValueError("invalid audio frame count")
+    if flags & 5:
+        if accepted or elapsed > 1:
+            raise ValueError("invalid audio packet after startup")
+        return False
+    return True
+
+
 def packet_clock(packets, rate):
     """Validate contiguous WASAPI packets and return first QPC timestamp in ns."""
     if not packets or rate <= 0:

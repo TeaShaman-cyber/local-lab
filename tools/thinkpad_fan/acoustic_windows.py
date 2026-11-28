@@ -11,7 +11,7 @@ import wave
 from ctypes import wintypes as W
 from pathlib import Path
 
-from acoustic_trace import analyze, packet_clock
+from acoustic_trace import admit_packet, analyze, packet_clock
 
 ROOT = Path("D:/theseus-hardware")
 
@@ -120,6 +120,7 @@ def capture(seconds):
     started = False
     data = []
     packets = []
+    startup_excluded = []
     try:
         dev = endpoint(ole)
         if 1 in sessions(dev):
@@ -195,8 +196,11 @@ def capture(seconds):
                     C.byref(qpc),
                 )
                 try:
-                    if not 0 < frames.value <= rate or flags.value & 5:
-                        raise ValueError("invalid audio packet")
+                    if not admit_packet(frames.value, flags.value, rate, len(data), time.monotonic() - (end - seconds)):
+                        startup_excluded.append((pos.value, frames.value, qpc.value, flags.value))
+                        # Release the packet before asking for the next size.
+                        n.value = 0
+                        continue
                     take = min(frames.value, limit - len(data))
                     packets.append((pos.value, take, qpc.value, flags.value))
                     if flags.value & 2:
@@ -248,6 +252,7 @@ def capture(seconds):
             "after": b,
             "first_qpc_ns": first,
             "packets": packets,
+            "startup_excluded": startup_excluded,
             "format": [tag, ch, rate, bits],
             "channel": 0,
         },

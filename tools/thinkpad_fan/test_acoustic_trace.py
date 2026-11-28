@@ -46,3 +46,19 @@ def test_packet_clock_rejects_discontinuity_and_bad_timestamp():
     ):
         with pytest.raises(ValueError):
             packet_clock(bad, 48000)
+
+
+def test_startup_packet_exclusion_never_hides_later_discontinuity():
+    from acoustic_trace import admit_packet
+
+    assert not admit_packet(480, 1, 48000, 0, 0.01)
+    assert not admit_packet(480, 4, 48000, 0, 0.03)
+    assert admit_packet(480, 0, 48000, 0, 0.04)
+    for frames, flags, accepted, elapsed in (
+        (480, 1, 480, 0.1),
+        (480, 4, 480, 0.1),
+        (480, 1, 0, 1.01),
+        (0, 0, 0, 0.01),
+    ):
+        with pytest.raises(ValueError):
+            admit_packet(frames, flags, 48000, accepted, elapsed)
