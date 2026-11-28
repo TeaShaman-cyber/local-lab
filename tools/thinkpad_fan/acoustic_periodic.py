@@ -35,9 +35,11 @@ def summarize(data, rate, first, clock):
     peaks = sorted(stable_spectral_peaks(trace), key=lambda p: p["prominence_db"], reverse=True)[:32]
     bands = (25, 300, 1000, 3500, 8000)
     groups = {}
+    band_frames = [[] for _ in range(4)]
+    end = first + len(data) * 1e9 / rate - 0.5e9
     for frame in trace["spectra"]:
         second = (frame["center_ns"] - first) // 1_000_000_000
-        if second < 2 or frame["center_ns"] > first + len(data) * 1e9 / rate - 0.5e9:
+        if second < 2 or frame["center_ns"] > end:
             continue
         powers = [0.0] * 4
         for k, db in enumerate(frame["spectrum_dbfs"], trace["first_bin"]):
@@ -47,6 +49,23 @@ def summarize(data, rate, first, clock):
                     powers[i] += 10 ** (db / 10)
                     break
         groups.setdefault(second, []).append(powers)
+        for values, power in zip(band_frames, powers):
+            values.append((frame["center_ns"], 10 * math.log10(max(1e-18, power))))
+
+    def top_relative(values, limit):
+        if not values:
+            return []
+        median = statistics.median(v for _, v in values)
+        return [
+            {"offset_ms": round((t - first) / 1e6), "above_median_db": round(v - median, 2)}
+            for t, v in sorted(values, key=lambda row: row[1], reverse=True)[:limit]
+        ]
+
+    envelope = [
+        (f["start_ns"], 20 * math.log10(max(1e-15, f["rms"])))
+        for f in trace["envelope"]
+        if first + 2e9 <= f["start_ns"] and f["start_ns"] + 20e6 <= end
+    ]
     return {
         "schema": 1,
         "first_utc_ns": first,
@@ -57,6 +76,13 @@ def summarize(data, rate, first, clock):
             k: clock[k] for k in ("buffer_frames", "max_loop_ms", "processing", "format") if k in clock
         },
         "stable_peaks": peaks,
+        "impulses": {
+            "envelope_top": top_relative(envelope, 5),
+            "bands": [
+                {"low_hz": lo, "high_hz": hi, "top": top_relative(values, 3)}
+                for lo, hi, values in zip(bands, bands[1:], band_frames)
+            ],
+        },
         "band_edges_hz": bands,
         "band_seconds": [
             {"second": sec, "median_dbfs": [10 * math.log10(max(1e-18, statistics.median(v))) for v in zip(*rows)]}

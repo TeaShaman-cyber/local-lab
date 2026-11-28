@@ -194,3 +194,10 @@ capture. Packet discontinuity/timestamp errors still invalidate the trace;
 status records flag, position, elapsed time, actual buffer and maximum
 observed outer-loop interval, without retaining audio. Successful compact
 records include capture-quality metadata. No global audio settings changed.
+
+Compact periodic summaries also retain the five strongest 20 ms RMS blocks
+and three strongest spectral frames per frequency band, as offsets and dB
+above the median of the same trace. Exclude the initial two seconds and final
+half-second. These are uncalibrated transient candidates, not a source
+classifier; adjacent peaks can represent the same event. No full envelope,
+spectrogram, audio waveform or speech reconstruction data are persisted.
