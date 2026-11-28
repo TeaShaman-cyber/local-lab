@@ -32,6 +32,7 @@ def main():
             if c.execute(f"select count(*) from {table}").fetchone()[0]!=expected["rows"]:
                 raise ValueError("snapshot count mismatch")
         print(name,json.dumps({k:v["rows"] for k,v in manifest["tables"].items()}))
+        c.execute(Path(__file__).with_name("hardware_quality.sql").read_text())
         sql=Path(__file__).with_name("hardware_analysis.sql").read_text()
         for statement in c.extract_statements(sql):
             result=c.execute(statement.query)
