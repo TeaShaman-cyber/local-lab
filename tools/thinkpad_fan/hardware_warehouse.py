@@ -106,6 +106,7 @@ def init(c):
     c.execute("create table if not exists imports(sha varchar primary key, source varchar, bytes bigint,n bigint)")
     c.execute("create table if not exists events(sha varchar, ordinal bigint, timestamp_ns bigint, provider_id varchar, provider_name varchar,event_id integer,version integer,task integer,opcode integer,level integer,event json,primary key(sha,ordinal))")
     c.execute("create table if not exists polls(run_id varchar,"+",".join(k+" bigint" for k in FIELDS)+",primary key(run_id,seq))")
+    c.execute(Path(__file__).with_name("hardware_quality.sql").read_text())
     c.execute("create table if not exists poll_snapshots(sha varchar primary key,run_id varchar,bytes bigint,n bigint)")
     c.execute("create table if not exists trace_anchors(sha varchar primary key,tick_start bigint,tick_end bigint,offset_ns bigint,drift_ns bigint)")
     c.execute("create table if not exists windows_events(event_key varchar primary key,channel varchar,record_id bigint,provider varchar,event_id integer,timestamp_ns bigint,xml varchar)")
