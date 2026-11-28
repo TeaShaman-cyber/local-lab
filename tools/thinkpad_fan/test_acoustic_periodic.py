@@ -117,3 +117,27 @@ def test_capture_rejection_retains_reason_without_trace(tmp_path):
     status = json.loads((tmp_path / "status.json").read_text())
     assert status["reason"] == "invalid audio packet after startup"
     assert not list(tmp_path.glob("trace-*.json"))
+
+
+def test_compact_summary_preserves_short_impulse_lost_in_medians():
+    rate = 8192
+    x = [0.0005 * math.sin(2 * math.pi * 76 * i / rate) for i in range(rate * 8)]
+    x[rate * 4] = 0.8
+    s = summarize(x, rate, 1000000000, {"before": {}, "after": {}, "first_qpc_ns": 1})
+    impulses = s["impulses"]
+    assert 3980 <= impulses["envelope_top"][0]["offset_ms"] <= 4020
+    assert impulses["envelope_top"][0]["above_median_db"] > 20
+    assert len(impulses["envelope_top"]) <= 5
+    assert len(impulses["bands"]) == 4
+    assert all(len(b["top"]) <= 3 for b in impulses["bands"])
+    assert "spectra" not in s and "envelope" not in s
+
+
+def test_impulse_summary_excludes_startup_and_end():
+    rate = 8192
+    x = [0.001 * math.sin(2 * math.pi * 76 * i / rate) for i in range(rate * 8)]
+    x[rate // 2] = 0.9
+    x[-100] = 0.9
+    x[rate * 4] = 0.1
+    s = summarize(x, rate, 1000000000, {"before": {}, "after": {}, "first_qpc_ns": 1})
+    assert 3980 <= s["impulses"]["envelope_top"][0]["offset_ms"] <= 4020
