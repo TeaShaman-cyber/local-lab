@@ -11,6 +11,8 @@ TABLES = {
     "trace_anchors": "sha,tick_start,tick_end,offset_ns,drift_ns",
     "capture_batches": "sha,started_ns,ended_ns,events_lost,buffers_lost,mode",
     "imports": "sha,bytes,n",
+    "cpu_limit_samples": "batch_sha,sample_index,start_ns,end_ns,start_tick,end_tick,package,cores,reason_union,pl1_active,pl2_active,thermal_active,prochot_active,pl1_w,pl2_w,pl1_enabled,pl2_enabled",
+    "cpu_limit_batches": "sha,segment,status,n",
     "smart_events": "run_id,byte_offset,tick,kind,seq,payload,parse_status,line_sha256",
 }
 
@@ -31,8 +33,8 @@ def publish(c, root: Path):
     c.execute("begin")
     try:
         for table,columns in TABLES.items():
-            if table == "smart_events" and not c.execute(
-                    "select count(*) from information_schema.tables where table_name='smart_events'"
+            if table in ("smart_events", "cpu_limit_samples", "cpu_limit_batches") and not c.execute(
+                    "select count(*) from information_schema.tables where table_name=?", [table]
             ).fetchone()[0]:
                 continue
             path=folder/(table+".parquet")

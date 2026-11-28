@@ -78,3 +78,42 @@ def test_report_does_not_count_invalid_identity(tmp_path):
     )
     (tmp_path / "trace-456.json").write_text("{}")
     assert report(tmp_path) == {"captures": 1, "rejected": 1, "seconds": 1.0, "first_utc_ns": 123, "last_utc_ns": 123}
+
+
+def test_pinned_capture_uses_explicit_device_not_current_default(monkeypatch):
+    import acoustic_windows as w
+
+    class Ole:
+        def CoCreateInstance(self, *args):
+            args[-1]._obj.value = 10
+
+    calls = []
+
+    def call(p, i, types, *args):
+        calls.append((p.value, i))
+        if p.value == 10 and i == 5:
+            assert args[0] == "pinned"
+            args[-1]._obj.value = 20
+        elif p.value == 20 and i == 6:
+            args[-1]._obj.value = 1
+        elif p.value == 20 and i == 0:
+            args[-1]._obj.value = 30
+        elif p.value == 30 and i == 3:
+            args[-1]._obj.value = 1
+        else:
+            raise AssertionError((p.value, i))
+
+    monkeypatch.setattr(w, "call", call)
+    monkeypatch.setattr(w, "release", lambda p: None)
+    assert w.endpoint(Ole(), "pinned").value == 20
+    assert (10, 4) not in calls
+
+
+def test_capture_rejection_retains_reason_without_trace(tmp_path):
+    def rejected(*args, **kwargs):
+        raise ValueError("invalid audio packet after startup")
+
+    assert run_once(tmp_path, 100, "pinned", rejected, lambda: None, now=lambda: 10) == "capture_rejected"
+    status = json.loads((tmp_path / "status.json").read_text())
+    assert status["reason"] == "invalid audio packet after startup"
+    assert not list(tmp_path.glob("trace-*.json"))

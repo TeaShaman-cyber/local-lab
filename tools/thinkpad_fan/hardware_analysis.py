@@ -21,8 +21,9 @@ def main():
     if manifest["schema"]!=1 or manifest["generation"]!=name:
         raise ValueError("snapshot manifest mismatch")
     tables=("events","windows_events","polls","trace_anchors","capture_batches","imports")
-    if "smart_events" in manifest["tables"]:
-        tables += ("smart_events",)
+    for optional in ("smart_events", "cpu_limit_samples", "cpu_limit_batches"):
+        if optional in manifest["tables"]:
+            tables += (optional,)
     with duckdb.connect(config={"memory_limit":"512MB","threads":1,"max_temp_directory_size":"96MB"}) as c:
         for table in tables:
             path=folder/(table+".parquet")
@@ -48,6 +49,12 @@ def main():
             print(*result.fetchall(),sep="\n")
         else:
             print("Smart event coverage: unavailable (legacy snapshot)")
+        if "cpu_limit_samples" in tables and "cpu_limit_batches" in tables:
+            print("CPU limit coverage", c.execute("select status,count(*),sum(n) from cpu_limit_batches group by status order by status").fetchall())
+            print("CPU limits (sample counts, not elapsed time)", c.execute("""
+                select pl1_w,pl2_w,pl1_enabled,pl2_enabled,count(*) n,
+                count_if(pl1_active),count_if(pl2_active),count_if(thermal_active),count_if(prochot_active)
+                from cpu_limit_samples group by all order by n desc""").fetchall())
 
 if __name__=="__main__":
     main()
