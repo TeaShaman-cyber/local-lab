@@ -119,7 +119,6 @@ def test_tick_collision_never_matches_different_boot():
     from pathlib import Path
 
     import duckdb
-
     from hardware_warehouse import init
     with duckdb.connect() as c:
         init(c)
