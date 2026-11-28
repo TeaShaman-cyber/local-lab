@@ -313,7 +313,7 @@ def test_integrated_tpfan_row_does_not_qualify_unrestored_or_torn_data():
 
 def test_pending_startup_evidence_survives_before_any_poll(tmp_path):
     import duckdb
-    from hardware_warehouse import init,import_polls,FIELDS
+    from hardware_warehouse import FIELDS, import_polls, init
     path=tmp_path/"log"
     start=b"[28.11.2026 17:35:56] Port backend: PawnIO test\n"
     row=integrated_line(100,3,b="-",after="-",inhibited=1)
