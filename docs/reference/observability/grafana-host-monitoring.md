@@ -383,3 +383,34 @@ the source file identity/generation/offset, with collection time distinct
 from the original clock. Existing source and checkpoint files are retained.
 Cloud delivery of both new and recovered records was observed. No change
 to measurement frequency, EC access or cloud destination.
+
+
+### Local hardware warehouse (issue #289)
+
+The Windows task Theseus Hardware Warehouse samples ETW for 240 seconds every
+five minutes while the user is logged in. It never wakes the laptop and ignores
+overlapping invocations. The versioned profile includes 20 hardware providers;
+the noisy WLAN-driver and processor-power streams are warnings-only, while
+WLAN AutoConfig remains informational. No packet capture is enabled. Raw ETL
+segments are circular and limited to 16 MiB; do not infer gapless coverage or
+absence of events from a circular trace or a period without a trace. The
+existing TPFan collection/control path is untouched.
+
+The local DuckDB file is D:/theseus-hardware/hardware.duckdb. ETL uses the
+PyETWkit 3.2.0 native read_all API because its CLI calls a missing events method.
+DuckDB 1.5.5 and PyArrow are installed in the existing D: virtual environment.
+ETL is keyed by source SHA and ordinal; Windows Event Log is keyed by canonical
+XML hash, with source channel, record ID and UTC nanoseconds. System imports
+only hardware-related providers, plus WLAN AutoConfig Operational; no Security
+log or packet payload. First query covers up to seven days; subsequent queries
+overlap by at least an hour, capped at 5000 records per channel and explicitly
+marked if capped. TPFan rows preserve sequence and reject conflicting data.
+Clock anchors allow interval joins; missing sequence numbers remain missing.
+
+The 5 GiB budget is an admission guard, not a filesystem quota: keep 1 GiB
+headroom and at least 10 GiB free on D:, stop new work before crossing the
+guard, retain prior data without deleting it. ETL decoder is bounded by file
+size and event count; DuckDB memory and spill are bounded. last-run.json
+reports the latest invocation status. Raw and decoded local data can contain
+network identifiers; never upload them by default. Review retention separately;
+no automatic deletion. Disable the task to stop scheduled collection.

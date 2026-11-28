@@ -706,6 +706,23 @@ services:
     docs: docs/reference/observability/grafana-host-monitoring.md
     notes: 'Every minute, interactive user; default battery restrictions. Never tail active TPFan files directly. Immutable batches double as checkpoints; retain locally. Cloud completeness is not established.'
 
+  - id: INFRA-027
+    name: hardware-warehouse
+    criticality: T
+    role: local read-only hardware ETW and event log analytics for issue 289
+    status: active
+    kind: scheduled-tasks
+    location:
+      task: Theseus Hardware Warehouse
+      script: E:/local-lab/tools/thinkpad_fan/hardware_warehouse.py
+      installer: E:/local-lab/tools/thinkpad_fan/hardware_task.py
+      database: D:/theseus-hardware/hardware.duckdb
+      profile: E:/local-lab/tools/thinkpad_fan/hardware_providers.txt
+    monitoring: D:/theseus-hardware/last-run.json and DuckDB capture_batches/windows_batches
+    check: 'schtasks /Query /TN "Theseus Hardware Warehouse" /FO LIST /V'
+    docs: docs/reference/observability/grafana-host-monitoring.md
+    notes: 'Interactive token, 240s per 5min, no wake, no packet capture. Pause at budget/reserve, retain evidence. Not gapless.'
+
 # Признак продового/тестового — RULE-009 в infrastructure.md.
 test_stands:
   - id: LAB-001
