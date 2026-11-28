@@ -423,3 +423,22 @@ last-run.json. Docker Desktop currently runs Linux containers; host ETW and
 Event Log acquisition and PyETWkit decoding need Windows APIs. Keep that
 boundary native; container-side offline analysis is a separate optional
 consumer, not a second concurrent writer to hardware.duckdb.
+
+### Portable hardware analysis
+
+The native Windows collector remains the sole DuckDB writer. WSL Interop
+can invoke Windows tools, including the ETL decoder, but Docker Desktop's
+ordinary Linux containers do not inherit the session socket. Do not mount
+the WSL interop socket or grant arbitrary Windows process execution to the
+analysis container. The portable data boundary is an immutable local
+Parquet snapshot, with SHA-256, schema and row counts, atomically published
+via latest.json. Only event metadata is exported; raw JSON/XML stays in
+the Windows database. No network or Docker socket is needed by analysis.
+
+On demand, run hardware_snapshot.py with the warehouse venv Python while
+the writer is not importing (a lock error is retriable, not a corrupt
+database). Then use docker compose -f infra/compose/hardware-analysis/docker-compose.yml
+run --rm --build analysis. Snapshot directory is configurable using
+HARDWARE_ANALYSIS_ROOT; no host API access and no shared DuckDB writer.
+Snapshots are derived data retained under the existing admission budget;
+do not infer continuous ETW coverage. Snapshot export is not scheduled.
